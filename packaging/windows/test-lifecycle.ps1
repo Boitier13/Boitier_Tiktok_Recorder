@@ -87,6 +87,10 @@ try {
     Assert ((Get-FileHash -Algorithm SHA256 (Join-Path $DataDir 'config.ini')).Hash -eq $BeforeConfig) 'Uninstall changed config.ini.'
     Assert ((Get-FileHash -Algorithm SHA256 (Join-Path $DataDir 'recordings\keep.mp4')).Hash -eq $BeforeMedia) 'Uninstall changed a recording.'
     Write-Host 'Lifecycle smoke PASS: install, update preserved both data hashes and shortcuts, uninstall removed app/shortcuts and kept data.'
+} catch {
+    $FailureMessage = ($_.Exception.Message -replace '[\r\n]+', ' ')
+    Write-Output "::error title=BTL lifecycle failure::$FailureMessage"
+    throw
 } finally {
     # Clean the isolated test data after asserting the uninstall default. Never touch the user's real BTL data.
     if (Test-Path -LiteralPath $InstallDir) { Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction SilentlyContinue }

@@ -209,7 +209,6 @@ class WindowsDesktopShell:
                 text_select=True,
             )
             self.window.events.closing += self._on_closing
-            self.window.events.minimized += self._on_minimized
         except Exception as exc:
             raise DesktopUnavailable(
                 "WebView2 est détecté mais la fenêtre native n’a pas pu être créée. "
@@ -232,10 +231,6 @@ class WindowsDesktopShell:
             # pywebview cancels the native close when a handler returns False.
             return False
         return None
-
-    def _on_minimized(self):
-        if self._has_tray():
-            self.window.hide()
 
     def show(self):
         if self.window is not None:

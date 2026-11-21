@@ -70,6 +70,57 @@ def windows_startup_manager(data_dir):
     )
 
 
+_SINGLE_INSTANCE_HANDLE = None
+
+
+def _activate_native_window(user32, hwnd):
+    """Restore a hidden/minimized BTL top-level window and request foreground focus."""
+    if not hwnd:
+        return False
+    user32.ShowWindow(hwnd, 9)  # SW_RESTORE also makes a hidden window visible.
+    user32.BringWindowToTop(hwnd)
+    user32.SetForegroundWindow(hwnd)
+    return True
+
+
+def _claim_or_activate_windows_instance(*, title="Boitier Tiktok Live", kernel32=None,
+                                        user32=None, sleep=time.sleep):
+    """Hold a per-user mutex; a second EXE launch restores the running WebView2 window."""
+    global _SINGLE_INSTANCE_HANDLE
+    if sys.platform != "win32":
+        return False, False
+    try:
+        import ctypes
+        kernel32 = kernel32 or ctypes.WinDLL("kernel32", use_last_error=True)
+        user32 = user32 or ctypes.WinDLL("user32", use_last_error=True)
+        kernel32.CreateMutexW.restype = ctypes.c_void_p
+        kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        user32.FindWindowW.restype = ctypes.c_void_p
+        user32.FindWindowW.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
+        user32.ShowWindow.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        user32.BringWindowToTop.argtypes = [ctypes.c_void_p]
+        user32.SetForegroundWindow.argtypes = [ctypes.c_void_p]
+        handle = kernel32.CreateMutexW(None, False, r"Local\BoitierTiktokRecorder.BTL")
+        if not handle:
+            return False, False
+        if ctypes.get_last_error() != 183:  # ERROR_ALREADY_EXISTS
+            _SINGLE_INSTANCE_HANDLE = handle
+            return False, False
+        kernel32.CloseHandle(handle)
+        for attempt in range(30):
+            hwnd = user32.FindWindowW(None, title)
+            if hwnd:
+                _activate_native_window(user32, hwnd)
+                return True, True
+            if attempt < 29:
+                sleep(0.1)
+        return True, False
+    except Exception:
+        logging.warning("Single-instance Windows activation failed", exc_info=True)
+        return False, False
+
+
 def _capture_tool_version(command, args, *, timeout=45, runner=None, diagnostics=None, diagnostic_key=None):
     """Probe one packaged console launcher with enough time for onefile cold-start extraction."""
     from msr.nowindow import no_window_kwargs
@@ -188,7 +239,12 @@ def capture_tools_status():
     # the user's TEMP folder so --check-tools failures can be diagnosed on Windows.
     try:
         report_path = Path(tempfile.gettempdir()) / "btl-tools-check.txt"
-        report_lines = [f"BTL capture-tools preflight ({time.strftime('%Y-%m-%d %H:%M:%S')})"]
+        report_lines = [
+            f"BTL capture-tools preflight ({time.strftime('%Y-%m-%d %H:%M:%S')})",
+            f"Executable: {Path(sys.executable).resolve()}",
+            f"PID: {os.getpid()}",
+            f"Working directory: {Path.cwd()}",
+        ]
         report_lines.extend(f"{name}: {diagnostics.get(name, 'inconnu')}" for name in status)
         report_path.write_text("\n".join(report_lines) + "\n", encoding="utf-8-sig")
     except OSError:
@@ -1348,6 +1404,26 @@ def run_smoke(data_dir: Path | None = None):
             def start(self, **kwargs):
                 self.start_options = kwargs
 
+        class FakeUser32:
+            def __init__(self):
+                self.calls = []
+
+            def ShowWindow(self, hwnd, command):
+                self.calls.append(("show", hwnd, command))
+
+            def BringWindowToTop(self, hwnd):
+                self.calls.append(("top", hwnd))
+
+            def SetForegroundWindow(self, hwnd):
+                self.calls.append(("foreground", hwnd))
+
+        fake_user32 = FakeUser32()
+        activated = _activate_native_window(fake_user32, 42)
+        result.check("réouverture via EXE restaure et met au premier plan la fenêtre existante",
+                     activated and fake_user32.calls == [
+                         ("show", 42, 9), ("top", 42), ("foreground", 42)
+                     ])
+
         fake_webview = FakeWebview()
         desktop_shell = WindowsDesktopShell(
             "http://127.0.0.1:8765/", webview_module=fake_webview, platform="win32"
@@ -1362,12 +1438,12 @@ def run_smoke(data_dir: Path | None = None):
         tray._quit()
         close_after_quit = desktop_shell.window.events.closing.fire()
         shell_works = (close_results == [False] and close_after_quit == [None]
-                       and desktop_shell.window.hide_count == 2
+                       and desktop_shell.window.hide_count == 1
                        and desktop_shell.window.show_count == 2
                        and desktop_shell.window.restore_count == 2
                        and desktop_shell.window.destroy_count == 1
                        and fake_webview.start_options == {"gui": "edgechromium", "debug": False})
-        result.check("fenêtre WebView2 se masque, se restaure et se ferme proprement via le tray",
+        result.check("minimiser conserve la fenêtre dans la barre des tâches; fermer la masque au tray",
                      shell_works)
         try:
             WindowsDesktopShell("", platform="linux").prepare()
@@ -1735,6 +1811,16 @@ def main():
             for name, version in status.items():
                 print(f"{name}: {version or 'MANQUANT'}")
         raise SystemExit(0 if all(status.values()) else 1)
+    if sys.platform == "win32" and not args.background:
+        already_running, restored = _claim_or_activate_windows_instance()
+        if already_running:
+            if not restored:
+                show_windows_message(
+                    "Boitier Tiktok Live est déjà en cours de démarrage. "
+                    "Attendez quelques secondes puis réessayez depuis l’icône BTL près de l’horloge.",
+                    title="Boitier Tiktok Live déjà ouvert",
+                )
+            return
     if sys.platform == "win32":
         status = capture_tools_status()
         message = missing_capture_tool_message(status, frozen=bool(getattr(sys, "frozen", False)))

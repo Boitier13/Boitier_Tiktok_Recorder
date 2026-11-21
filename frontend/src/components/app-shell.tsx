@@ -77,7 +77,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="rounded-lg border border-sidebar-border bg-surface p-3 text-xs">
               <p className="font-medium text-foreground">Application locale</p>
               <p className="mt-1 text-muted-foreground">
-                La fenêtre WebView2 se masque dans le tray ; le démarrage automatique se règle dans
+                Réduire garde la fenêtre dans la barre des tâches ; fermer la masque dans le tray.
+                Un nouveau double-clic sur l’EXE la restaure. Le démarrage automatique se règle dans
                 Paramètres sous Windows.
               </p>
               <p className="mt-3 flex items-center gap-2 text-muted-foreground">

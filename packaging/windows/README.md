@@ -80,7 +80,7 @@ Le build puis l’EXE final exposent `--check-tools`, qui teste les quatre comma
 
 Le runtime Evergreen WebView2 **n’est pas embarqué** : il est entretenu séparément par Microsoft et peut déjà être présent avec Edge. Avant d’ouvrir la fenêtre native, BTL cherche l’entrée « Microsoft Edge WebView2 Runtime » dans Edge Update pour HKCU/HKLM et les vues registre pertinentes; la valeur de version doit être valide et non nulle.
 
-S’il manque, BTL indique le lien Microsoft de téléchargement et ouvre l’interface dans le navigateur par défaut. Si le runtime est détecté mais ne démarre pas, le message recommande de réparer Evergreen et de vérifier les politiques WebView2/Edge. Relancer BTL après installation/réparation pour revenir à la fenêtre native. `--no-desktop` reste disponible pour choisir délibérément le navigateur; l’autostart en arrière-plan n’ouvre pas de navigateur spontanément.
+S’il manque, BTL indique le lien Microsoft de téléchargement et ouvre l’interface dans le navigateur par défaut. Si le runtime est détecté mais ne démarre pas, le message recommande de réparer Evergreen et de vérifier les politiques WebView2/Edge. Relancer BTL après installation/réparation pour revenir à la fenêtre native. Réduire la fenêtre conserve son bouton dans la barre des tâches; fermer la fenêtre la masque dans la zone de notification. Un nouveau lancement de l’EXE utilise un mutex utilisateur pour restaurer l’instance déjà ouverte au lieu de lancer une seconde sonde/outils. `--no-desktop` reste disponible pour choisir délibérément le navigateur; l’autostart en arrière-plan n’ouvre pas de navigateur spontanément.
 
 ## Dépendances verrouillées
 

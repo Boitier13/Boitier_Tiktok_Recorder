@@ -39,7 +39,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $InstallDir 'BoitierTiktokLive.exe')
     throw "Installation BTL introuvable dans '$InstallDir'. Utilisez maintenance\install.ps1."
 }
 if ($PayloadDir.Equals($InstallDir, [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'L’update doit être lancé depuis le dossier d’une nouvelle archive extraite, pas depuis l’installation à remplacer.'
+    throw "L’update doit être lancé depuis le dossier d’une nouvelle archive extraite, pas depuis l’installation à remplacer."
 }
 
 $MetadataPath = Join-Path $InstallDir 'install-info.json'
@@ -64,7 +64,7 @@ if ((Test-IsWithin $DataDir $InstallDir) -or $DataDir.Equals($InstallDir, [Strin
 # Fail safe if an earlier/manual install put user data beside the executable.
 if ((Test-Path -LiteralPath (Join-Path $InstallDir 'config.ini')) -or
     (Test-Path -LiteralPath (Join-Path $InstallDir 'recordings'))) {
-    throw 'Des données utilisateur semblent se trouver dans le dossier application. L’update refuse de les écraser; sauvegardez-les puis déplacez-les vers le dossier de données.'
+    throw "Des données utilisateur semblent se trouver dans le dossier application. L’update refuse de les écraser; sauvegardez-les puis déplacez-les vers le dossier de données."
 }
 if (Get-Process -Name 'BoitierTiktokLive' -ErrorAction SilentlyContinue) {
     throw 'Fermez Boitier Tiktok Live et son icône de barre système avant de lancer la mise à jour.'
@@ -108,4 +108,4 @@ try {
 }
 Write-Host "BTL mis à jour dans : $InstallDir"
 Write-Host "Données conservées sans modification dans : $DataDir"
-Write-Host 'Le raccourci Startup par utilisateur et le raccourci du menu Démarrer restent en place car le chemin d’installation ne change pas.'
+Write-Host "Le raccourci Startup par utilisateur et le raccourci du menu Démarrer restent en place car le chemin d’installation ne change pas."

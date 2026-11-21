@@ -53,7 +53,7 @@ if (Get-Process -Name 'BoitierTiktokLive' -ErrorAction SilentlyContinue) {
 if ($PurgeUserData) {
     Write-Warning "La suppression est définitive et portera sur toute la configuration et les enregistrements : $DataDir"
     $Answer = Read-Host 'Pour confirmer, saisissez exactement le chemin ci-dessus'
-    if ($Answer -cne $DataDir) { throw 'Confirmation incorrecte; les données utilisateur n’ont pas été supprimées.' }
+    if ($Answer -cne $DataDir) { throw "Confirmation incorrecte; les données utilisateur n’ont pas été supprimées." }
 }
 
 if (-not $StartupFolder) { $StartupFolder = [Environment]::GetFolderPath('Startup') }

@@ -96,4 +96,4 @@ if (-not (Test-Path -LiteralPath $ShortcutPath)) {
 }
 Write-Host "BTL installé dans : $InstallDir"
 Write-Host "Configuration et enregistrements : $DataDir (conservés en dehors du dossier application)."
-Write-Host 'L’autostart est facultatif et se règle dans Paramètres; il utilise un raccourci Startup limité à cet utilisateur.'
+Write-Host "L’autostart est facultatif et se règle dans Paramètres; il utilise un raccourci Startup limité à cet utilisateur."

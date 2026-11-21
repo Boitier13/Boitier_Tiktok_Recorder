@@ -8,7 +8,6 @@ transport tests only, never evidence of TikTok detection.
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
 import json
 import logging
 import mimetypes
@@ -71,7 +70,7 @@ def windows_startup_manager(data_dir):
     )
 
 
-def _capture_tool_version(command, args, *, timeout=30, runner=None, diagnostics=None, diagnostic_key=None):
+def _capture_tool_version(command, args, *, timeout=45, runner=None, diagnostics=None, diagnostic_key=None):
     """Probe one packaged console launcher with enough time for onefile cold-start extraction."""
     from msr.nowindow import no_window_kwargs
 
@@ -102,44 +101,51 @@ def _capture_tool_version(command, args, *, timeout=30, runner=None, diagnostics
 
 
 def capture_tools_status():
-    """Probe required tools; allow bundled onefile Python launchers a slower cold start."""
-    from msr import deps
-    from msr.util import ffprobe_from_ffmpeg
-
+    """Probe required tools serially to avoid antivirus contention on onefile launchers."""
     diagnostics = {}
     if getattr(sys, "frozen", False):
         tools_dir = Path(sys.executable).resolve().parent / "tools"
-        yt_dlp_command = str(tools_dir / "yt-dlp.exe")
-        streamlink_command = str(tools_dir / "streamlink.exe")
+        commands = {
+            "yt-dlp": str(tools_dir / "yt-dlp.exe"),
+            "streamlink": str(tools_dir / "streamlink.exe"),
+            "ffmpeg": str(tools_dir / "ffmpeg.exe"),
+            "ffprobe": str(tools_dir / "ffprobe.exe"),
+        }
     else:
-        yt_dlp_command = "yt-dlp"
-        streamlink_command = "streamlink"
+        commands = {name: name for name in ("yt-dlp", "streamlink", "ffmpeg", "ffprobe")}
 
     # yt-dlp and Streamlink are self-extracting PyInstaller onefile executables. On
-    # Windows 10, antivirus scanning can make each first launch exceed the engine's
-    # generic five-second probe timeout. Probe both concurrently with a 30-second cap.
-    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="btl-tool-check") as pool:
-        yt_dlp_future = pool.submit(
-            _capture_tool_version, yt_dlp_command, ["--version"],
-            diagnostics=diagnostics, diagnostic_key="yt-dlp",
-        )
-        streamlink_future = pool.submit(
-            _capture_tool_version, streamlink_command, ["--version"],
-            diagnostics=diagnostics, diagnostic_key="streamlink",
-        )
-        yt_dlp_version = yt_dlp_future.result()
-        streamlink_version = streamlink_future.result()
+    # Windows 10 antivirus scanning can make them slow, especially when launched at
+    # the same time. Probe sequentially with generous caps; ffmpeg/ffprobe are native.
+    yt_dlp_version = _capture_tool_version(
+        commands["yt-dlp"], ["--version"], timeout=45,
+        diagnostics=diagnostics, diagnostic_key="yt-dlp",
+    )
+    streamlink_version = _capture_tool_version(
+        commands["streamlink"], ["--version"], timeout=45,
+        diagnostics=diagnostics, diagnostic_key="streamlink",
+    )
+    ffmpeg_output = _capture_tool_version(
+        commands["ffmpeg"], ["-version"], timeout=15,
+        diagnostics=diagnostics, diagnostic_key="ffmpeg",
+    )
+    ffprobe_output = _capture_tool_version(
+        commands["ffprobe"], ["-version"], timeout=15,
+        diagnostics=diagnostics, diagnostic_key="ffprobe",
+    )
 
     if streamlink_version and streamlink_version.lower().startswith("streamlink "):
         streamlink_version = streamlink_version[len("streamlink "):].strip()
+    ffmpeg_version = None
+    if ffmpeg_output:
+        first_line = ffmpeg_output.splitlines()[0]
+        ffmpeg_version = first_line.replace("ffmpeg version ", "").split(" ")[0] or "unknown"
     status = {
         "yt-dlp": yt_dlp_version,
         "streamlink": streamlink_version,
-        "ffmpeg": deps.check_ffmpeg("ffmpeg"),
-        "ffprobe": "available" if deps.check_ffprobe(ffprobe_from_ffmpeg("ffmpeg")) else None,
+        "ffmpeg": ffmpeg_version,
+        "ffprobe": "available" if ffprobe_output else None,
     }
-    for name in ("ffmpeg", "ffprobe"):
-        diagnostics[name] = "OK" if status[name] else "commande introuvable ou échec du probe moteur (délai 5s)"
 
     # The frozen GUI executable has no console. Keep a small, non-sensitive report in
     # the user's TEMP folder so --check-tools failures can be diagnosed on Windows.
@@ -147,7 +153,7 @@ def capture_tools_status():
         report_path = Path(tempfile.gettempdir()) / "btl-tools-check.txt"
         report_lines = [f"BTL capture-tools preflight ({time.strftime('%Y-%m-%d %H:%M:%S')})"]
         report_lines.extend(f"{name}: {diagnostics.get(name, 'inconnu')}" for name in status)
-        report_path.write_text("\n".join(report_lines) + "\n", encoding="utf-8")
+        report_path.write_text("\n".join(report_lines) + "\n", encoding="utf-8-sig")
     except OSError:
         pass
     return status
@@ -1069,7 +1075,7 @@ def run_smoke(data_dir: Path | None = None):
         )
         result.check("probe onefile des outils utilise un délai étendu et garde le diagnostic",
                      probe_version == "2026.10.26"
-                     and probe_call.get("kwargs", {}).get("timeout") == 30
+                     and probe_call.get("kwargs", {}).get("timeout") == 45
                      and probe_diagnostics.get("yt-dlp", "").startswith("OK en "))
 
         page = api_page = urllib.request.urlopen(base + "/", timeout=5).read().decode("utf-8")

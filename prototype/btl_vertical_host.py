@@ -100,6 +100,42 @@ def _capture_tool_version(command, args, *, timeout=45, runner=None, diagnostics
         return None
 
 
+def _sync_engine_tool_status(status):
+    """Refresh engine probe caches after the slower BTL boundary checks succeed/fail."""
+    try:
+        from msr import deps
+    except Exception:
+        return
+
+    versions = dict(getattr(deps, "_VERSIONS", {}) or {})
+    for name in ("yt-dlp", "streamlink", "ffmpeg"):
+        versions[name] = status.get(name)
+    versions.setdefault("deno", getattr(deps, "DENO_VERSION", None))
+    deps._VERSIONS = versions
+    deps.YTDLP_VERSION = versions.get("yt-dlp")
+    deps.HAS_YTDLP = deps.YTDLP_VERSION is not None
+    deps.STREAMLINK_VERSION = versions.get("streamlink")
+    deps.HAS_STREAMLINK = deps.STREAMLINK_VERSION is not None
+    deps.FFMPEG_VERSION = versions.get("ffmpeg")
+    deps.HAS_FFMPEG = deps.FFMPEG_VERSION is not None
+    os.environ[deps.TOOL_VERSIONS_ENV] = json.dumps(versions)
+
+    # The shared engine imports these flags by value in its validators/command builders.
+    # Refresh those module-level copies too, before BTL starts its paused headless adapter.
+    for module_name in ("msr.util", "msr.platforms", "msr.gui"):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
+        for name, value in (
+            ("HAS_YTDLP", deps.HAS_YTDLP),
+            ("HAS_STREAMLINK", deps.HAS_STREAMLINK),
+            ("YTDLP_VERSION", deps.YTDLP_VERSION),
+            ("STREAMLINK_VERSION", deps.STREAMLINK_VERSION),
+        ):
+            if hasattr(module, name):
+                setattr(module, name, value)
+
+
 def capture_tools_status():
     """Probe required tools serially to avoid antivirus contention on onefile launchers."""
     diagnostics = {}
@@ -146,6 +182,7 @@ def capture_tools_status():
         "ffmpeg": ffmpeg_version,
         "ffprobe": "available" if ffprobe_output else None,
     }
+    _sync_engine_tool_status(status)
 
     # The frozen GUI executable has no console. Keep a small, non-sensitive report in
     # the user's TEMP folder so --check-tools failures can be diagnosed on Windows.
@@ -245,6 +282,14 @@ class Prototype:
         streams.mkdir(parents=True, exist_ok=True)
         self.config = Config(str(self.data_dir / "config.ini"))
         self.config.config.set("Paths", "streams_dir", str(streams))
+        roster_file = self.data_dir / "channels.json"
+        self.config.config.set("Paths", "channels_file", str(roster_file))
+        if not roster_file.exists():
+            try:
+                with roster_file.open("x", encoding="utf-8") as roster:
+                    roster.write("[]\n")
+            except FileExistsError:
+                pass
         self.config.config.set("Paths", "fallback_dir", "")
         self.config.config.set("Paths", "cookies_file", "")
         self.config.config.set("Advanced", "use_venv", "false")
@@ -1098,6 +1143,10 @@ def run_smoke(data_dir: Path | None = None):
 
         state = api("GET", "/api/state")
         result.check("démarrage du véritable adaptateur headless du moteur", state["app"]["mode"] == "headless")
+        roster_file = path / "channels.json"
+        result.check("roster initial vide créé dans le dossier de données persistant",
+                     roster_file.is_file() and json.loads(roster_file.read_text(encoding="utf-8")) == []
+                     and Path(prototype.config.get("Paths", "channels_file")).resolve() == roster_file.resolve())
         result.check("BTL TikTok ne démarre pas le poller multi-plateforme partagé",
                      prototype.app._poller is None)
         result.check("état initial vide lu à travers le pont UI → moteur", state.get("channels") == [])

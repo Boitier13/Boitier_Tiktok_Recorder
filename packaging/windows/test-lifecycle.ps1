@@ -44,6 +44,25 @@ try {
     } finally {
         $env:PATH = $OriginalPath
     }
+    $ToolProbes = @(
+        @{ Name = 'yt-dlp.exe'; Args = @('--version') },
+        @{ Name = 'streamlink.exe'; Args = @('--version') },
+        @{ Name = 'ffmpeg.exe'; Args = @('-version') },
+        @{ Name = 'ffprobe.exe'; Args = @('-version') }
+    )
+    $ProbeFailures = @()
+    foreach ($Probe in $ToolProbes) {
+        $ToolPath = Join-Path (Join-Path $PayloadDir 'tools') $Probe.Name
+        try {
+            $ProbeArgs = @($Probe.Args)
+            $ProbeOutput = (& $ToolPath @ProbeArgs 2>&1 | Out-String).Trim()
+            $ProbeExitCode = $LASTEXITCODE
+            if ($ProbeExitCode -ne 0) { $ProbeFailures += "$($Probe.Name): exit $ProbeExitCode; $ProbeOutput" }
+        } catch {
+            $ProbeFailures += "$($Probe.Name): $($_.Exception.Message)"
+        }
+    }
+    Assert ($ProbeFailures.Count -eq 0) ("Tool probes after restore failed: " + ($ProbeFailures -join ' | '))
 
     & (Join-Path $PayloadDir 'maintenance\install.ps1') -SourceDir $PayloadDir -InstallDir $InstallDir -DataDir $DataDir -ProgramsFolder $ProgramsFolder
     Assert (Test-Path -LiteralPath $Exe) 'Install did not copy the BTL executable.'

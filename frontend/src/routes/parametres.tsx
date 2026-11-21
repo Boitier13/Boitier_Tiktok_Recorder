@@ -25,7 +25,7 @@ import {
 import { formatSize } from "@/lib/format";
 import type { Settings } from "@/lib/models";
 
-const ENGINE_QUALITIES = ["best", "1080p60", "1080p", "720p60", "720p", "480p", "worst"];
+const ENGINE_QUALITIES = ["best", "1080p60", "1080p", "720p60", "720p", "480p", "360p", "worst"];
 
 export const Route = createFileRoute("/parametres")({
   head: () => ({
@@ -346,7 +346,7 @@ function SettingsPage() {
       <Section icon={Video} title="Enregistrement">
         <Row
           label="Qualité Streamlink / yt-dlp"
-          hint="Choisit une variante proposée par le flux ; les workers déjà lancés la gardent jusqu’à leur prochain démarrage."
+          hint="Choisit une variante proposée par le flux. 360p réduit la taille si TikTok la propose; sinon cette qualité exacte peut ne pas être disponible. Les captures déjà lancées ne changent pas."
         >
           <Select
             value={settings.quality}
@@ -368,6 +368,7 @@ function SettingsPage() {
               <SelectItem value="720p60">720p60</SelectItem>
               <SelectItem value="720p">720p</SelectItem>
               <SelectItem value="480p">480p</SelectItem>
+              <SelectItem value="360p">360p · économie de disque</SelectItem>
               <SelectItem value="worst">Plus basse disponible</SelectItem>
             </SelectContent>
           </Select>

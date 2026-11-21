@@ -49,7 +49,7 @@ GROUPS = (
     ("Recording", False, (
         row("Recording", "quality", "Quality", "choice", "best = highest available",
             "streamlink / yt-dlp quality name. Unknown names fall back to best.",
-            choices=("best", "1080p60", "1080p", "720p60", "720p", "480p", "worst"), width=10),
+            choices=("best", "1080p60", "1080p", "720p60", "720p", "480p", "360p", "worst"), width=10),
         row("Recording", "filename_pattern", "File name", "pattern", "",
             "Tokens: {username} {platform} {date} {time} {timestamp} {title}\n"
             "Keep {timestamp} (or {date}+{time}) so files never collide.", width=28),

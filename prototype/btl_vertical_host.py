@@ -997,7 +997,7 @@ class UIHandler(BaseHTTPRequestHandler):
                 }
                 if key not in mapping:
                     return self._send_json({"error": "Paramètre non pris en charge par BTL."}, 400)
-                if key == "quality" and value not in ("best", "1080p60", "1080p", "720p60", "720p", "480p", "worst"):
+                if key == "quality" and value not in ("best", "1080p60", "1080p", "720p60", "720p", "480p", "360p", "worst"):
                     return self._send_json({"error": "Qualité vidéo non prise en charge."}, 400)
                 section, option = mapping[key]
                 if key == "checkIntervalSec":
@@ -1391,9 +1391,15 @@ def run_smoke(data_dir: Path | None = None):
             result.check("modification validée, persistée et relue depuis la configuration moteur",
                          saved_setting.get("value") == 90 and saved_setting.get("applies") == "now"
                          and reloaded_settings.get("checkIntervalSec") == 90)
+            saved_quality = api("POST", "/api/settings", {"key": "quality", "value": "360p"})
+            result.check("qualité 360p acceptée et persistée par le moteur",
+                         saved_quality.get("value") == "360p"
+                         and api("GET", "/api/settings").get("settings", {}).get("quality") == "360p")
         finally:
             api("POST", "/api/settings", {"key": "checkIntervalSec",
                                             "value": settings_before.get("checkIntervalSec", 180)})
+            api("POST", "/api/settings", {"key": "quality",
+                                            "value": settings_before.get("quality", "best")})
 
         live_notice = notification_content({"event": "live", "channel": "tiktok:probe"})
         result.check("événements moteur traduits en titre et contenu Windows localisés",

@@ -1,0 +1,3 @@
+# Release build environment: BTL runtime packages plus the frozen bundle compiler.
+-r requirements-btl.in
+pyinstaller==6.22.3

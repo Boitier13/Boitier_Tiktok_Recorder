@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BTL — Prototype d’intégration</title>
+  <style>
+    :root{color-scheme:dark;--bg:#10141a;--panel:#191f28;--line:#2d3642;--text:#edf3f8;--muted:#9caab8;--cyan:#51d7d0;--red:#ff5c67;--green:#78dc9a;--gold:#f5c96a;font:15px "IBM Plex Sans",Segoe UI,sans-serif}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 72% 0,#183139 0,transparent 42%),var(--bg);color:var(--text)}
+    header{height:60px;padding:0 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;background:#0c1117}
+    .logo{border:1px solid #3ca7a4;border-radius:9px;padding:6px 9px;color:var(--cyan);font-weight:800;letter-spacing:.12em}.tag{color:var(--muted);font-size:13px}
+    main{max-width:920px;margin:30px auto;padding:0 18px}.card{background:#191f28eF;border:1px solid var(--line);border-radius:14px;padding:20px;margin:16px 0;box-shadow:0 16px 45px #0003}
+    h1{font-size:25px;margin:0 0 8px}h2{font-size:17px;margin:0 0 14px}.muted{color:var(--muted)}.warning{color:var(--gold)}.notice{font-size:13px;line-height:1.55;color:#c4d0dc;background:#24241f;border:1px solid #4a4434;border-radius:9px;padding:12px;margin:14px 0}
+    form{display:flex;gap:9px}input{flex:1;min-width:0;background:#10151c;border:1px solid #36414e;border-radius:8px;padding:10px 12px;color:var(--text)}button{border:0;border-radius:8px;padding:10px 13px;background:var(--cyan);color:#081416;font-weight:700;cursor:pointer}button.secondary{background:#293441;color:var(--text);border:1px solid #3b4755}button.danger{background:#54262c;color:#ffdbe0;border:1px solid #84434a}button:disabled{opacity:.45;cursor:default}
+    .row{display:flex;align-items:center;gap:12px;padding:12px 2px;border-bottom:1px solid #29313b}.row:last-child{border:0}.name{flex:1;min-width:0}.status{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:4px 8px;color:var(--muted)}.status.enabled{color:var(--green);border-color:#38684a}.log{height:170px;overflow:auto;background:#0d1218;border:1px solid var(--line);border-radius:8px;padding:10px;font:12px Consolas,monospace;color:#b7c5d2;white-space:pre-wrap}.footer{font-size:12px;color:var(--muted)}
+    @media(max-width:650px){.row{flex-wrap:wrap}.row .name{min-width:50%}form{flex-wrap:wrap}form input{flex-basis:100%}.card{padding:15px}}
+  </style>
+</head>
+<body>
+<header><span class="logo">BTL</span><strong>Boitier Tiktok Live</strong><span class="tag">prototype vertical · Creator Radar ↔ moteur existant</span></header>
+<main>
+  <section class="card">
+    <h1>Prototype de communication</h1>
+    <p class="muted">Cette page pilote le vrai adaptateur headless et le protocole de contrôle local du moteur importé.</p>
+    <div class="notice"><strong>Mode sans enregistrement :</strong> les créateurs sont ajoutés désactivés. Aucune requête TikTok ni capture vidéo n’est lancée. Le bouton « Simuler l’événement » injecte un événement de test, il ne prouve pas une détection LIVE.</div>
+    <p id="engine-state" class="muted">Connexion au moteur…</p>
+  </section>
+  <section class="card">
+    <h2>Créateurs — liste réelle du moteur</h2>
+    <form id="add-form"><input id="username" aria-label="Pseudonyme TikTok" placeholder="nom_utilisateur TikTok" autocomplete="off"><button>Ajouter désactivé</button></form>
+    <p class="footer">Ajouter, renommer, activer et désactiver modifient le roster JSON du moteur via son API locale.</p>
+    <div id="creators" class="muted">Chargement…</div>
+  </section>
+  <section class="card">
+    <h2>Événements reçus du moteur</h2>
+    <p class="muted">L’abonnement passe par le flux authentifié existant, relayé par le petit hôte Python vers SSE.</p>
+    <div id="events" class="log">Connexion au flux d’événements…</div>
+  </section>
+  <section class="card">
+    <h2>Cycle de vie</h2>
+    <button id="stop-engine" class="danger">Arrêter proprement le moteur</button>
+    <span id="stop-state" class="footer"></span>
+  </section>
+  <p class="footer">Prototype isolé, code moteur source non modifié. Aucun compte, cookie ou jeton n’est demandé à l’utilisateur.</p>
+</main>
+<script>
+const byId = (id) => document.getElementById(id);
+const eventLog = byId("events");
+function addLog(text) { eventLog.textContent = `${new Date().toLocaleTimeString("fr-FR")}  ${text}\n` + eventLog.textContent; }
+async function request(url, options={}) {
+  const response = await fetch(url, {headers:{"Content-Type":"application/json",...(options.headers||{})}, ...options});
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || `Erreur HTTP ${response.status}`);
+  return data;
+}
+async function refresh() {
+  const data = await request("/api/state");
+  const session = data.session || {};
+  byId("engine-state").textContent = `Moteur ${data.app?.mode || "?"} actif · session d’enregistrement ${session.running ? "active" : "arrêtée"} · ${data.channels?.length || 0} créateur(s)`;
+  const target = byId("creators"); target.replaceChildren();
+  const rows = data.channels || [];
+  if (!rows.length) { target.textContent = "Aucun créateur ajouté."; return; }
+  for (const row of rows) {
+    const item = document.createElement("div"); item.className = "row";
+    const label = document.createElement("div"); label.className = "name";
+    const strong = document.createElement("strong"); strong.textContent = row.name;
+    const small = document.createElement("div"); small.className = "footer"; small.textContent = `Statut moteur : ${row.status || "non vérifié"}`;
+    label.append(strong, small);
+    const badge = document.createElement("span"); badge.className = `status ${row.enabled ? "enabled" : ""}`; badge.textContent = row.enabled ? "Surveillance activée" : "Désactivé";
+    const toggle = document.createElement("button"); toggle.className = "secondary"; toggle.textContent = row.enabled ? "Désactiver" : "Activer";
+    toggle.onclick = async () => { try { await request(`/api/creators/${encodeURIComponent(row.name)}`, {method:"PATCH",body:JSON.stringify({enabled:!row.enabled})}); await refresh(); } catch(e) { addLog(`Erreur : ${e.message}`); } };
+    const rename = document.createElement("button"); rename.className = "secondary"; rename.textContent = "Renommer";
+    rename.onclick = async () => { const oldName = row.name.split(":").slice(1).join(":"); const next = prompt("Nouveau pseudonyme TikTok", oldName); if (!next) return; try { await request("/api/rename", {method:"POST",body:JSON.stringify({channel:row.name,username:next})}); await refresh(); } catch(e) { addLog(`Erreur : ${e.message}`); } };
+    const fake = document.createElement("button"); fake.className = "secondary"; fake.textContent = "Simuler l’événement";
+    fake.onclick = async () => { try { const r = await request("/api/demo-event", {method:"POST",body:JSON.stringify({channel:row.name})}); addLog(`Injection de test ${r.event.event} pour ${row.name} — SYNTHÉTIQUE`); } catch(e) { addLog(`Erreur : ${e.message}`); } };
+    item.append(label, badge, toggle, rename, fake); target.append(item);
+  }
+}
+byId("add-form").addEventListener("submit", async (event) => {
+  event.preventDefault(); const username = byId("username").value.trim(); if (!username) return;
+  try { await request("/api/creators", {method:"POST",body:JSON.stringify({username})}); byId("username").value=""; await refresh(); addLog(`Créateur ajouté dans le moteur : @${username.replace(/^@/, "")}`); }
+  catch(e) { addLog(`Ajout refusé : ${e.message}`); }
+});
+byId("stop-engine").onclick = async () => { byId("stop-engine").disabled=true; try { await request("/api/shutdown", {method:"POST",body:"{}"}); byId("stop-state").textContent="Arrêt propre demandé. Fermez cette page."; } catch(e) { byId("stop-state").textContent=e.message; } };
+const events = new EventSource("/api/events");
+events.addEventListener("engine", (event) => { const data=JSON.parse(event.data); addLog(`${data.event} · ${data.channel || "application"}${data.synthetic ? " · SYNTHÉTIQUE / TEST UNIQUEMENT" : ""}`); });
+events.addEventListener("erreur", (event) => addLog(`Flux : ${event.data}`));
+events.onerror = () => addLog("Flux interrompu ; le navigateur tentera une reconnexion.");
+refresh().catch((e) => { byId("engine-state").textContent=`Moteur indisponible : ${e.message}`; });
+window.setInterval(() => refresh().catch(()=>{}), 2000);
+</script>
+</body>
+</html>

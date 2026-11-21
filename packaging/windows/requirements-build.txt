@@ -1,0 +1,3 @@
+# Compatibility entry point for the complete pinned BTL Windows build environment.
+# Regenerate from requirements-build.in, then install with --require-hashes.
+-r requirements-win-x64-py312.lock

@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "target": "windows-x86_64",
+  "tools": [
+    {
+      "name": "FFmpeg",
+      "version_label": "n9.0 (BtbN build; upstream release tag is mutable 'latest')",
+      "asset": "ffmpeg-n9.0-latest-win64-lgpl-9.0.zip",
+      "url": "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-lgpl-9.0.zip",
+      "size_bytes": 171848467,
+      "sha256": "c6ba688c964ab8b2e5d357100a49be25491c60b5d48cdaac46d20ba0dded6260",
+      "binaries": ["ffmpeg.exe", "ffprobe.exe"],
+      "license_family": "FFmpeg LGPL build variant; verify exact configure flags and included component licenses before distribution",
+      "redistribution_status": "blocked-pending-license-and-notice-audit"
+    }
+  ]
+}

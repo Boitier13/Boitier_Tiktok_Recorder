@@ -71,19 +71,33 @@ def windows_startup_manager(data_dir):
     )
 
 
-def _capture_tool_version(command, args, *, timeout=30, runner=None):
+def _capture_tool_version(command, args, *, timeout=30, runner=None, diagnostics=None, diagnostic_key=None):
     """Probe one packaged console launcher with enough time for onefile cold-start extraction."""
     from msr.nowindow import no_window_kwargs
 
     if runner is None:
         runner = subprocess.run
+    key = diagnostic_key or str(command)
+    started = time.monotonic()
     try:
         result = runner(
             [command, *args], capture_output=True, text=True, timeout=timeout,
             **no_window_kwargs(),
         )
-        return result.stdout.strip() if result.returncode == 0 else None
-    except Exception:
+        elapsed = time.monotonic() - started
+        stdout = (result.stdout or "").strip()
+        stderr = (result.stderr or "").strip()
+        if result.returncode == 0:
+            if diagnostics is not None:
+                diagnostics[key] = f"OK en {elapsed:.1f}s; {stdout[:300]}"
+            return stdout or "available"
+        if diagnostics is not None:
+            details = stderr or stdout or "aucune sortie"
+            diagnostics[key] = f"code {result.returncode} en {elapsed:.1f}s; {details[:1000]}"
+        return None
+    except Exception as exc:
+        if diagnostics is not None:
+            diagnostics[key] = f"{type(exc).__name__} après {time.monotonic() - started:.1f}s: {exc}"
         return None
 
 
@@ -92,23 +106,51 @@ def capture_tools_status():
     from msr import deps
     from msr.util import ffprobe_from_ffmpeg
 
+    diagnostics = {}
+    if getattr(sys, "frozen", False):
+        tools_dir = Path(sys.executable).resolve().parent / "tools"
+        yt_dlp_command = str(tools_dir / "yt-dlp.exe")
+        streamlink_command = str(tools_dir / "streamlink.exe")
+    else:
+        yt_dlp_command = "yt-dlp"
+        streamlink_command = "streamlink"
+
     # yt-dlp and Streamlink are self-extracting PyInstaller onefile executables. On
     # Windows 10, antivirus scanning can make each first launch exceed the engine's
     # generic five-second probe timeout. Probe both concurrently with a 30-second cap.
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix="btl-tool-check") as pool:
-        yt_dlp_future = pool.submit(_capture_tool_version, "yt-dlp", ["--version"])
-        streamlink_future = pool.submit(_capture_tool_version, "streamlink", ["--version"])
+        yt_dlp_future = pool.submit(
+            _capture_tool_version, yt_dlp_command, ["--version"],
+            diagnostics=diagnostics, diagnostic_key="yt-dlp",
+        )
+        streamlink_future = pool.submit(
+            _capture_tool_version, streamlink_command, ["--version"],
+            diagnostics=diagnostics, diagnostic_key="streamlink",
+        )
         yt_dlp_version = yt_dlp_future.result()
         streamlink_version = streamlink_future.result()
 
     if streamlink_version and streamlink_version.lower().startswith("streamlink "):
         streamlink_version = streamlink_version[len("streamlink "):].strip()
-    return {
+    status = {
         "yt-dlp": yt_dlp_version,
         "streamlink": streamlink_version,
         "ffmpeg": deps.check_ffmpeg("ffmpeg"),
         "ffprobe": "available" if deps.check_ffprobe(ffprobe_from_ffmpeg("ffmpeg")) else None,
     }
+    for name in ("ffmpeg", "ffprobe"):
+        diagnostics[name] = "OK" if status[name] else "commande introuvable ou échec du probe moteur (délai 5s)"
+
+    # The frozen GUI executable has no console. Keep a small, non-sensitive report in
+    # the user's TEMP folder so --check-tools failures can be diagnosed on Windows.
+    try:
+        report_path = Path(tempfile.gettempdir()) / "btl-tools-check.txt"
+        report_lines = [f"BTL capture-tools preflight ({time.strftime('%Y-%m-%d %H:%M:%S')})"]
+        report_lines.extend(f"{name}: {diagnostics.get(name, 'inconnu')}" for name in status)
+        report_path.write_text("\n".join(report_lines) + "\n", encoding="utf-8")
+    except OSError:
+        pass
+    return status
 
 
 def missing_capture_tool_message(status, *, frozen=False):
@@ -129,7 +171,7 @@ def missing_capture_tool_message(status, *, frozen=False):
         )
     return (
         "BTL ne peut pas démarrer l’enregistrement : un ou plusieurs outils requis sont absents.\n\n"
-        f"{missing_lines}\n\n{remedy}"
+        f"{missing_lines}\n\n{remedy}\n\nDétail du contrôle : %TEMP%\\btl-tools-check.txt"
     )
 
 
@@ -1015,15 +1057,20 @@ def run_smoke(data_dir: Path | None = None):
 
     try:
         probe_call = {}
+        probe_diagnostics = {}
 
         def fake_probe_runner(command, **kwargs):
             probe_call.update(command=command, kwargs=kwargs)
             return subprocess.CompletedProcess(command, 0, stdout="2026.10.26\n", stderr="")
 
-        probe_version = _capture_tool_version("yt-dlp", ["--version"], runner=fake_probe_runner)
-        result.check("probe onefile des outils utilise un délai de démarrage étendu",
+        probe_version = _capture_tool_version(
+            "yt-dlp", ["--version"], runner=fake_probe_runner, diagnostics=probe_diagnostics,
+            diagnostic_key="yt-dlp",
+        )
+        result.check("probe onefile des outils utilise un délai étendu et garde le diagnostic",
                      probe_version == "2026.10.26"
-                     and probe_call.get("kwargs", {}).get("timeout") == 30)
+                     and probe_call.get("kwargs", {}).get("timeout") == 30
+                     and probe_diagnostics.get("yt-dlp", "").startswith("OK en "))
 
         page = api_page = urllib.request.urlopen(base + "/", timeout=5).read().decode("utf-8")
         result.check("interface locale française servie par l’hôte du prototype",

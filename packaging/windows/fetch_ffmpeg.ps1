@@ -42,7 +42,7 @@ try {
     $LicenseDir = Join-Path $Destination 'ffmpeg-licenses'
     New-Item -ItemType Directory -Force -Path $LicenseDir | Out-Null
     foreach ($File in $LicenseFiles) {
-        $Relative = $File.FullName.Substring($Extract.Length).TrimStart('\\', '/')
+        $Relative = $File.FullName.Substring($Extract.Length).TrimStart([char[]]@([char]92, [char]47))
         $Target = Join-Path $LicenseDir $Relative
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Target) | Out-Null
         Copy-Item -LiteralPath $File.FullName -Destination $Target -Force

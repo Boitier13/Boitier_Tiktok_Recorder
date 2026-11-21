@@ -30,7 +30,7 @@ describe("adaptateur d’état moteur BTL", () => {
         const payload = url.endsWith("/api/state")
           ? {
               app: { mode: "headless" },
-              session: { running: true },
+              session: { running: true, monitoring_active: true },
               channels: [
                 { name: "tiktok:live_user", enabled: true, live: false, last_error: "HTTP 503" },
                 { name: "tiktok:checking_user", enabled: true, live: false, status: "Checking..." },
@@ -54,6 +54,30 @@ describe("adaptateur d’état moteur BTL", () => {
       "live",
     ]);
     expect(state.monitoringActive).toBe(true);
+  });
+
+  it("garde les captures actives quand la détection est en pause", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        const payload = url.endsWith("/api/state")
+          ? {
+              session: { running: true, monitoring_active: false },
+              channels: [{ name: "tiktok:demo", enabled: true, live: true, recording: true }],
+            }
+          : { recordings: [] };
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    const state = await readSnapshot();
+    expect(state.monitoringActive).toBe(false);
+    expect(state.activeRecordings).toHaveLength(1);
+    expect(state.activeRecordings[0]?.creator.username).toBe("demo");
   });
 
   it("utilise les chemins et métadonnées réels des enregistrements reçus", async () => {

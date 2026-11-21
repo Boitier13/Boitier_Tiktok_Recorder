@@ -5,7 +5,8 @@ if (-not $PayloadDir) { $PayloadDir = Join-Path $PSScriptRoot '..\..\dist\Boitie
 $PayloadDir = (Resolve-Path $PayloadDir).Path
 $Suite = Join-Path $env:TEMP ('BTL cycle de vie éà - ' + [guid]::NewGuid().ToString('N'))
 $InstallDir = Join-Path $Suite 'application install é'
-$DataDir = Join-Path $Suite 'données utilisateur à'
+$DataDir = Join-Path $Suite 'configuration utilisateur à'
+$RecordingsDir = Join-Path $Suite 'Vidéos utilisateur à\BoitierTiktokRecorder'
 $NewPayload = Join-Path $Suite 'nouvelle version é'
 $StartupFolder = Join-Path (Join-Path $Suite 'raccourcis') 'démarrage'
 $ProgramsFolder = Join-Path (Join-Path $Suite 'raccourcis') 'menu démarrer'
@@ -64,16 +65,19 @@ try {
     }
     Assert ($ProbeFailures.Count -eq 0) ("Tool probes after restore failed: " + ($ProbeFailures -join ' | '))
 
-    & (Join-Path $PayloadDir 'maintenance\install.ps1') -SourceDir $PayloadDir -InstallDir $InstallDir -DataDir $DataDir -ProgramsFolder $ProgramsFolder
+    & (Join-Path $PayloadDir 'maintenance\install.ps1') -SourceDir $PayloadDir -InstallDir $InstallDir -DataDir $DataDir -RecordingsDir $RecordingsDir -ProgramsFolder $ProgramsFolder
     Assert (Test-Path -LiteralPath $Exe) 'Install did not copy the BTL executable.'
     Assert (Test-Path -LiteralPath $StartMenuShortcut) 'Install did not create the per-user Start menu shortcut.'
+    $InstallMetadata = Get-Content -Raw (Join-Path $InstallDir 'install-info.json') | ConvertFrom-Json
+    Assert ($InstallMetadata.dataDir -eq [IO.Path]::GetFullPath($DataDir)) 'Install metadata did not keep the config directory.'
+    Assert ($InstallMetadata.recordingsDir -eq [IO.Path]::GetFullPath($RecordingsDir)) 'Install metadata did not keep the recordings directory.'
     Assert ((Get-LinkTarget $StartMenuShortcut) -eq [IO.Path]::GetFullPath($Exe)) 'Start menu shortcut targets the wrong installation.'
 
-    New-Item -ItemType Directory -Force -Path (Join-Path $DataDir 'recordings') | Out-Null
+    New-Item -ItemType Directory -Force -Path $RecordingsDir | Out-Null
     Set-Content -LiteralPath (Join-Path $DataDir 'config.ini') -Value "[BTL]`nkeep = true" -Encoding utf8
-    Set-Content -LiteralPath (Join-Path $DataDir 'recordings\keep.mp4') -Value 'sentinel-media' -Encoding utf8
+    Set-Content -LiteralPath (Join-Path $RecordingsDir 'keep.mp4') -Value 'sentinel-media' -Encoding utf8
     $BeforeConfig = (Get-FileHash -Algorithm SHA256 (Join-Path $DataDir 'config.ini')).Hash
-    $BeforeMedia = (Get-FileHash -Algorithm SHA256 (Join-Path $DataDir 'recordings\keep.mp4')).Hash
+    $BeforeMedia = (Get-FileHash -Algorithm SHA256 (Join-Path $RecordingsDir 'keep.mp4')).Hash
 
     # The app's own Startup manager uses this stable user-scoped .lnk name.
     New-Item -ItemType Directory -Force -Path $StartupFolder | Out-Null
@@ -86,10 +90,10 @@ try {
 
     New-Item -ItemType Directory -Path $NewPayload | Out-Null
     Get-ChildItem -LiteralPath $PayloadDir -Force | Copy-Item -Destination $NewPayload -Recurse -Force
-    & (Join-Path $NewPayload 'maintenance\update.ps1') -PayloadDir $NewPayload -InstallDir $InstallDir
+    & (Join-Path $NewPayload 'maintenance\update.ps1') -PayloadDir $NewPayload -InstallDir $InstallDir -DataDir $DataDir -RecordingsDir $RecordingsDir
     Assert (Test-Path -LiteralPath $Exe) 'Update did not leave the new application installed.'
     Assert ((Get-FileHash -Algorithm SHA256 (Join-Path $DataDir 'config.ini')).Hash -eq $BeforeConfig) 'Update changed config.ini.'
-    Assert ((Get-FileHash -Algorithm SHA256 (Join-Path $DataDir 'recordings\keep.mp4')).Hash -eq $BeforeMedia) 'Update changed a recording.'
+    Assert ((Get-FileHash -Algorithm SHA256 (Join-Path $RecordingsDir 'keep.mp4')).Hash -eq $BeforeMedia) 'Update changed a recording.'
     Assert ((Get-LinkTarget $StartupShortcut) -eq [IO.Path]::GetFullPath($Exe)) 'Update broke/changed the Startup shortcut.'
     Assert ((Get-LinkTarget $StartMenuShortcut) -eq [IO.Path]::GetFullPath($Exe)) 'Update broke/changed the Start menu shortcut.'
 
@@ -104,8 +108,8 @@ try {
     Assert (-not (Test-Path -LiteralPath $StartupShortcut)) 'Uninstall did not remove the BTL Startup shortcut.'
     Assert (-not (Test-Path -LiteralPath $StartMenuShortcut)) 'Uninstall did not remove the BTL Start menu shortcut.'
     Assert ((Get-FileHash -Algorithm SHA256 (Join-Path $DataDir 'config.ini')).Hash -eq $BeforeConfig) 'Uninstall changed config.ini.'
-    Assert ((Get-FileHash -Algorithm SHA256 (Join-Path $DataDir 'recordings\keep.mp4')).Hash -eq $BeforeMedia) 'Uninstall changed a recording.'
-    Write-Host 'Lifecycle smoke PASS: install, update preserved both data hashes and shortcuts, uninstall removed app/shortcuts and kept data.'
+    Assert ((Get-FileHash -Algorithm SHA256 (Join-Path $RecordingsDir 'keep.mp4')).Hash -eq $BeforeMedia) 'Uninstall changed a recording.'
+    Write-Host 'Lifecycle smoke PASS: install and update preserved config/recording hashes and shortcuts; uninstall removed app/shortcuts while keeping both user data folders.'
 } catch {
     $FailureMessage = ($_.Exception.Message -replace '[\r\n]+', ' ')
     Write-Output "::error title=BTL lifecycle failure::$FailureMessage"

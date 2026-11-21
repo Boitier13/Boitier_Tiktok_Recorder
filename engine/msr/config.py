@@ -19,8 +19,8 @@ def new_parser(**kwargs):
 def default_streams_dir():
     """Recordings folder for a fresh config.ini (not ``E:\\Streams``).
 
-    Windows: ``%USERPROFILE%\\Videos\\Multi-Stream Recorder``
-    POSIX: ``~/Videos/Multi-Stream Recorder``
+    Windows uses the product's Videos folder name, while BTL's host resolves
+    the Windows known-folder path when it starts (including redirected folders).
     Existing config.ini values are left alone.
     """
     if os.name == "nt":
@@ -28,7 +28,7 @@ def default_streams_dir():
         videos = os.path.join(base, "Videos")
     else:
         videos = os.path.join(os.path.expanduser("~"), "Videos")
-    return os.path.join(videos, "Multi-Stream Recorder")
+    return os.path.join(videos, "BoitierTiktokRecorder")
 
 
 def parser_getfloat(parser, section, key, default):

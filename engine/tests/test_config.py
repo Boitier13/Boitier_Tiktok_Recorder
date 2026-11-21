@@ -21,7 +21,7 @@ class DefaultStreamsDirTests(unittest.TestCase):
         path = default_streams_dir()
         self.assertTrue(path)
         self.assertNotEqual(os.path.normcase(path), os.path.normcase(r"E:\Streams"))
-        self.assertTrue(path.endswith("Multi-Stream Recorder"))
+        self.assertTrue(path.endswith("BoitierTiktokRecorder"))
         self.assertIn("Videos", path.replace("\\", "/").split("/"))
 
     def test_new_config_uses_portable_default(self):

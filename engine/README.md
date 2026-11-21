@@ -145,7 +145,7 @@ This README describes **v3.1.5**. Full history: [CHANGELOG.md](CHANGELOG.md).
    ```
 4. Double-click **`run_msr.pyw`** in the MSR folder.
 
-The first launch shows a small "first-time setup" window for about a minute while MSR creates its own environment (`.venv` in the MSR folder) and installs its packages there. Later launches start straight away. MSR writes `config.ini` on first start; recordings go to `%USERPROFILE%\Videos\Multi-Stream Recorder` unless you set `streams_dir`.
+The first launch shows a small "first-time setup" window for about a minute while MSR creates its own environment (`.venv` in the MSR folder) and installs its packages there. Later launches start straight away. MSR writes `config.ini` on first start; recordings go to `%USERPROFILE%\Videos\BoitierTiktokRecorder` unless you set `streams_dir`.
 
 Want a desktop shortcut with the icon? Run `python create_shortcut.py` once (`--data-dir D:\msr-data` for another data folder). It never replaces an existing shortcut; `--set-icon "path\to\Old.lnk"` only gives an existing one the icon.
 
@@ -244,7 +244,7 @@ Or leave the password out and set the `MSR_FISHTANK_PASSWORD` environment variab
 
 | Section / key | Default | Meaning |
 | --- | --- | --- |
-| `Paths/streams_dir` | Videos\Multi-Stream Recorder | Where `Recorded`, `Processed`, `Clips` and the log go |
+| `Paths/streams_dir` | Videos\BoitierTiktokRecorder | Where `Recorded`, `Processed`, `Clips` and the log go |
 | `Paths/fallback_dir` | (blank) | Where recording continues if `streams_dir` becomes unreachable. Blank = a folder in the system temp folder; `off` = pause instead. Moved back when the drive returns |
 | `Paths/cookies_file` | auto | Explicit cookies.txt path |
 | `Recording/quality` | best | Stream quality |

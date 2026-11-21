@@ -118,7 +118,7 @@ function SurveillancePage() {
       )}
       <PageHeader
         title="Surveillance"
-        subtitle="État et enregistrements transmis par le moteur local."
+        subtitle="La pause suspend la détection des nouveaux LIVE; les captures déjà en cours continuent jusqu’à la fin du LIVE."
         actions={
           <Button
             variant={monitoringActive ? "secondary" : "default"}
@@ -128,8 +128,8 @@ function SurveillancePage() {
                 await setMonitoringActive(!monitoringActive);
                 toast(
                   monitoringActive
-                    ? "Session moteur arrêtée"
-                    : "Démarrage de la session moteur demandé",
+                    ? "Détection des nouveaux LIVE mise en pause; les captures en cours continuent"
+                    : "Reprise de la détection des LIVE demandée",
                 );
               } catch (error) {
                 toast.error("Commande moteur refusée", {
@@ -166,9 +166,9 @@ function SurveillancePage() {
           <p className="font-mono text-xs text-muted-foreground">
             {monitoringActive
               ? nextCheckIn === null
-                ? "session moteur active"
+                ? "détection active"
                 : `prochaine vérification · ${nextCheckIn} s`
-              : "session moteur arrêtée"}
+              : "détection en pause · captures en cours conservées"}
           </p>
         </div>
 

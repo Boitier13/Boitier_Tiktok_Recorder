@@ -138,6 +138,10 @@ class FakeRecorder:
     def set_poll_interval(self, minutes):
         self.calls.append(("set_poll_interval", minutes))
 
+    def set_monitoring_paused(self, paused):
+        self.calls.append(("set_monitoring_paused", bool(paused)))
+        self.runtime["monitoring_paused"] = bool(paused)
+
 
 class Headless:
     """A HeadlessApp running its main loop on a thread, with a live control Service."""
@@ -243,6 +247,24 @@ class SessionTests(unittest.TestCase):
 
     def test_headless_starts_enabled_channels_at_once(self):
         self.assertEqual(self.h.recorders[0].channels, ["kickone"])
+
+    def test_pause_monitoring_keeps_active_recorders_running(self):
+        rec = self.h.recorders[0]
+        paused = self.h.call("monitoring", {"running": False})
+        self.assertTrue(paused["ok"], paused)
+        self.assertEqual(paused["result"]["monitoring"], "paused")
+        self.assertTrue(paused["result"]["recordings_continued"])
+        self.assertTrue(rec.is_running)
+        self.assertIn(("set_monitoring_paused", True), rec.calls)
+        status = self.h.call("status")["result"]
+        self.assertTrue(status["session"]["running"])
+        self.assertFalse(status["session"]["monitoring_active"])
+
+        resumed = self.h.call("monitoring", {"running": True})
+        self.assertTrue(resumed["ok"], resumed)
+        self.assertIn(("set_monitoring_paused", False), rec.calls)
+        self.assertTrue(self.h.call("status")["result"]["session"]["monitoring_active"])
+        self.assertNotIn("stop", rec.calls)
 
     def test_stop_then_start_makes_a_new_session(self):
         self.assertEqual(self.h.call("stop")["result"]["session"], "stopped")

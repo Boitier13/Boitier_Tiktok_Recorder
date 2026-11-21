@@ -1227,6 +1227,7 @@ class StreamRecorder:
         self.runtime = self.manager.dict()
         self.runtime['poll_interval_minutes'] = config.getfloat(
             'Timeouts', 'poll_interval_minutes', fallback=3.0)
+        self.runtime['monitoring_paused'] = False
 
         # Per-channel wake events.  Setting one snaps that worker out of its
         # offline/error sleep so it checks the stream immediately ("Check Now").
@@ -1296,6 +1297,13 @@ class StreamRecorder:
         self.watch_channels = list(keys or [])
         if self.is_running:
             self._sync_kick_push()
+
+    def set_monitoring_paused(self, paused):
+        """Pause new stream checks while allowing existing capture processes to finish."""
+        try:
+            self.runtime['monitoring_paused'] = bool(paused)
+        except Exception:
+            logging.debug("Could not update paused monitoring state", exc_info=True)
 
     def _get_wake_event(self, channel_name):
         """Return the wake event for a channel, creating it on first use.

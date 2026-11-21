@@ -85,8 +85,9 @@ Boitier Tiktok Live — Windows x64 portable runtime package
 
 If PowerShell blocks downloaded scripts, run Unblock-File maintenance\*.ps1 for these scripts only.
 Run maintenance\install.ps1 from this extracted folder to install BTL per-user under
-%LOCALAPPDATA%\Programs\BoitierTiktokRecorder. Config and recordings stay under
-%LOCALAPPDATA%\BoitierTiktokRecorder, outside the app directory.
+%LOCALAPPDATA%\Programs\BoitierTiktokRecorder. Config and creator list stay under
+%LOCALAPPDATA%\BoitierTiktokRecorder; recordings go to
+%USERPROFILE%\Videos\BoitierTiktokRecorder, outside the app directory.
 
 For updates, extract the new release separately, close BTL, then run its
 maintenance\update.ps1. To uninstall and keep user data, run the installed

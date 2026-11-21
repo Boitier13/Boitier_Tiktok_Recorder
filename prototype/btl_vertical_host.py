@@ -330,13 +330,130 @@ def tiktok_only_status(state, hidden_count=0):
     return tiktok_only_payload(state, hidden_count)
 
 
+def windows_videos_directory(*, platform=None, home=None):
+    """Resolve Windows' actual Videos known folder, respecting OneDrive/redirection."""
+    platform = sys.platform if platform is None else platform
+    home = Path(home or os.environ.get("USERPROFILE") or Path.home())
+    if platform != "win32":
+        return home / "Videos"
+    try:
+        import ctypes
+        from uuid import UUID
+
+        class GUID(ctypes.Structure):
+            _fields_ = [
+                ("Data1", ctypes.c_uint32),
+                ("Data2", ctypes.c_uint16),
+                ("Data3", ctypes.c_uint16),
+                ("Data4", ctypes.c_ubyte * 8),
+            ]
+
+        parts = UUID("18989B1D-99B5-455B-841C-AB7C74E4DDFC")
+        folder_id = GUID(
+            parts.time_low, parts.time_mid, parts.time_hi_version,
+            (ctypes.c_ubyte * 8).from_buffer_copy(parts.bytes[8:]),
+        )
+        shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+        ole32 = ctypes.WinDLL("ole32", use_last_error=True)
+        shell32.SHGetKnownFolderPath.argtypes = [
+            ctypes.POINTER(GUID), ctypes.c_uint32, ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_wchar_p),
+        ]
+        shell32.SHGetKnownFolderPath.restype = ctypes.c_long
+        ole32.CoTaskMemFree.argtypes = [ctypes.c_void_p]
+        path_pointer = ctypes.c_wchar_p()
+        result = shell32.SHGetKnownFolderPath(
+            ctypes.byref(folder_id), 0, None, ctypes.byref(path_pointer)
+        )
+        if result == 0 and path_pointer.value:
+            result_path = Path(path_pointer.value)
+            ole32.CoTaskMemFree(ctypes.cast(path_pointer, ctypes.c_void_p))
+            return result_path
+        if path_pointer:
+            ole32.CoTaskMemFree(ctypes.cast(path_pointer, ctypes.c_void_p))
+    except Exception:
+        logging.warning("Could not resolve the Windows Videos known folder; using USERPROFILE\\Videos.",
+                        exc_info=True)
+    return home / "Videos"
+
+
+class RecordingsMigrationError(RuntimeError):
+    """Raised when moving existing recordings would risk overwriting user data."""
+
+
+def migrate_recordings_directory(source, destination):
+    """Move a BTL recordings tree without overwriting any existing destination files."""
+    source = Path(source).resolve()
+    destination = Path(destination).resolve()
+    if source == destination:
+        destination.mkdir(parents=True, exist_ok=True)
+        return False
+    if source in destination.parents or destination in source.parents:
+        raise RecordingsMigrationError(
+            f"Le déplacement des enregistrements est ambigu entre '{source}' et '{destination}'. "
+            "Aucun fichier n’a été déplacé."
+        )
+    if not source.exists():
+        destination.mkdir(parents=True, exist_ok=True)
+        return False
+    if not source.is_dir():
+        raise RecordingsMigrationError(f"Le dossier source des enregistrements n’est pas un dossier : '{source}'.")
+
+    source_has_files = any(path.is_file() for path in source.rglob("*"))
+    if destination.exists():
+        destination_has_files = destination.is_dir() and any(
+            path.is_file() for path in destination.rglob("*")
+        )
+        if destination_has_files and source_has_files:
+            raise RecordingsMigrationError(
+                "Les deux dossiers contiennent déjà des fichiers; BTL n’écrasera rien.\n\n"
+                f"Ancien dossier : {source}\nNouveau dossier : {destination}\n\n"
+                "Faites une copie de sauvegarde et déplacez ou fusionnez ces dossiers manuellement, "
+                "puis relancez BTL."
+            )
+        if destination_has_files:
+            return False
+        shutil.rmtree(destination)
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.move(str(source), str(destination))
+    except Exception as exc:
+        # shutil.move may leave a partial cross-volume copy. The source remains intact on
+        # copy failure; remove only the destination we just created so a later retry is safe.
+        if source.exists() and destination.exists():
+            shutil.rmtree(destination, ignore_errors=True)
+        raise RecordingsMigrationError(
+            "BTL n’a pas pu déplacer les enregistrements vers le dossier Vidéos. "
+            "Les originaux sont conservés dans l’ancien dossier.\n\n"
+            f"Source : {source}\nDestination : {destination}\nDétail : {exc}"
+        ) from exc
+    return True
+
+
 class Prototype:
-    def __init__(self, data_dir: Path, *, enable_windows_notifications=True):
+    def __init__(self, data_dir: Path, *, enable_windows_notifications=True, recordings_dir=None):
         self.data_dir = data_dir.resolve()
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        streams = self.data_dir / "recordings"
+        config_path = self.data_dir / "config.ini"
+        config_existed = config_path.is_file()
+        self.config = Config(str(config_path))
+        legacy_streams = self.data_dir / "recordings"
+        if recordings_dir is None:
+            streams = legacy_streams
+        else:
+            streams = Path(recordings_dir).resolve()
+            configured_streams = (self.config.get("Paths", "streams_dir", fallback="") or "").strip()
+            if config_existed and configured_streams:
+                source = Path(configured_streams)
+                if not source.is_absolute():
+                    source = self.data_dir / source
+                source = source.resolve()
+                if source != streams and source.exists():
+                    migrate_recordings_directory(source, streams)
+            if legacy_streams.exists() and legacy_streams.resolve() != streams:
+                migrate_recordings_directory(legacy_streams, streams)
         streams.mkdir(parents=True, exist_ok=True)
-        self.config = Config(str(self.data_dir / "config.ini"))
         self.config.config.set("Paths", "streams_dir", str(streams))
         roster_file = self.data_dir / "channels.json"
         self.config.config.set("Paths", "channels_file", str(roster_file))
@@ -966,8 +1083,7 @@ class UIHandler(BaseHTTPRequestHandler):
                 running = body.get("running")
                 if not isinstance(running, bool):
                     return self._send_json({"error": "Le champ running doit être booléen."}, 400)
-                command = "start" if running else "stop"
-                result = self.prototype.command(command)
+                result = self.prototype.command("monitoring", {"running": running})
                 return self._send_json({"result": result, "state": self.prototype.command("status")})
             if path == "/api/demo-event":
                 body = self._body()
@@ -1178,6 +1294,53 @@ def run_smoke(data_dir: Path | None = None):
                      probe_version == "2026.10.26"
                      and probe_call.get("kwargs", {}).get("timeout") == 45
                      and probe_diagnostics.get("yt-dlp", "").startswith("OK en "))
+
+        legacy_root = path / "legacy-recordings"
+        videos_root = path / "Videos" / "BoitierTiktokRecorder"
+        sample_raw = legacy_root / "Recorded" / "tiktok" / "demo" / "sample.ts"
+        sample_raw.parent.mkdir(parents=True)
+        sample_raw.write_bytes(b"existing capture bytes")
+        (legacy_root / "stream_recorder.log").write_text("existing log", encoding="utf-8")
+        moved = migrate_recordings_directory(legacy_root, videos_root)
+        result.check("migration des enregistrements préserve les captures et journaux",
+                     moved and not legacy_root.exists()
+                     and (videos_root / "Recorded" / "tiktok" / "demo" / "sample.ts").read_bytes()
+                     == b"existing capture bytes"
+                     and (videos_root / "stream_recorder.log").read_text(encoding="utf-8") == "existing log")
+
+        conflict_source = path / "conflict-source"
+        conflict_destination = path / "conflict-destination"
+        conflict_source.mkdir()
+        conflict_destination.mkdir()
+        (conflict_source / "same.mp4").write_bytes(b"old recording")
+        (conflict_destination / "same.mp4").write_bytes(b"different existing recording")
+        try:
+            migrate_recordings_directory(conflict_source, conflict_destination)
+            conflict_safe = False
+        except RecordingsMigrationError:
+            conflict_safe = ((conflict_source / "same.mp4").read_bytes() == b"old recording"
+                             and (conflict_destination / "same.mp4").read_bytes()
+                             == b"different existing recording")
+        result.check("migration refuse d’écraser des enregistrements déjà présents", conflict_safe)
+
+        migration_data = path / "migration-data"
+        migration_old = migration_data / "recordings"
+        migration_new = path / "user-videos" / "BoitierTiktokRecorder"
+        migration_file = migration_old / "Processed" / "tiktok" / "demo" / "kept.mp4"
+        migration_file.parent.mkdir(parents=True)
+        migration_file.write_bytes(b"kept media")
+        migration_config = Config(str(migration_data / "config.ini"))
+        migration_config.config.set("Paths", "streams_dir", str(migration_old))
+        migration_config.save()
+        migrated_prototype = Prototype(migration_data, recordings_dir=migration_new)
+        result.check("premier démarrage migre le dossier configuré et persiste le nouveau chemin",
+                     not migration_old.exists()
+                     and (migration_new / "Processed" / "tiktok" / "demo" / "kept.mp4").read_bytes()
+                     == b"kept media"
+                     and Path(migrated_prototype.config.get("Paths", "streams_dir")).resolve()
+                     == migration_new.resolve())
+        result.check("dossier Vidéos de secours suit le dossier utilisateur",
+                     windows_videos_directory(platform="linux", home=path) == path / "Videos")
 
         page = api_page = urllib.request.urlopen(base + "/", timeout=5).read().decode("utf-8")
         result.check("interface locale française servie par l’hôte du prototype",
@@ -1858,7 +2021,15 @@ def main():
         logging.basicConfig(stream=background_log, level=logging.INFO,
                             format="%(asctime)s %(levelname)s %(message)s")
 
-    prototype = Prototype(data_dir).start()
+    recordings_dir = (
+        windows_videos_directory() / "BoitierTiktokRecorder"
+        if sys.platform == "win32" else None
+    )
+    try:
+        prototype = Prototype(data_dir, recordings_dir=recordings_dir).start()
+    except RecordingsMigrationError as exc:
+        show_windows_message(str(exc), title="Déplacement des enregistrements")
+        raise SystemExit(2) from exc
     httpd = create_local_ui(prototype, port=args.port, frontend_dir=frontend_dir)
     desktop_enabled = sys.platform == "win32" and not args.no_desktop
     frontend_server = None

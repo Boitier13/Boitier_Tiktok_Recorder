@@ -2,7 +2,7 @@ import type { ActivityEvent, ActivityType, Creator, Recording, Settings } from "
 
 export type EngineSnapshot = {
   app?: { mode?: string; version?: string };
-  session?: { running?: boolean; recording?: number };
+  session?: { running?: boolean; monitoring_active?: boolean; recording?: number };
   channels?: Array<Record<string, unknown>>;
   health?: { problems?: string[]; disk?: { main?: { free_gb?: number } } };
   updated_at?: number;
@@ -283,7 +283,10 @@ export async function readSnapshot(): Promise<BtlSnapshot> {
     recordings,
     activeRecordings,
     diskFreeGB: typeof free === "number" ? free : null,
-    monitoringActive: engine.session?.running === true,
+    monitoringActive:
+      typeof engine.session?.monitoring_active === "boolean"
+        ? engine.session.monitoring_active
+        : engine.session?.running === true,
   };
 }
 
@@ -314,7 +317,6 @@ export async function removeCreator(id: string): Promise<void> {
 
 export async function setMonitoring(running: boolean): Promise<void> {
   await request("/api/session", { method: "POST", body: JSON.stringify({ running }) });
-  if (!running) clearArchiveCache();
 }
 
 export async function stopRecording(id: string): Promise<void> {

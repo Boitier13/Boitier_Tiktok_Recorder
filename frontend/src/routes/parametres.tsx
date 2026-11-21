@@ -136,6 +136,7 @@ function SettingsPage() {
     settingsError,
     connected,
     monitoringActive,
+    engine,
     diskFreeGB,
   } = useAppStore();
   const [saving, setSaving] = useState<string | null>(null);
@@ -240,7 +241,8 @@ function SettingsPage() {
   };
 
   const valueDisabled = disabled;
-  const pathDisabled = disabled || monitoringActive;
+  const sessionActive = engine?.session?.running === true;
+  const pathDisabled = disabled || sessionActive;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -443,7 +445,7 @@ function SettingsPage() {
               disabled={pathDisabled || !folderDraft.trim() || folderDraft === settings.saveFolder}
               onClick={() => void save("saveFolder", folderDraft.trim())}
               title={
-                monitoringActive
+                sessionActive
                   ? "Arrêtez la session moteur avant de changer le dossier"
                   : undefined
               }

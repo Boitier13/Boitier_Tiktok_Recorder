@@ -5,10 +5,11 @@
 BTL est distribué comme ZIP portable x64 contenant une application PyInstaller `onedir`, pas comme MSI. Les scripts PowerShell fournis ajoutent un cycle utilisateur sans droits administrateur :
 
 - **Application** : `%LOCALAPPDATA%\Programs\BoitierTiktokRecorder` par défaut.
-- **Données persistantes** : `%LOCALAPPDATA%\BoitierTiktokRecorder` par défaut — `config.ini`, journaux, index et dossiers d’enregistrements. Ce chemin est séparé du dossier application et n’est ni remplacé lors d’une mise à jour, ni supprimé par défaut à la désinstallation.
+- **Configuration et créateurs** : `%LOCALAPPDATA%\BoitierTiktokRecorder` par défaut — `config.ini`, journaux, index et liste des créateurs. Ce chemin est séparé du dossier application et n’est ni remplacé lors d’une mise à jour, ni supprimé par défaut à la désinstallation.
+- **Enregistrements vidéo** : `%USERPROFILE%\Videos\BoitierTiktokRecorder` par défaut, en utilisant le dossier Vidéos Windows connu s’il est redirigé (par exemple OneDrive). Les vidéos restent séparées de la configuration et sont conservées lors des mises à jour et désinstallations.
 - **Raccourcis** : raccourci menu Démarrer à l’installation; autostart facultatif géré depuis Paramètres par un raccourci Startup du profil utilisateur. Aucun service ni clé de registre d’autostart n’est créé.
 
-`-InstallDir` et `-DataDir` permettent de personnaliser les chemins. Les scripts refusent que le dossier application et le dossier de données se recouvrent. Ne placez jamais les enregistrements dans le dossier application. Périmètre V1 accepté : pas de MSI, pas de sélecteur natif de dossier, et import/export reportés; le chemin des données est le défaut ou `--data-dir`.
+`-InstallDir`, `-DataDir` et `-RecordingsDir` permettent de personnaliser les chemins. Le lanceur conserve `--data-dir` pour la configuration et la liste des créateurs; le dossier vidéo par défaut est résolu par BTL depuis le dossier Vidéos Windows. Les scripts refusent que les trois dossiers se recouvrent. Périmètre V1 accepté : pas de MSI, pas de sélecteur natif de dossier, et import/export reportés.
 
 ## Installer
 
@@ -19,7 +20,7 @@ BTL est distribué comme ZIP portable x64 contenant une application PyInstaller 
 .\maintenance\install.ps1
 ```
 
-L’application et un raccourci menu Démarrer sont installés pour l’utilisateur courant. Les données restent à leur emplacement existant/default. L’autostart n’est pas activé implicitement; il peut l’être ensuite dans Paramètres. Si Windows bloque un script marqué comme téléchargé, débloquez uniquement les scripts de ce dossier (`Unblock-File .\maintenance\*.ps1`) au lieu de modifier la stratégie PowerShell globale.
+L’application et un raccourci menu Démarrer sont installés pour l’utilisateur courant. La configuration reste sous `%LOCALAPPDATA%\BoitierTiktokRecorder`; les captures sont enregistrées sous `%USERPROFILE%\Videos\BoitierTiktokRecorder`. L’autostart n’est pas activé implicitement; il peut l’être ensuite dans Paramètres. Si Windows bloque un script marqué comme téléchargé, débloquez uniquement les scripts de ce dossier (`Unblock-File .\maintenance\*.ps1`) au lieu de modifier la stratégie PowerShell globale.
 
 Exemple de chemins personnalisés :
 
@@ -45,9 +46,9 @@ Pour une installation personnalisée :
 .\maintenance\update.ps1 -InstallDir "$env:LOCALAPPDATA\Apps\BTL"
 ```
 
-Le script prépare la nouvelle arborescence à côté de l’installation, remplace le dossier application avec restauration de l’ancien en cas d’échec de bascule, puis supprime le backup applicatif après succès. Il **n’écrit pas dans le dossier de données** : `config.ini`, enregistrements, journaux et index restent sous `%LOCALAPPDATA%\BoitierTiktokRecorder` (ou leur chemin personnalisé enregistré à l’installation). Les raccourcis restent valides parce que le chemin d’installation ne change pas; le script refuse de tourner si BTL est encore ouvert.
+Le script prépare la nouvelle arborescence à côté de l’installation, remplace le dossier application avec restauration de l’ancien en cas d’échec de bascule, puis supprime le backup applicatif après succès. Il **n’écrit pas dans les dossiers utilisateur** : `config.ini`, journaux, index et liste des créateurs restent sous `%LOCALAPPDATA%\BoitierTiktokRecorder`; les vidéos restent sous `%USERPROFILE%\Videos\BoitierTiktokRecorder` (ou aux chemins personnalisés enregistrés à l’installation). Les raccourcis restent valides parce que le chemin d’installation ne change pas; le script refuse de tourner si BTL est encore ouvert.
 
-Avant une mise à jour importante, une copie de sauvegarde du dossier de données reste recommandée. Si une ancienne installation contient `config.ini` ou `recordings` à côté de l’EXE, l’update s’arrête plutôt que de les écraser : sauvegardez et déplacez ces données hors du dossier application. Pour changer le chemin d’installation, désinstallez l’ancienne application en conservant les données puis réinstallez au nouvel emplacement en réutilisant le même `-DataDir`; réactivez l’autostart si besoin.
+Avant une mise à jour importante, une copie de sauvegarde des dossiers de configuration et de vidéos reste recommandée. Si une ancienne installation contient `config.ini` ou `recordings` à côté de l’EXE, l’update s’arrête plutôt que de les écraser : sauvegardez et déplacez la configuration hors du dossier application. Les vidéos trouvées sous leur ancien chemin configuré sont migrées au premier démarrage vers le dossier Vidéos par défaut; si source et destination contiennent déjà des fichiers, BTL refuse la migration sans écraser de données et indique les chemins pour une fusion manuelle. Pour changer le chemin d’installation, désinstallez l’ancienne application en conservant les données puis réinstallez au nouvel emplacement en réutilisant les mêmes `-DataDir` et `-RecordingsDir`; réactivez l’autostart si besoin.
 
 ## Désinstaller sans effacer les données
 
@@ -57,9 +58,9 @@ Lancer le script depuis le dossier de l’installation :
 .\maintenance\uninstall.ps1
 ```
 
-Il demande que BTL soit fermé, retire le raccourci Startup BTL s’il vise cette installation, retire le raccourci menu Démarrer correspondant et le dossier application. **Il conserve les données utilisateur**, y compris la configuration et les enregistrements, sous `%LOCALAPPDATA%\BoitierTiktokRecorder` ou le chemin personnalisé consigné dans `install-info.json`. La suppression de l’application est différée de quelques secondes pour laisser le script rendre la main avant le retrait des fichiers.
+Il demande que BTL soit fermé, retire le raccourci Startup BTL s’il vise cette installation, retire le raccourci menu Démarrer correspondant et le dossier application. **Il conserve les données utilisateur** : configuration et créateurs sous `%LOCALAPPDATA%\BoitierTiktokRecorder`, vidéos sous `%USERPROFILE%\Videos\BoitierTiktokRecorder` (ou leurs chemins personnalisés consignés dans `install-info.json`). La suppression de l’application est différée de quelques secondes pour laisser le script rendre la main avant le retrait des fichiers.
 
-Pour effacer également les données, il faut ajouter `-PurgeUserData`; le script affiche alors le chemin complet et exige de le ressaisir exactement. Exemple :
+Pour effacer également les données, il faut ajouter `-PurgeUserData`; le script affiche alors les deux chemins complets et exige de les ressaisir exactement, séparés par `|`. Exemple :
 
 ```powershell
 .\maintenance\uninstall.ps1 -PurgeUserData

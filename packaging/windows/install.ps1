@@ -3,6 +3,7 @@ param(
     [string]$SourceDir = '',
     [string]$InstallDir = '',
     [string]$DataDir = '',
+    [string]$RecordingsDir = '',
     [string]$ProgramsFolder = ''
 )
 $ErrorActionPreference = 'Stop'
@@ -31,8 +32,19 @@ if (-not $InstallDir) { $InstallDir = Join-Path $env:LOCALAPPDATA 'Programs\Boit
 $InstallDir = Get-FullPath $InstallDir
 if (-not $DataDir) { $DataDir = Join-Path $env:LOCALAPPDATA 'BoitierTiktokRecorder' }
 $DataDir = Get-FullPath $DataDir
+if (-not $RecordingsDir) {
+    $VideosDir = [Environment]::GetFolderPath('MyVideos')
+    if (-not $VideosDir) {
+        $UserHome = $env:USERPROFILE
+        if (-not $UserHome) { $UserHome = $HOME }
+        $VideosDir = Join-Path $UserHome 'Videos'
+    }
+    $RecordingsDir = Join-Path $VideosDir 'BoitierTiktokRecorder'
+}
+$RecordingsDir = Get-FullPath $RecordingsDir
 Assert-NotDriveRoot $InstallDir 'InstallDir'
 Assert-NotDriveRoot $DataDir 'DataDir'
+Assert-NotDriveRoot $RecordingsDir 'RecordingsDir'
 $Exe = Join-Path $SourceDir 'BoitierTiktokLive.exe'
 if (-not (Test-Path -LiteralPath $Exe -PathType Leaf) -or -not (Test-Path (Join-Path $SourceDir 'tools'))) {
     throw "Payload BTL incomplet : '$SourceDir' doit contenir BoitierTiktokLive.exe et tools/."
@@ -42,9 +54,15 @@ if ($LASTEXITCODE -ne 0) { throw 'Les outils de capture du ZIP ne passent pas --
 if (
     (Test-IsWithin $DataDir $InstallDir) -or
     (Test-IsWithin $InstallDir $DataDir) -or
-    $InstallDir.Equals($DataDir, [StringComparison]::OrdinalIgnoreCase)
+    $InstallDir.Equals($DataDir, [StringComparison]::OrdinalIgnoreCase) -or
+    (Test-IsWithin $RecordingsDir $InstallDir) -or
+    (Test-IsWithin $InstallDir $RecordingsDir) -or
+    (Test-IsWithin $RecordingsDir $DataDir) -or
+    (Test-IsWithin $DataDir $RecordingsDir) -or
+    $RecordingsDir.Equals($InstallDir, [StringComparison]::OrdinalIgnoreCase) -or
+    $RecordingsDir.Equals($DataDir, [StringComparison]::OrdinalIgnoreCase)
 ) {
-    throw 'Le dossier application et le dossier de données doivent être séparés. Les données par défaut restent sous %LOCALAPPDATA%\BoitierTiktokRecorder.'
+    throw 'Les dossiers application, données et enregistrements doivent être séparés. Configuration et liste de créateurs restent sous %LOCALAPPDATA%\BoitierTiktokRecorder; vidéos sous Vidéos\BoitierTiktokRecorder.'
 }
 if (Test-Path -LiteralPath $InstallDir) {
     if (Test-Path -LiteralPath (Join-Path $InstallDir 'BoitierTiktokLive.exe')) {
@@ -67,6 +85,7 @@ try {
         schema = 1
         installDir = $InstallDir
         dataDir = $DataDir
+        recordingsDir = $RecordingsDir
         installedAtUtc = [DateTime]::UtcNow.ToString('o')
     }
     $Metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Stage 'install-info.json') -Encoding utf8
@@ -95,5 +114,6 @@ if (-not (Test-Path -LiteralPath $ShortcutPath)) {
     Write-Warning "Le raccourci du menu Démarrer n’a pas été créé : $ShortcutPath"
 }
 Write-Host "BTL installé dans : $InstallDir"
-Write-Host "Configuration et enregistrements : $DataDir (conservés en dehors du dossier application)."
+Write-Host "Configuration et liste des créateurs : $DataDir"
+Write-Host "Enregistrements vidéo : $RecordingsDir (conservés en dehors du dossier application)."
 Write-Host "L’autostart est facultatif et se règle dans Paramètres; il utilise un raccourci Startup limité à cet utilisateur."

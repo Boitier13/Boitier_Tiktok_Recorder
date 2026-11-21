@@ -547,7 +547,8 @@ class HeadlessApp(AppAdapter):
         self._quit = threading.Event()
         self._lock = threading.Lock()
         self.after_children = None
-        self.paused = False    # set by stop: stays stopped until start
+        self.paused = False    # stop intent: stays stopped until explicit start
+        self.monitoring_paused = False  # pause detection without terminating active captures
         from msr.presence import PresenceStore
         self.presence = PresenceStore()   # live/offline of disabled channels (start_presence)
         self._poller = None
@@ -591,6 +592,19 @@ class HeadlessApp(AppAdapter):
         self._poller.start()
         return self._poller
 
+    def set_monitoring_paused(self, paused):
+        """Pause only discovery of new lives; workers already capturing remain untouched."""
+        paused = bool(paused)
+        with self._lock:
+            self.monitoring_paused = paused
+            self.paused = paused
+            rec = self.recorder
+        if is_running_session(rec):
+            setter = getattr(rec, "set_monitoring_paused", None)
+            if callable(setter):
+                setter(paused)
+        return "paused" if paused else "active"
+
     def start_session(self):
         with self._lock:
             if is_running_session(self.recorder) or self._want_session.is_set():
@@ -598,6 +612,7 @@ class HeadlessApp(AppAdapter):
             if not self.enabled_keys():
                 raise ControlError("Enable at least one channel first.", "conflict")
             self.paused = False
+            self.monitoring_paused = False
             self._want_session.set()
         return "starting"
 
@@ -605,6 +620,7 @@ class HeadlessApp(AppAdapter):
         with self._lock:
             self._want_session.clear()
             self.paused = True
+            self.monitoring_paused = True
             rec = self.recorder
         if not is_running_session(rec):
             raise ControlError("Recording is not running.", "conflict")
@@ -632,6 +648,9 @@ class HeadlessApp(AppAdapter):
                 rec = self.recorder_factory(self.enabled_keys())
                 with self._lock:
                     self.recorder = self.last_recorder = rec
+                    setter = getattr(rec, "set_monitoring_paused", None)
+                    if callable(setter):
+                        setter(self.monitoring_paused)
                 try:
                     rec.run()  # returns after a stop (control) or raises KeyboardInterrupt (Ctrl+C)
                 finally:
@@ -753,6 +772,7 @@ def live_status(app) -> dict:
         "updated_at": round(time.time(), 1),
         "session": {
             "running": running,
+            "monitoring_active": running and not bool(getattr(app, "monitoring_paused", getattr(app, "paused", False))),
             "channels_watched": len(getattr(rec, "channels", []) or []) if running else 0,
             "recording": sum(1 for r in rows if r["recording"]),
             "storage": {"state": storage_state, "notice": notice},
@@ -1091,8 +1111,27 @@ class Controller:
         return {"channels": self.app.reload_channels()}
 
     # -------------------------------------------------- session and recording
+    def cmd_monitoring(self, args):
+        """Pause/resume detection independently from workers already capturing a live."""
+        self._need_live()
+        running = args.get("running")
+        if not isinstance(running, bool):
+            raise ControlError("running must be a boolean.", "bad_request")
+        if running:
+            if is_running_session(self.app.recorder):
+                state = self.app.set_monitoring_paused(False)
+                return {"monitoring": state}
+            return {"monitoring": self.app.start_session()}
+        if is_running_session(self.app.recorder):
+            state = self.app.set_monitoring_paused(True)
+            return {"monitoring": state, "recordings_continued": True}
+        self.app.set_monitoring_paused(True)
+        return {"monitoring": "paused", "session": "stopped"}
+
     def cmd_start(self, args):
         self._need_live()
+        if is_running_session(self.app.recorder) and self.app.monitoring_paused:
+            return {"session": self.app.set_monitoring_paused(False)}
         return {"session": self.app.start_session()}
 
     def cmd_stop(self, args):

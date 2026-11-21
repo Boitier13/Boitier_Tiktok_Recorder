@@ -2475,9 +2475,33 @@ def record_worker(args):
 
     # No initial stagger: a live channel records at once; later polls are jittered below.
 
+    def _monitoring_paused():
+        try:
+            return bool(runtime.get("monitoring_paused", False))
+        except Exception:
+            return False  # manager can disappear during shutdown
+
+    def _wait_for_monitoring_resume():
+        nonlocal last_status
+        if not _monitoring_paused():
+            return not stop_event.is_set()
+        paused_status = {
+            "status": "Paused",
+            "detail": "surveillance en pause · les captures en cours continuent",
+            "size": "", "time": "", "progress": 0,
+        }
+        if paused_status != last_status:
+            status_queue.put((channel_key, paused_status))
+            last_status = paused_status.copy()
+        while _monitoring_paused() and not stop_event.is_set():
+            stop_event.wait(0.25)
+        return not stop_event.is_set()
+
     proc = None              # the running capture, reaped on every error path
     overlap_handoff = {}     # a size/time split's next capture, if one was started
     while not stop_event.is_set():
+        if not _wait_for_monitoring_resume():
+            break
         try:
             # Live-refresh the poll interval from the shared runtime dict so
             # GUI changes (including custom rates) apply without a restart.
@@ -2655,6 +2679,13 @@ def record_worker(args):
                         error = "could not build stream URL (JWT missing)"
             else:
                 is_live, stream_title, error = check_stream_streamlink(url, logger, stream_check_timeout)
+
+            # A pause requested while this network check was in flight must not
+            # launch a new capture. Wait for resume, then do a fresh check.
+            if _monitoring_paused():
+                if not _wait_for_monitoring_resume():
+                    break
+                continue
 
             if error:
                 consecutive_errors += 1

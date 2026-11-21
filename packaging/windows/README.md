@@ -114,7 +114,7 @@ Pour diagnostiquer un dossier déjà installé :
 
 ## État de validation
 
-Les scripts de cycle de vie et le contrôle WebView2 sont préparés mais n’ont pas encore été exécutés sur Windows. Le workflow doit vérifier les outils manquants, l’installation et la mise à jour avec chemins contenant espaces/accents, comparer les hashes des fichiers de données avant/après, vérifier la conservation des raccourcis et désinstaller sans purge. La purge après confirmation exacte reste un essai manuel sur données jetables. Le build PyInstaller Windows et ces tests restent requis.
+Le workflow GitHub Actions Windows a réussi le build PyInstaller, `--package-smoke` et le test automatisé du cycle install/update/uninstall sur `windows-latest` (run [44922937660](https://github.com/Boitier13/Boitier_Tiktok_Recorder/actions/runs/44922937660), 21 novembre 2026). Il a vérifié les outils manquants, les chemins avec espaces/accents, les hashes des données conservés et les raccourcis; l’artefact ZIP candidat `BoitierTiktokLive-win-x64-portable` a été publié (230,162,940 octets). Cela ne remplace pas les essais manuels Windows 10/11 : WebView2 réel, tray/autostart, installation utilisateur et capture autorisée restent à vérifier. La purge après confirmation exacte reste un essai manuel sur données jetables. Le ZIP demeure un candidat, pas une release juridiquement validée.
 
 Le rapport de licences est encore préliminaire et bloque la redistribution publique tant que l’audit et les notices complètes ne sont pas terminés. Le ZIP candidat ne doit pas être présenté comme une release juridiquement validée.
 

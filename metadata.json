@@ -1,0 +1,7 @@
+{
+  "name": "TikTok LIVE Monitor & Recorder",
+  "description": "Professional web dashboard for monitoring TikTok creators, tracking LIVE status, auto-recording streams, managing video archives, and viewing activity logs.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

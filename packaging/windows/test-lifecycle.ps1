@@ -73,7 +73,7 @@ try {
     Assert ($InstallMetadata.recordingsDir -eq [IO.Path]::GetFullPath($RecordingsDir)) 'Install metadata did not keep the recordings directory.'
     Assert ((Get-LinkTarget $StartMenuShortcut) -eq [IO.Path]::GetFullPath($Exe)) 'Start menu shortcut targets the wrong installation.'
 
-    New-Item -ItemType Directory -Force -Path $RecordingsDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $DataDir, $RecordingsDir | Out-Null
     Set-Content -LiteralPath (Join-Path $DataDir 'config.ini') -Value "[BTL]`nkeep = true" -Encoding utf8
     Set-Content -LiteralPath (Join-Path $RecordingsDir 'keep.mp4') -Value 'sentinel-media' -Encoding utf8
     $BeforeConfig = (Get-FileHash -Algorithm SHA256 (Join-Path $DataDir 'config.ini')).Hash

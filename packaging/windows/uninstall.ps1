@@ -47,8 +47,15 @@ if (
 ) {
     throw 'Le dossier de données ne peut pas être supprimé avec le dossier application : les deux chemins doivent être séparés.'
 }
-if (Get-Process -Name 'BoitierTiktokLive' -ErrorAction SilentlyContinue) {
-    throw 'Fermez Boitier Tiktok Live et son icône de barre système avant de le désinstaller.'
+$RunningBtl = @(Get-Process -Name 'BoitierTiktokLive' -ErrorAction SilentlyContinue | Where-Object {
+    try {
+        $ProcessPath = $_.Path
+        if (-not $ProcessPath) { return $true }
+        [IO.Path]::GetFullPath($ProcessPath).Equals($Exe, [StringComparison]::OrdinalIgnoreCase)
+    } catch { return $true }
+})
+if ($RunningBtl.Count -gt 0) {
+    throw 'Fermez Boitier Tiktok Live depuis le dossier installé et son icône de barre système avant de le désinstaller.'
 }
 if ($PurgeUserData) {
     Write-Warning "La suppression est définitive et portera sur toute la configuration et les enregistrements : $DataDir"

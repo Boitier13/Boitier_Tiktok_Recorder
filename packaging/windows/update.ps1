@@ -66,8 +66,16 @@ if ((Test-Path -LiteralPath (Join-Path $InstallDir 'config.ini')) -or
     (Test-Path -LiteralPath (Join-Path $InstallDir 'recordings'))) {
     throw "Des données utilisateur semblent se trouver dans le dossier application. L’update refuse de les écraser; sauvegardez-les puis déplacez-les vers le dossier de données."
 }
-if (Get-Process -Name 'BoitierTiktokLive' -ErrorAction SilentlyContinue) {
-    throw 'Fermez Boitier Tiktok Live et son icône de barre système avant de lancer la mise à jour.'
+$InstalledExe = Get-FullPath (Join-Path $InstallDir 'BoitierTiktokLive.exe')
+$RunningBtl = @(Get-Process -Name 'BoitierTiktokLive' -ErrorAction SilentlyContinue | Where-Object {
+    try {
+        $ProcessPath = $_.Path
+        if (-not $ProcessPath) { return $true }
+        [IO.Path]::GetFullPath($ProcessPath).Equals($InstalledExe, [StringComparison]::OrdinalIgnoreCase)
+    } catch { return $true }
+})
+if ($RunningBtl.Count -gt 0) {
+    throw 'Fermez Boitier Tiktok Live depuis le dossier installé et son icône de barre système avant de lancer la mise à jour.'
 }
 
 $Parent = Split-Path -Parent $InstallDir

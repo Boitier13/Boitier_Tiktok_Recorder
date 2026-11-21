@@ -39,8 +39,11 @@ if (-not (Test-Path -LiteralPath $Exe -PathType Leaf) -or -not (Test-Path (Join-
 }
 & $Exe --check-tools
 if ($LASTEXITCODE -ne 0) { throw 'Les outils de capture du ZIP ne passent pas --check-tools; installation annulée.' }
-if ((Test-IsWithin $DataDir $InstallDir) -or (Test-IsWithin $InstallDir $DataDir)
-    -or $InstallDir.Equals($DataDir, [StringComparison]::OrdinalIgnoreCase)) {
+if (
+    (Test-IsWithin $DataDir $InstallDir) -or
+    (Test-IsWithin $InstallDir $DataDir) -or
+    $InstallDir.Equals($DataDir, [StringComparison]::OrdinalIgnoreCase)
+) {
     throw 'Le dossier application et le dossier de données doivent être séparés. Les données par défaut restent sous %LOCALAPPDATA%\BoitierTiktokRecorder.'
 }
 if (Test-Path -LiteralPath $InstallDir) {

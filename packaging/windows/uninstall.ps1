@@ -40,8 +40,11 @@ if (-not $DataDir) { $DataDir = Join-Path $env:LOCALAPPDATA 'BoitierTiktokRecord
 $DataDir = Get-FullPath $DataDir
 Assert-NotDriveRoot $InstallDir 'InstallDir'
 Assert-NotDriveRoot $DataDir 'DataDir'
-if ((Test-IsWithin $DataDir $InstallDir) -or (Test-IsWithin $InstallDir $DataDir)
-    -or $DataDir.Equals($InstallDir, [StringComparison]::OrdinalIgnoreCase)) {
+if (
+    (Test-IsWithin $DataDir $InstallDir) -or
+    (Test-IsWithin $InstallDir $DataDir) -or
+    $DataDir.Equals($InstallDir, [StringComparison]::OrdinalIgnoreCase)
+) {
     throw 'Le dossier de données ne peut pas être supprimé avec le dossier application : les deux chemins doivent être séparés.'
 }
 if (Get-Process -Name 'BoitierTiktokLive' -ErrorAction SilentlyContinue) {

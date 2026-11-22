@@ -2033,6 +2033,16 @@ def build_recording_command_streamlink(url, raw_file, quality, platform, config,
         cmd.extend([
             "--http-header", "User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         ])
+    elif platform == "tiktok":
+        # The TikTok live-status fallback uses browser impersonation and a Chrome
+        # User-Agent. Streamlink's default client identity can be treated
+        # differently by TikTok's playback API, so use the same browser-style
+        # headers when opening the actual live stream.
+        cmd.extend([
+            "--http-header",
+            "User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "--http-header", "Accept-Language=en-US,en;q=0.9",
+        ])
     elif platform == "youtube":
         cmd.extend([
             "--http-header", "User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"

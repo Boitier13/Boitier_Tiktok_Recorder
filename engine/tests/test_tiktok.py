@@ -5,7 +5,11 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from msr.platforms import tiktok_parse_api_live_room, tiktok_room_id_from_html
+from msr.platforms import (
+    build_recording_command_streamlink,
+    tiktok_parse_api_live_room,
+    tiktok_room_id_from_html,
+)
 
 
 class TiktokRoomIdFromHtmlTests(unittest.TestCase):
@@ -21,6 +25,29 @@ class TiktokRoomIdFromHtmlTests(unittest.TestCase):
         self.assertIsNone(tiktok_room_id_from_html("<html>captcha</html>"))
         self.assertIsNone(tiktok_room_id_from_html(""))
         self.assertIsNone(tiktok_room_id_from_html(None))
+
+
+class TiktokStreamlinkCommandTests(unittest.TestCase):
+    def test_tiktok_capture_uses_browser_headers(self):
+        cmd = build_recording_command_streamlink(
+            "https://www.tiktok.com/@sample/live",
+            "capture.ts",
+            "480p",
+            "tiktok",
+            None,
+            verbose=False,
+            streamlink_debug=False,
+        )
+
+        self.assertIn(
+            "User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            cmd,
+        )
+        self.assertIn("Accept-Language=en-US,en;q=0.9", cmd)
+        self.assertIn("--http-header", cmd)
+        self.assertIn("--loglevel", cmd)
+        self.assertEqual(cmd[cmd.index("https://www.tiktok.com/@sample/live") + 1], "480p")
 
 
 class TiktokParseApiLiveRoomTests(unittest.TestCase):

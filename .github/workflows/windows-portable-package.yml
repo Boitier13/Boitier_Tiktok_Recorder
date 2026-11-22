@@ -26,8 +26,22 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Build and verify portable runtime
+        id: build
         shell: pwsh
-        run: ./packaging/windows/build.ps1
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $BuildLog = Join-Path $env:RUNNER_TEMP 'btl-portable-build.log'
+          try {
+            ./packaging/windows/build.ps1 *>&1 | Tee-Object -FilePath $BuildLog
+            if ($LASTEXITCODE -ne 0) { throw "Portable build exited with code $LASTEXITCODE." }
+          } catch {
+            $Detail = (Get-Content $BuildLog -Tail 40 -ErrorAction SilentlyContinue) -join ' | '
+            if ($Detail) {
+              $Detail = $Detail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Output "::error title=Portable build failure details::$Detail"
+            }
+            throw
+          }
       - name: Verify install-update-uninstall data preservation
         shell: pwsh
         run: ./packaging/windows/test-lifecycle.ps1

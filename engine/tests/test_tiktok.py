@@ -112,14 +112,44 @@ class TiktokDirectStreamTests(unittest.TestCase):
         self.assertIsNone(tiktok_stream_url_from_api({}, "best"))
 
     @patch("msr.platforms._tiktok_http_get")
-    def test_explicit_api_offline_status_is_clean_offline(self, get):
-        get.return_value = json.dumps({"data": {
+    def test_non_live_api_statuses_are_confirmed_by_both_webcast_hosts(self, get):
+        api_offline = json.dumps({"data": {
             "user": {"roomId": "123", "status": 4},
             "liveRoom": {"roomId": "123", "status": 4, "title": "Ended"},
         }})
+        webcast_offline = json.dumps({"data": {"status": 4}})
+        get.side_effect = [api_offline, webcast_offline, webcast_offline]
+
         result = check_tiktok_live_webcast("sample", None, Mock(), timeout=1)
-        self.assertEqual(result, (False, "123", "Ended", None, None))
-        get.assert_called_once()
+
+        self.assertEqual(result, (False, "123", None, None, None))
+        self.assertEqual(get.call_count, 3)
+
+    @patch("msr.platforms._tiktok_http_get")
+    def test_webcast_live_confirmation_overrides_stale_api_offline_status(self, get):
+        api_offline = json.dumps({"data": {
+            "user": {"roomId": "123", "status": 4},
+            "liveRoom": {"roomId": "123", "status": 4},
+        }})
+        webcast_live = json.dumps({"data": {"status": 2, "title": "Still live"}})
+        get.side_effect = [api_offline, webcast_live]
+
+        result = check_tiktok_live_webcast("sample", None, Mock(), timeout=1)
+
+        self.assertEqual(result, (True, "123", "Still live", None, None))
+        self.assertEqual(get.call_count, 2)
+
+    @patch("msr.platforms._tiktok_http_get")
+    def test_one_offline_webcast_response_and_one_failure_is_inconclusive(self, get):
+        api_offline = json.dumps({"data": {"user": {"roomId": "123", "status": 4}}})
+        webcast_offline = json.dumps({"data": {"status": 4}})
+        get.side_effect = [api_offline, webcast_offline, TimeoutError("network timeout")]
+
+        result = check_tiktok_live_webcast("sample", None, Mock(), timeout=1)
+
+        self.assertFalse(result[0])
+        self.assertIn("inconclusive", result[3])
+        self.assertEqual(get.call_count, 3)
 
     @patch("msr.platforms._tiktok_http_get")
     def test_unreachable_api_is_inconclusive_not_clean_offline(self, get):

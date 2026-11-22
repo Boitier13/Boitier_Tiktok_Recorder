@@ -266,6 +266,18 @@ class SessionTests(unittest.TestCase):
         self.assertTrue(self.h.call("status")["result"]["session"]["monitoring_active"])
         self.assertNotIn("stop", rec.calls)
 
+    def test_resume_monitoring_rearms_channels_stopped_by_record_stop(self):
+        rec = self.h.recorders[0]
+        stopped = self.h.call("record_stop", {"channels": ["kickone"]})
+        self.assertTrue(stopped["ok"], stopped)
+        self.assertIn("kickone", rec.stopped_channels)
+
+        self.assertTrue(self.h.call("monitoring", {"running": False})["ok"])
+        resumed = self.h.call("monitoring", {"running": True})
+        self.assertTrue(resumed["ok"], resumed)
+        self.assertIn(("start_channel", "kickone"), rec.calls)
+        self.assertNotIn("kickone", rec.stopped_channels)
+
     def test_stop_then_start_makes_a_new_session(self):
         self.assertEqual(self.h.call("stop")["result"]["session"], "stopped")
         self.assertTrue(self.h.wait(lambda: self.h.app.recorder is None))

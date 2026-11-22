@@ -265,6 +265,14 @@ describe("adaptateur d’état moteur BTL", () => {
       type: "live-start",
       creator: "demo",
     });
+    expect(
+      activityFromEngineEvent({ event: "recording", channel: "tiktok:sabrina.13131313", seq: 13 }),
+    ).toMatchObject({
+      id: "13",
+      type: "record-start",
+      creator: "sabrina.13131313",
+      text: "Enregistrement démarré",
+    });
     expect(activityFromEngineEvent({ event: "future_event", channel: "tiktok:demo" })).toBeNull();
   });
 });

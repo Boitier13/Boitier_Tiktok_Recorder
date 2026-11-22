@@ -343,11 +343,18 @@ export function activityFromEngineEvent(payload: Record<string, unknown>): Activ
   const type = types[event];
   if (!type) return null;
   const date = new Date();
+  const textByEvent: Record<string, string> = {
+    live: "LIVE détecté par le moteur",
+    recording: "Enregistrement démarré",
+    offline: "LIVE terminé — enregistrement finalisé",
+    finished: "Enregistrement terminé",
+    reconnect: "Reconnexion au LIVE",
+  };
   return {
     id: String(payload["seq"] ?? `${date.getTime()}-${event}-${channel}`),
     time: date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
     type,
     creator: channel,
-    text: event === "live" ? "Live détecté par le moteur" : event,
+    text: textByEvent[event] ?? event,
   };
 }

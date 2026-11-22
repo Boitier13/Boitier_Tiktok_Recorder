@@ -71,7 +71,7 @@ class TrackerTests(unittest.TestCase):
         raw = touch(os.path.join(self.streams, "Recorded", "kick", "knut", "knut_2.ts"), 99)
         self.t.seen("knut", {"status": "Remux failed", "detail": "ffmpeg exit 1"})
         kinds = [e["event"] for e in self.t.events()]
-        self.assertEqual(kinds, ["live", "finished", "error", "error", "finished"])
+        self.assertEqual(kinds, ["live", "recording", "finished", "error", "error", "finished"])
         ok, bad = self.t.finished
         self.assertEqual((ok["path"], ok["size"], ok["duration_seconds"], ok["remux_ok"]), (mp4, 2048, 61.5, True))
         self.assertEqual((bad["path"], bad["remux_ok"], bad["error"]), (raw, False, "ffmpeg exit 1"))
@@ -87,6 +87,15 @@ class TrackerTests(unittest.TestCase):
         self.t.seen_presence({"twitch:two": {"live": False}})
         self.t.seen_presence({"twitch:two": {"live": True}})
         self.assertEqual([e["event"] for e in self.t.events()], ["live", "live"])
+
+    def test_capture_start_is_reported_even_if_presence_already_marked_live(self):
+        self.t.seen_presence({"tiktok:sabrina.13131313": {"live": True}})
+        self.t.seen("tiktok:sabrina.13131313", {"status": "Recording", "time": "0:01"})
+        self.t.seen("tiktok:sabrina.13131313", {"status": "Recording", "time": "0:02"})
+
+        events = self.t.events()
+        self.assertEqual([event["event"] for event in events], ["live", "recording"])
+        self.assertEqual(events[-1]["source"], "capture")
 
     def test_wait_returns_the_next_matching_event_or_none(self):
         self.t.emit("error", "other")
@@ -553,7 +562,7 @@ class RestartAndRemoveTests(unittest.TestCase):
         self.c.handle("record_stop", {"channels": ["knut"]})
         self.t.seen("knut", {"status": "Stopped"})
         self.t.seen("knut", {"status": "Recording"})
-        self.assertEqual(self.kinds("knut"), ["live", "stopped", "live"])
+        self.assertEqual(self.kinds("knut"), ["live", "recording", "stopped", "live", "recording"])
 
     def test_remove_emits_stopped_and_a_re_add_goes_live_again(self):
         st = self.app.recorder.status_dict
@@ -564,13 +573,19 @@ class RestartAndRemoveTests(unittest.TestCase):
         self.assertEqual((ev["channel"], ev["was_recording"]), ("twitch:saruei", True))
         st["twitch:saruei"] = {"status": "Recording"}   # re-added worker records
         self.t.seen("twitch:saruei", st["twitch:saruei"])
-        self.assertEqual(self.kinds("twitch:saruei"), ["live", "stopped", "live"])
+        self.assertEqual(
+            self.kinds("twitch:saruei"),
+            ["live", "recording", "stopped", "live", "recording"],
+        )
 
     def test_removed_in_the_window_is_a_stop_too(self):
         self.t.seen("knut", {"status": "Recording"})
         self.t.prune({"twitch:saruei"})
         self.t.seen("knut", {"status": "Recording"})
-        self.assertEqual(self.kinds("knut"), ["live", "stopped", "live"])
+        self.assertEqual(
+            self.kinds("knut"),
+            ["live", "recording", "stopped", "live", "recording"],
+        )
 
     def test_wait_live_on_a_recording_channel_returns_at_once(self):
         ev = self.c.handle("wait", {"events": ["live"], "channel": "knut", "timeout": 0})["result"]
@@ -617,7 +632,7 @@ class OfflineAndIdleStopTests(unittest.TestCase):
                          ("offline", True, 460, True))
         self.t.seen("knut", {"status": "Offline", "detail": "reconnecting (100s left)"})
         self.t.seen("knut", {"status": "Offline", "detail": "reconnect grace period over", "event": "ended"})
-        self.assertEqual(self.kinds("knut"), ["live", "offline", "ended"])
+        self.assertEqual(self.kinds("knut"), ["live", "recording", "offline", "ended"])
 
     def rows(self):
         return {r["name"]: r for r in control.channel_rows(self.app)}

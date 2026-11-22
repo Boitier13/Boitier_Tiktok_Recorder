@@ -1186,7 +1186,7 @@ class UIHandler(BaseHTTPRequestHandler):
             after = int(urlparse(self.path).query.partition("after=")[2].split("&", 1)[0] or 0)
             stream = subscribe(
                 str(self.prototype.data_dir),
-                {"events": ["live", "error", "offline", "ended", "finished"],
+                {"events": ["live", "recording", "error", "offline", "ended", "finished"],
                  "after": after, "heartbeat": 2, "max_seconds": 3600},
                 idle_timeout=10,
             )

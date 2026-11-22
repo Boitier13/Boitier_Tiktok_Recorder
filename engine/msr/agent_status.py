@@ -14,7 +14,7 @@ from collections import deque
 FINISHED_KEEP = 50        # finished recordings remembered this run
 FINISHED_IN_STATUS = 20   # of those, how many go into msr_status.json
 EVENTS_KEEP = 500
-EVENT_KINDS = ("live", "stopped", "remux_started", "finished", "error", "offline", "ended",
+EVENT_KINDS = ("live", "recording", "stopped", "remux_started", "finished", "error", "offline", "ended",
                # app-wide (channel null):
                "health_problem", "disk_low", "update_available", "library_action")
 HEALTH_EVERY = 30.0       # seconds between health checks for the status file
@@ -155,7 +155,10 @@ class Tracker:
             info["last_recorded"] = info["last_live"] = now
             if not was_recording:
                 self._started(key)
+                # The dashboard needs a durable, explicit capture-start event even
+                # when the channel was already marked live by an earlier presence check.
                 self._set_live(key, True, "recording")
+                self.emit("recording", key, source="capture")
             return
         if old == (status, detail):
             return

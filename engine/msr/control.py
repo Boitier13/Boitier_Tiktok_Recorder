@@ -596,6 +596,7 @@ class HeadlessApp(AppAdapter):
         """Pause only discovery of new lives; workers already capturing remain untouched."""
         paused = bool(paused)
         with self._lock:
+            was_paused = self.monitoring_paused
             self.monitoring_paused = paused
             self.paused = paused
             rec = self.recorder
@@ -603,6 +604,16 @@ class HeadlessApp(AppAdapter):
             setter = getattr(rec, "set_monitoring_paused", None)
             if callable(setter):
                 setter(paused)
+            # record_stop intentionally kills that channel's worker. Once the user
+            # resumes surveillance, re-arm those enabled channels too; otherwise
+            # their stopped flag would silently exclude them from future LIVE checks.
+            if was_paused and not paused:
+                channels = set(getattr(rec, "channels", ()) or ())
+                stopped = set(getattr(rec, "stopped_channels", ()) or ())
+                start_channel = getattr(rec, "start_channel", None)
+                if callable(start_channel):
+                    for key in sorted(channels & stopped):
+                        start_channel(key)
         return "paused" if paused else "active"
 
     def start_session(self):

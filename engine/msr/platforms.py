@@ -395,6 +395,118 @@ def tiktok_parse_api_live_room(data):
     return (2 in statuses), room_id, title
 
 
+_TIKTOK_QUALITY_WEIGHTS = {
+    "ao": 0, "auto": 200, "ld": 300, "ld1": 300,
+    "sd": 400, "sd1": 400, "sd2": 400,
+    "hd": 500, "hd1": 500, "full_hd1": 700,
+    "hd_60": 600, "uhd": 700, "uhd_60": 800,
+    "origin": 1_000_000,
+}
+_TIKTOK_QUALITY_TARGETS = {
+    "worst": 0, "360p": 300, "480p": 400, "720p": 500,
+    "720p60": 600, "1080p": 700, "1080p60": 800,
+}
+
+
+def tiktok_stream_url_from_api(data, quality="best"):
+    """Select a direct FLV playback URL from TikTok's ``liveRoom`` streamData.
+
+    TikTok nests the pull variants as JSON inside ``streamData`` and
+    ``hevcStreamData``. Return a signed URL only to the caller (never log it);
+    malformed, absent, or non-HTTPS variants are ignored.
+    """
+    if not isinstance(data, dict):
+        return None
+    payload = data.get("data") if isinstance(data.get("data"), dict) else data
+    live_room = payload.get("liveRoom") if isinstance(payload.get("liveRoom"), dict) else {}
+    variants = []
+
+    for data_key, default_codec in (("streamData", "h264"), ("hevcStreamData", "h265")):
+        source = live_room.get(data_key)
+        pull_data = source.get("pull_data") if isinstance(source, dict) else None
+        raw_stream_data = pull_data.get("stream_data") if isinstance(pull_data, dict) else None
+        if isinstance(raw_stream_data, str):
+            try:
+                stream_data = json.loads(raw_stream_data)
+            except (TypeError, ValueError):
+                continue
+        elif isinstance(raw_stream_data, dict):
+            stream_data = raw_stream_data
+        else:
+            continue
+
+        stream_map = stream_data.get("data") if isinstance(stream_data, dict) else None
+        if not isinstance(stream_map, dict):
+            continue
+        for quality_name, rendition in stream_map.items():
+            main = rendition.get("main") if isinstance(rendition, dict) else None
+            sdk_params = (
+                rendition.get("sdk_params") if isinstance(rendition, dict) else None
+            ) or (main.get("sdk_params") if isinstance(main, dict) else None) or {}
+            if isinstance(sdk_params, str):
+                try:
+                    sdk_params = json.loads(sdk_params)
+                except (TypeError, ValueError):
+                    sdk_params = {}
+            if not isinstance(sdk_params, dict):
+                sdk_params = {}
+            if isinstance(main, str):
+                stream_url = main
+            elif isinstance(main, dict):
+                stream_url = (
+                    main.get("flv") or main.get("flv_url") or main.get("url")
+                )
+            else:
+                stream_url = None
+            if not isinstance(stream_url, str) or not stream_url.startswith("https://"):
+                continue
+            codec = str(sdk_params.get("VCodec") or sdk_params.get("v_codec") or default_codec).lower()
+            codec = {"avc": "h264", "hevc": "h265"}.get(codec, codec)
+            variants.append({"quality": str(quality_name).lower(), "codec": codec, "url": stream_url})
+
+    if not variants:
+        return None
+
+    requested = (quality or "best").lower()
+    if requested == "best":
+        selected = max(
+            variants,
+            key=lambda item: (
+                _TIKTOK_QUALITY_WEIGHTS.get(item["quality"], 200),
+                item["codec"] == "h264",
+            ),
+        )
+    elif requested == "worst":
+        selected = min(
+            variants,
+            key=lambda item: (
+                _TIKTOK_QUALITY_WEIGHTS.get(item["quality"], 200),
+                item["codec"] != "h264",
+            ),
+        )
+    else:
+        target = _TIKTOK_QUALITY_TARGETS.get(requested)
+        if target is None:
+            target = _TIKTOK_QUALITY_WEIGHTS.get(requested)
+        if target is None:
+            selected = max(variants, key=lambda item: _TIKTOK_QUALITY_WEIGHTS.get(item["quality"], 200))
+        else:
+            at_or_below = [
+                item for item in variants
+                if _TIKTOK_QUALITY_WEIGHTS.get(item["quality"], 200) <= target
+            ]
+            pool = at_or_below or variants
+            selected = max(
+                pool,
+                key=lambda item: (
+                    _TIKTOK_QUALITY_WEIGHTS.get(item["quality"], 200)
+                    if at_or_below else -_TIKTOK_QUALITY_WEIGHTS.get(item["quality"], 200),
+                    item["codec"] == "h264",
+                ),
+            )
+    return selected["url"]
+
+
 def _tiktok_http_get(url, opener, timeout, logger):
     """GET *url*. Prefer curl_cffi chrome impersonation; else cookie opener."""
     if HAS_CURL_CFFI:
@@ -421,7 +533,7 @@ def _tiktok_http_get(url, opener, timeout, logger):
         return resp.read().decode("utf-8", errors="replace")
 
 
-def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30):
+def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30, quality="best"):
     """Check TikTok live status when yt-dlp reports offline.
 
     Order:
@@ -430,9 +542,11 @@ def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30):
       2. roomId from the profile page, then ``/@user/live``.
       3. webcast.us.tiktok.com then webcast.tiktok.com (US-TTP vs global).
 
-    Any endpoint returning status 2 is live. Misses are logged at info.
+    Any endpoint returning status 2 is live. The user/room endpoint also
+    exposes direct FLV variants when TikTok includes them; choose the requested
+    quality and return the signed URL without logging it.
 
-    Returns (is_live, room_id, title, error).
+    Returns (is_live, room_id, title, error, stream_url).
     """
 
     handle = (username or "").lstrip("@")
@@ -465,11 +579,19 @@ def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30):
         data = json.loads(body)
         is_live, room_id, title = tiktok_parse_api_live_room(data)
         if is_live:
+            stream_url = tiktok_stream_url_from_api(data, quality)
             logger.info(
                 f"TikTok webcast check: LIVE via api-live/user/room "
                 f"(roomId={room_id}) for @{handle}"
             )
-            return True, room_id, title, None
+            if stream_url:
+                logger.info("TikTok API provided a direct FLV playback variant")
+            else:
+                logger.info(
+                    "TikTok API confirmed LIVE but exposed no direct FLV variant; "
+                    "will use the Streamlink plugin fallback"
+                )
+            return True, room_id, title, None, stream_url
         if room_id:
             logger.info(
                 f"TikTok api-live/user/room: @{handle} status not live "
@@ -503,7 +625,7 @@ def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30):
             logger.info(f"TikTok webcast check: {last_err} for @{handle}")
 
     if not room_id:
-        return False, None, None, last_err or "no roomId (profile, /live, api-live)"
+        return False, None, None, last_err or "no roomId (profile, /live, api-live)", None
 
     # ── 3. Webcast room/info — US-TTP first, global fallback ────────────
     statuses = []
@@ -522,10 +644,10 @@ def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30):
         if status == 2:
             title_data = room_data.get("title") or ""
             logger.info(f"TikTok webcast check: LIVE via {host} (status=2)")
-            return True, room_id, title_data or None, None
+            return True, room_id, title_data or None, None, None
 
     detail = ", ".join(statuses) if statuses else (last_err or "no webcast response")
-    return False, room_id, None, f"webcast did not confirm live ({detail})"
+    return False, room_id, None, f"webcast did not confirm live ({detail})", None
 
 
 def _fill_check_info(info, data):
@@ -1995,6 +2117,38 @@ def build_recording_command_ytdlp_from_start(url, out_stem, config, verbose, str
     return cmd
 
 
+_TIKTOK_BROWSER_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+_TIKTOK_ACCEPT_LANGUAGE = "en-US,en;q=0.9"
+
+
+def build_recording_command_tiktok_flv(stream_url, raw_file, config, verbose):
+    """Record TikTok's already-resolved FLV URL directly with ffmpeg.
+
+    The signed playback URL must not be logged; callers use redact_cmd_for_log.
+    No session cookies are copied from the browser or written to the command.
+    """
+    ffmpeg_path = config.get('Advanced', 'ffmpeg_path', fallback='ffmpeg') or 'ffmpeg'
+    loglevel = "verbose" if verbose else "warning"
+    headers = (
+        f"User-Agent: {_TIKTOK_BROWSER_USER_AGENT}\r\n"
+        "Referer: https://www.tiktok.com/\r\n"
+        f"Accept-Language: {_TIKTOK_ACCEPT_LANGUAGE}\r\n"
+    )
+    return [
+        ffmpeg_path,
+        "-loglevel", loglevel,
+        "-protocol_whitelist", _FFMPEG_NETWORK_PROTOCOLS,
+        "-headers", headers,
+        "-i", stream_url,
+        "-c", "copy",
+        "-f", "mpegts",
+        raw_file,
+    ]
+
+
 def build_recording_command_streamlink_kick(url, raw_file, quality, verbose, streamlink_debug):
     """Build an alternate streamlink command for Kick recording.
 
@@ -2040,8 +2194,8 @@ def build_recording_command_streamlink(url, raw_file, quality, platform, config,
         # headers when opening the actual live stream.
         cmd.extend([
             "--http-header",
-            "User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "--http-header", "Accept-Language=en-US,en;q=0.9",
+            f"User-Agent={_TIKTOK_BROWSER_USER_AGENT}",
+            "--http-header", f"Accept-Language={_TIKTOK_ACCEPT_LANGUAGE}",
         ])
     elif platform == "youtube":
         cmd.extend([

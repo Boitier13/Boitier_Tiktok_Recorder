@@ -33,6 +33,7 @@ from msr.platforms import (
     build_recording_command_fishtank,
     build_recording_command_rumble_hls,
     build_recording_command_streamlink,
+    build_recording_command_tiktok_flv,
     build_recording_command_streamlink_kick,
     build_recording_command_ytdlp,
     build_recording_command_ytdlp_from_start,
@@ -2623,6 +2624,7 @@ def record_worker(args):
             need_impersonate = False
             format_urls = None
             rumble_hls_url = None
+            tiktok_stream_url = None
             recording_url = url  # may be overridden by resolved URL
             if platform == "kick":
                 # Try streamlink for Kick first — it has a JS challenge solver
@@ -2668,8 +2670,8 @@ def record_worker(args):
                 # via api-live/user/room, /live HTML roomId, then Webcast.
                 if not is_live:
                     logger.info("TikTok: yt-dlp reported offline — cross-checking via TikTok live APIs")
-                    wc_live, _, wc_title, wc_err = check_tiktok_live_webcast(
-                        username, cookies_file, logger, stream_check_timeout)
+                    wc_live, _, wc_title, wc_err, tiktok_stream_url = check_tiktok_live_webcast(
+                        username, cookies_file, logger, stream_check_timeout, quality=quality)
                     if wc_live:
                         logger.info("TikTok: live API confirms LIVE (yt-dlp said offline)")
                         is_live = True
@@ -2863,6 +2865,9 @@ def record_worker(args):
                 if fs is not None:
                     return build_recording_command_ytdlp_from_start(
                         recording_url, fs.stem, config, verbose, streamlink_debug, cookies_file)
+                if platform == "tiktok" and tiktok_stream_url:
+                    return build_recording_command_tiktok_flv(
+                        tiktok_stream_url, out_file, config, verbose)
                 if platform == "kick":
                     # Use streamlink for Kick — it has a JS challenge solver for
                     # Cloudflare that yt-dlp lacks.  Same approach as Twitch.
@@ -3111,6 +3116,9 @@ def record_worker(args):
                     # from-start: yt-dlp reads the DASH manifest before any file appears
                     max(file_creation_timeout, 120) if from_start else file_creation_timeout,
                     verbose=verbose,
+                    tool_name_override=(
+                        "ffmpeg" if platform == "tiktok" and tiktok_stream_url else None
+                    ),
                     max_file_size_gb=max_file_size_gb,
                     stream_info=stream_info,
                     ffmpeg_path=config.get('Advanced', 'ffmpeg_path', fallback='ffmpeg') or 'ffmpeg',
@@ -3204,7 +3212,9 @@ def record_worker(args):
                         raw_file = merged
                     else:
                         logger.error("From-start parts could not be merged - kept for the next start")
-            if platform == "fishtank" or format_urls or rumble_hls_url:
+            if platform == "fishtank" or format_urls or rumble_hls_url or (
+                platform == "tiktok" and tiktok_stream_url
+            ):
                 tool_name = "ffmpeg"
             elif platform in ("kick", "twitch", "tiktok"):
                 tool_name = "streamlink"

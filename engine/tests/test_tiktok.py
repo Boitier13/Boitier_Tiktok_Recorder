@@ -1,14 +1,20 @@
 """TikTok live-status parsers used when yt-dlp reports offline."""
+import configparser
+import json
 import os
 import sys
 import unittest
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from msr.platforms import (
     build_recording_command_streamlink,
+    check_tiktok_live_webcast,
+    build_recording_command_tiktok_flv,
     tiktok_parse_api_live_room,
     tiktok_room_id_from_html,
+    tiktok_stream_url_from_api,
 )
 
 
@@ -25,6 +31,74 @@ class TiktokRoomIdFromHtmlTests(unittest.TestCase):
         self.assertIsNone(tiktok_room_id_from_html("<html>captcha</html>"))
         self.assertIsNone(tiktok_room_id_from_html(""))
         self.assertIsNone(tiktok_room_id_from_html(None))
+
+
+class TiktokDirectStreamTests(unittest.TestCase):
+    @staticmethod
+    def api_data():
+        variants = {
+            "data": {
+                "LD": {"main": {"flv": "https://cdn.invalid/low.flv?sig=low"}},
+                "SD1": {"main": "https://cdn.invalid/sd.flv?sig=sd"},
+                "HD1": {"main": "https://cdn.invalid/hd.flv?sig=hd"},
+                "ORIGIN": {"main": "https://cdn.invalid/origin.flv?sig=origin"},
+            }
+        }
+        return {
+            "data": {
+                "liveRoom": {
+                    "streamData": {
+                        "pull_data": {"stream_data": json.dumps(variants)},
+                    },
+                },
+            },
+        }
+
+    def test_api_stream_variants_respect_quality_and_best(self):
+        data = self.api_data()
+        self.assertEqual(
+            tiktok_stream_url_from_api(data, "480p"),
+            "https://cdn.invalid/sd.flv?sig=sd",
+        )
+        self.assertEqual(
+            tiktok_stream_url_from_api(data, "best"),
+            "https://cdn.invalid/origin.flv?sig=origin",
+        )
+
+    def test_invalid_or_missing_signed_url_is_ignored(self):
+        data = self.api_data()
+        data["data"]["liveRoom"]["streamData"]["pull_data"]["stream_data"] = "{"
+        self.assertIsNone(tiktok_stream_url_from_api(data, "best"))
+        self.assertIsNone(tiktok_stream_url_from_api({}, "best"))
+
+    @patch("msr.platforms._tiktok_http_get")
+    def test_live_api_check_returns_direct_url_without_logging_it(self, get):
+        data = self.api_data()
+        data["data"]["user"] = {"status": 2, "roomId": "123"}
+        data["data"]["liveRoom"].update({"status": 2, "roomId": "123", "title": "Live"})
+        get.return_value = json.dumps(data)
+        logger = Mock()
+
+        result = check_tiktok_live_webcast(
+            "@sample", None, logger, timeout=1, quality="480p"
+        )
+
+        self.assertEqual(result, (
+            True, "123", "Live", None, "https://cdn.invalid/sd.flv?sig=sd"
+        ))
+        self.assertNotIn("sig=sd", " ".join(str(call) for call in logger.mock_calls))
+
+    def test_direct_ffmpeg_command_uses_headers_and_writes_ts(self):
+        config = configparser.ConfigParser()
+        cmd = build_recording_command_tiktok_flv(
+            "https://cdn.invalid/live.flv?sig=secret", "capture.ts", config, verbose=False
+        )
+        self.assertEqual(cmd[0], "ffmpeg")
+        self.assertIn("User-Agent: ", cmd[cmd.index("-headers") + 1])
+        self.assertIn("Referer: https://www.tiktok.com/", cmd[cmd.index("-headers") + 1])
+        self.assertIn("-c", cmd)
+        self.assertIn("copy", cmd)
+        self.assertEqual(cmd[-1], "capture.ts")
 
 
 class TiktokStreamlinkCommandTests(unittest.TestCase):

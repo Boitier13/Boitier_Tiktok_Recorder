@@ -1504,7 +1504,7 @@ def run_smoke(data_dir: Path | None = None):
         native_sent = send_windows_notification(
             "Test", "Essai", platform="win32", notification_api=fake_notification_api
         )
-        result.check("adaptateur Windows appelle Plyer avec le titre et le message attendus",
+        result.check("adaptateur Windows appelle le backend persistant avec le titre et le message attendus",
                      native_sent and fake_notification_api.calls == [{
                          "title": "Test", "message": "Essai", "app_name": "Boitier Tiktok Live", "timeout": 8
                      }])
@@ -2162,6 +2162,9 @@ def main():
                 window=desktop,
             )
             tray.start()
+            # Reuse the one long-lived pystray icon for balloons. Plyer creates a
+            # separate Shell_NotifyIcon entry per event, which accumulates hidden icons.
+            prototype._notification_sender = tray.notify
             if desktop is not None:
                 desktop.attach_tray(tray)
         except TrayUnavailable as exc:

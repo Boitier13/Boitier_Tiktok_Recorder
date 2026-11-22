@@ -41,10 +41,11 @@ def notification_content(event: dict) -> tuple[str, str] | None:
 
 def send_windows_notification(title: str, message: str, *, platform: str | None = None,
                               notification_api=None) -> bool:
-    """Send a best-effort Windows notification using the engine's existing Plyer dependency.
+    """Send through an injected persistent-icon backend; never create a temporary tray icon.
 
-    ``platform`` and ``notification_api`` are injectable for deterministic tests; production
-    callers leave both unset. Plyer dispatches the Windows balloon/toast on its own thread.
+    Plyer's Windows backend registers one Shell_NotifyIcon entry per notification and
+    retains its cleanup callback until process exit. Production uses ``WindowsTray.notify``
+    on BTL's already-running icon; ``notification_api`` remains injectable for tests.
     """
     import sys
 
@@ -52,12 +53,9 @@ def send_windows_notification(title: str, message: str, *, platform: str | None 
     if platform != "win32":
         raise WindowsNotificationsUnavailable("Les notifications système BTL nécessitent Windows.")
     if notification_api is None:
-        try:
-            from plyer import notification as notification_api
-        except ImportError as exc:
-            raise WindowsNotificationsUnavailable(
-                "Le module Plyer est absent. Installez les dépendances Windows du moteur."
-            ) from exc
+        raise WindowsNotificationsUnavailable(
+            "Aucune icône BTL persistante n’est disponible pour afficher la notification."
+        )
 
     notification_api.notify(
         title=title,

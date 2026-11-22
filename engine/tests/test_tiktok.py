@@ -8,14 +8,54 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from msr.worker import _merge_tiktok_status_checks
 from msr.platforms import (
     build_recording_command_streamlink,
     check_tiktok_live_webcast,
+    check_stream_ytdlp,
     build_recording_command_tiktok_flv,
     tiktok_parse_api_live_room,
     tiktok_room_id_from_html,
     tiktok_stream_url_from_api,
 )
+
+
+class TiktokYtdlpInconclusiveTests(unittest.TestCase):
+    def test_failed_api_crosscheck_is_not_reported_as_offline(self):
+        self.assertEqual(
+            _merge_tiktok_status_checks("old title", None, False, None, "network timeout"),
+            (False, "old title", "TikTok live-status check inconclusive: network timeout"),
+        )
+
+    def test_api_live_confirmation_clears_prior_offline_result(self):
+        self.assertEqual(
+            _merge_tiktok_status_checks("old title", "offline", True, "current title", None),
+            (True, "current title", None),
+        )
+
+    @patch("msr.platforms.HAS_YTDLP", True)
+    @patch("msr.platforms.subprocess.run")
+    def test_empty_failure_is_not_silently_classified_offline(self, run):
+        run.return_value = Mock(returncode=1, stdout="", stderr="")
+        result = check_stream_ytdlp("https://www.tiktok.com/@sample/live", Mock())
+        self.assertFalse(result[0])
+        self.assertEqual(result[2], "unrecognized yt-dlp error")
+
+    @patch("msr.platforms.HAS_YTDLP", True)
+    @patch("msr.platforms.subprocess.run")
+    def test_unknown_failure_stderr_is_not_silently_classified_offline(self, run):
+        run.return_value = Mock(returncode=1, stdout="", stderr="temporary CDN response")
+        result = check_stream_ytdlp("https://www.tiktok.com/@sample/live", Mock())
+        self.assertFalse(result[0])
+        self.assertEqual(result[2], "unrecognized yt-dlp error")
+
+    @patch("msr.platforms.HAS_YTDLP", True)
+    @patch("msr.platforms.subprocess.run")
+    def test_empty_success_response_is_not_silently_classified_offline(self, run):
+        run.return_value = Mock(returncode=0, stdout="", stderr="")
+        result = check_stream_ytdlp("https://www.tiktok.com/@sample/live", Mock())
+        self.assertFalse(result[0])
+        self.assertEqual(result[2], "unexpected yt-dlp output")
 
 
 class TiktokRoomIdFromHtmlTests(unittest.TestCase):
@@ -70,6 +110,23 @@ class TiktokDirectStreamTests(unittest.TestCase):
         data["data"]["liveRoom"]["streamData"]["pull_data"]["stream_data"] = "{"
         self.assertIsNone(tiktok_stream_url_from_api(data, "best"))
         self.assertIsNone(tiktok_stream_url_from_api({}, "best"))
+
+    @patch("msr.platforms._tiktok_http_get")
+    def test_explicit_api_offline_status_is_clean_offline(self, get):
+        get.return_value = json.dumps({"data": {
+            "user": {"roomId": "123", "status": 4},
+            "liveRoom": {"roomId": "123", "status": 4, "title": "Ended"},
+        }})
+        result = check_tiktok_live_webcast("sample", None, Mock(), timeout=1)
+        self.assertEqual(result, (False, "123", "Ended", None, None))
+        get.assert_called_once()
+
+    @patch("msr.platforms._tiktok_http_get")
+    def test_unreachable_api_is_inconclusive_not_clean_offline(self, get):
+        get.side_effect = TimeoutError("network timeout")
+        result = check_tiktok_live_webcast("sample", None, Mock(), timeout=1)
+        self.assertFalse(result[0])
+        self.assertIsNotNone(result[3])
 
     @patch("msr.platforms._tiktok_http_get")
     def test_live_api_check_returns_direct_url_without_logging_it(self, get):

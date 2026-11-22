@@ -1991,6 +1991,20 @@ class StreamRecorder:
             except Exception as e:
                 self._supervise_failed(ch, e, now)
 
+    def _launch_initial_workers(self, config_dict):
+        """Start each channel independently; one OS/process-start failure must not abort the host."""
+        now = time.monotonic()
+        for ch in self.channels:
+            try:
+                proc = self._spawn_worker(ch, config_dict)
+            except Exception as exc:
+                self.processes[ch] = []
+                self._supervise_failed(ch, exc, now)
+                logging.error("Could not start initial worker for %s; supervisor will retry", ch)
+                continue
+            self.processes[ch] = [proc]
+            logging.info(f"Started process for {ch} (PID {proc.pid})")
+
     def run(self):
         if self.is_running:
             return
@@ -2019,10 +2033,7 @@ class StreamRecorder:
             config_dict.setdefault('Paths', {})['cookies_file'] = cookies_file
             logging.info(f"Using cookies file: {cookies_file}")
 
-        for ch in self.channels:
-            proc = self._spawn_worker(ch, config_dict)
-            self.processes[ch] = [proc]
-            logging.info(f"Started process for {ch} (PID {proc.pid})")
+        self._launch_initial_workers(config_dict)
 
         # Start the Kick push listener (harmless no-op without Kick channels
         # or without websocket-client installed)

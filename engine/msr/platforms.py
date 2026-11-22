@@ -371,6 +371,21 @@ def tiktok_room_id_from_html(html):
     return m.group(1) if m else None
 
 
+def _tiktok_room_status_values(data):
+    if not isinstance(data, dict):
+        return []
+    payload = data.get("data") if isinstance(data.get("data"), dict) else data
+    user = payload.get("user") if isinstance(payload.get("user"), dict) else {}
+    live_room = payload.get("liveRoom") if isinstance(payload.get("liveRoom"), dict) else {}
+    statuses = []
+    for val in (user.get("status"), live_room.get("status")):
+        try:
+            statuses.append(int(val))
+        except (TypeError, ValueError):
+            pass
+    return statuses
+
+
 def tiktok_parse_api_live_room(data):
     """Parse ``/api-live/user/room`` JSON.
 
@@ -382,12 +397,7 @@ def tiktok_parse_api_live_room(data):
     payload = data.get("data") if isinstance(data.get("data"), dict) else data
     user = payload.get("user") if isinstance(payload.get("user"), dict) else {}
     live_room = payload.get("liveRoom") if isinstance(payload.get("liveRoom"), dict) else {}
-    statuses = []
-    for val in (user.get("status"), live_room.get("status")):
-        try:
-            statuses.append(int(val))
-        except (TypeError, ValueError):
-            pass
+    statuses = _tiktok_room_status_values(data)
     room_id = user.get("roomId") or live_room.get("roomId")
     if room_id is not None:
         room_id = str(room_id)
@@ -578,6 +588,7 @@ def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30, qualit
         body = _tiktok_http_get(api_url, opener, timeout, logger)
         data = json.loads(body)
         is_live, room_id, title = tiktok_parse_api_live_room(data)
+        api_statuses = _tiktok_room_status_values(data)
         if is_live:
             stream_url = tiktok_stream_url_from_api(data, quality)
             logger.info(
@@ -592,6 +603,9 @@ def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30, qualit
                     "will use the Streamlink plugin fallback"
                 )
             return True, room_id, title, None, stream_url
+        if api_statuses:
+            logger.info(f"TikTok api-live/user/room: explicit non-live status for @{handle}")
+            return False, room_id, title, None, None
         if room_id:
             logger.info(
                 f"TikTok api-live/user/room: @{handle} status not live "
@@ -639,14 +653,25 @@ def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30, qualit
             continue
         room_data = data.get("data") if isinstance(data.get("data"), dict) else {}
         status = room_data.get("status")
-        statuses.append(f"{host}={status}")
+        try:
+            status_value = int(status)
+        except (TypeError, ValueError):
+            status_value = None
+        if status_value is not None:
+            statuses.append(status_value)
         logger.info(f"TikTok webcast check ({host}): status={status}")
-        if status == 2:
+        if status_value == 2:
             title_data = room_data.get("title") or ""
             logger.info(f"TikTok webcast check: LIVE via {host} (status=2)")
             return True, room_id, title_data or None, None, None
 
-    detail = ", ".join(statuses) if statuses else (last_err or "no webcast response")
+    if statuses:
+        # A valid non-live status from at least one endpoint is explicit offline;
+        # malformed or unreachable endpoints alone remain inconclusive.
+        detail = ", ".join(str(status) for status in statuses)
+        logger.info(f"TikTok webcast reports non-live room status ({detail})")
+        return False, room_id, None, None, None
+    detail = last_err or "no webcast response"
     return False, room_id, None, f"webcast did not confirm live ({detail})", None
 
 
@@ -871,7 +896,11 @@ def check_stream_ytdlp(url, logger, timeout=30, cookies_file=None, info=None):
                 logger.error("Login required — cookies may be missing or expired")
                 return False, None, "login required (check cookies)", False, None, None
 
-        return False, None, None, False, None, None
+        # An empty/unrecognized response is not evidence that a channel is offline.
+        # Return an error so the worker retries with backoff instead of silently
+        # resetting its offline state (important for flaky API/CDN failures).
+        detail = "unrecognized yt-dlp error" if check.returncode else "unexpected yt-dlp output"
+        return False, None, detail, False, None, None
 
     except subprocess.TimeoutExpired:
         logger.warning("Stream check timed out")

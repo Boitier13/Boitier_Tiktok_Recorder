@@ -120,6 +120,15 @@ def _should_report_stream_end(stop_requested, split_requested, output_size):
     return not stop_requested and not split_requested and output_size > 0
 
 
+def _merge_tiktok_status_checks(ytdlp_title, ytdlp_error, api_live, api_title, api_error):
+    """Treat a failed API cross-check as inconclusive, never as confirmed offline."""
+    if api_live:
+        return True, api_title or ytdlp_title, None
+    if api_error and not ytdlp_error:
+        ytdlp_error = f"TikTok live-status check inconclusive: {api_error}"
+    return False, ytdlp_title, ytdlp_error
+
+
 class ReconnectWindow:
     """Post-drop polling schedule: fast phase, extended phase, then normal.
 
@@ -2674,11 +2683,11 @@ def record_worker(args):
                         username, cookies_file, logger, stream_check_timeout, quality=quality)
                     if wc_live:
                         logger.info("TikTok: live API confirms LIVE (yt-dlp said offline)")
-                        is_live = True
-                        stream_title = wc_title or stream_title
-                        error = None
                     else:
                         logger.info(f"TikTok live API fallback: {wc_err or 'not live'}")
+                    is_live, stream_title, error = _merge_tiktok_status_checks(
+                        stream_title, error, wc_live, wc_title, wc_err
+                    )
             elif platform in ["youtube", "custom"]:
                 check_info.clear()
                 is_live, stream_title, error, need_impersonate, resolved_url, format_urls = check_stream_ytdlp(

@@ -675,6 +675,11 @@ class CleanerReportTests(unittest.TestCase):
 
 
 class CatalogAndApiTests(unittest.TestCase):
+    def test_monitoring_cli_pauses_or_resumes_without_a_recording_command(self):
+        for action, expected in (("pause", False), ("resume", True)):
+            args = msr_ctl.build_parser().parse_args(["monitoring", action])
+            self.assertEqual(msr_ctl.to_request(args), ("monitoring", {"running": expected}))
+
     def test_catalog_covers_every_cli_command_and_every_protocol_command(self):
         cat = msr_ctl.catalog()
         leaves = {path for path, _p, _h in msr_ctl._leaves(msr_ctl.build_parser())}

@@ -215,8 +215,24 @@ def _sync_engine_tool_status(status):
                 setattr(module, name, value)
 
 
-def capture_tools_status():
-    """Probe required tools serially to avoid antivirus contention on onefile launchers."""
+def _capture_tool_presence(commands):
+    """Fast startup gate: check bundled/discoverable files without launching onefile tools."""
+    status = {}
+    for name, command in commands.items():
+        path = Path(command)
+        present = path.is_file() if path.is_absolute() or path.parent != Path(".") else bool(shutil.which(command))
+        status[name] = "present" if present else None
+    return status
+
+
+def capture_tools_status(*, quick=False):
+    """Check capture tools; use file presence at normal startup, deep probes on request.
+
+    yt-dlp and Streamlink are self-extracting onefile programs. Launching them
+    synchronously during GUI startup can stall behind antivirus scanning and
+    produce transient false-missing dialogs. The explicit --check-tools command
+    still performs the full runnable/version probes for diagnostics.
+    """
     diagnostics = {}
     if getattr(sys, "frozen", False):
         tools_dir = Path(sys.executable).resolve().parent / "tools"
@@ -228,6 +244,11 @@ def capture_tools_status():
         }
     else:
         commands = {name: name for name in ("yt-dlp", "streamlink", "ffmpeg", "ffprobe")}
+
+    if quick:
+        status = _capture_tool_presence(commands)
+        _sync_engine_tool_status(status)
+        return status
 
     # yt-dlp and Streamlink are self-extracting PyInstaller onefile executables. On
     # Windows 10 antivirus scanning can make them slow, especially when launched at
@@ -2052,7 +2073,7 @@ def main():
                 )
             return
     if sys.platform == "win32":
-        status = capture_tools_status()
+        status = capture_tools_status(quick=True)
         message = missing_capture_tool_message(status, frozen=bool(getattr(sys, "frozen", False)))
         if message:
             show_windows_message(message, title="Outils de capture requis")

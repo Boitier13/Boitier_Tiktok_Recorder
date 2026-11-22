@@ -1,11 +1,29 @@
 """Transient startup behavior for the bundled Windows capture-tool launchers."""
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
-from prototype.btl_vertical_host import _capture_tool_version
+from prototype.btl_vertical_host import _capture_tool_presence, _capture_tool_version
 
 
 class CaptureToolPreflightTests(unittest.TestCase):
+    def test_quick_presence_gate_does_not_launch_tools(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            commands = {}
+            for name in ("yt-dlp", "streamlink", "ffmpeg", "ffprobe"):
+                path = Path(tmp) / f"{name}.exe"
+                path.touch()
+                commands[name] = str(path)
+            commands["ffprobe"] = str(Path(tmp) / "missing-ffprobe.exe")
+            with patch("prototype.btl_vertical_host._sync_engine_tool_status") as sync:
+                status = _capture_tool_presence(commands)
+            self.assertEqual(status, {
+                "yt-dlp": "present", "streamlink": "present", "ffmpeg": "present", "ffprobe": None,
+            })
+            sync.assert_not_called()
+
     def test_retries_a_transient_launcher_failure(self):
         calls = []
         diagnostics = {}

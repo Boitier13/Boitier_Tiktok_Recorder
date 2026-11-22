@@ -19,6 +19,8 @@ Examples:
   python msr_ctl.py add twitch:somename
   python msr_ctl.py disable "#3" kickname
   python msr_ctl.py start | stop | quit
+  python msr_ctl.py monitoring pause           (pauses checks; active recordings continue)
+  python msr_ctl.py monitoring resume
   python msr_ctl.py record-start kickname      (one channel, mid-session)
   python msr_ctl.py health
   python msr_ctl.py recordings --since 24h
@@ -64,6 +66,7 @@ CATALOG = {
     "sound-test": ("read", ["sound-test live"]),
     "start": ("session", ["start"]),
     "stop": ("session", ["stop"]),
+    "monitoring": ("session", ["monitoring pause", "monitoring resume"]),
     "quit": ("session", ["quit"]),
     "reload-channels": ("write", ["reload-channels"]),
     "add": ("write", ["add kick:knut twitch:someone"]),
@@ -181,10 +184,13 @@ def build_parser():
 
     for name, text in (("status", "live status (or the files, when nothing runs)"), ("channels", "the roster"),
                        ("ping", "is a copy running?"),
-                       ("start", "Start Recording"), ("stop", "Stop Recording"), ("quit", "quit the app cleanly"),
+                       ("start", "Start Recording"), ("stop", "Stop Recording"),
+                       ("quit", "quit the app cleanly"),
                        ("reload-channels", "re-read channels.json"),
                        ):
         sub.add_parser(name, help=text)
+    p = sub.add_parser("monitoring", help="pause/resume detection without stopping active captures")
+    p.add_argument("action", choices=["pause", "resume"], help="pause checks only, or resume monitoring")
     sub.add_parser("health", help="tools, disk space, cookies, Fishtank login, problems; the window's Health line") \
         .add_argument("--check-now", action="store_true", help="window: run the full Health check again")
     sub.add_parser("sound-test", help="Options > Sounds: play one sound (ignores its checkbox)") \
@@ -331,6 +337,8 @@ def to_request(a):
               "stop": "stop", "quit": "quit", "reload-channels": "channels_reload"}
     if c in simple:
         return simple[c], {}
+    if c == "monitoring":
+        return "monitoring", {"running": a.action == "resume"}
     if c == "add":
         return "channel_add", {"names": a.names, "platform": a.platform, "disabled": a.disabled}
     if c in ("enable", "disable"):

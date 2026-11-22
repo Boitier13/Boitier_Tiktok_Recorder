@@ -440,6 +440,25 @@ class RestartPolicyTests(SupervisorBase):
 
 
 class SupervisorLoopSurvivalTests(SupervisorBase):
+    def test_initial_worker_start_failure_is_scheduled_without_blocking_other_channels(self):
+        calls = []
+
+        def spawn(ch, cfg):
+            calls.append(ch)
+            if ch == "kick1":
+                raise OSError("temporary process creation failure")
+            return FakeProc()
+
+        with mock.patch.object(self.rec, "_spawn_worker", spawn), \
+                self.assertLogs(level="ERROR") as cm:
+            self.rec._launch_initial_workers({})
+
+        self.assertEqual(calls, ["kick1", "kick2"])
+        self.assertEqual(self.rec.processes["kick1"], [])
+        self.assertEqual(len(self.rec.processes["kick2"]), 1)
+        self.assertIn("kick1", self.rec._supervision()["restart_at"])
+        self.assertTrue(any("temporary process creation failure" in line for line in cm.output))
+
     def test_a_failing_start_does_not_stop_the_other_channels_or_the_loop(self):
         procs = self.start_all(now=0.0)
         procs["kick1"].die(1)

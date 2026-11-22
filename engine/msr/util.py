@@ -1948,7 +1948,7 @@ def kill_orphan_ffmpeg_processes(logger=None, streams_dir=None, keep_pid=None):
 # on the argv we otherwise print in full.
 _SENSITIVE_QUERY_KEYS = {
     'jwt', 'tkn', 'token', 'access_token', 'refresh_token',
-    'auth', 'authorization', 'sig', 'signature', 'key',
+    'auth', 'authorization', 'sig', 'sign', 'signature', 'key',
     'api_key', 'apikey', 'password', 'passwd', 'pwd', 'secret',
     'session', 'sessionid', 'playback_token', 'live_stream_token',
     'hash', 'ip', 'expire', 'expires', 'lsig', 'policy', 'key-pair-id',

@@ -174,6 +174,14 @@ class RedactTests(unittest.TestCase):
             self.assertNotIn(secret, out)
         self.assertIn("allow_source=true", out)
 
+    def test_tiktok_signed_playback_url_hides_sign_and_expiry(self):
+        url = "https://pull-f5-tt03.tiktokcdn.com/stage/live.flv?expire=1795380000&sign=private-signature"
+        out = redact_for_log(url)
+        self.assertIn("expire=***", out)
+        self.assertIn("sign=***", out)
+        self.assertNotIn("private-signature", out)
+        self.assertNotIn("1795380000", out)
+
     def test_jwt_query(self):
         text = "Error opening input: https://cdn.example/hls/index.m3u8?jwt=eyJabc.def"
         out = redact_for_log(text)

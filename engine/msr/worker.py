@@ -92,6 +92,33 @@ RECONNECT_POLL_INTERVAL = 15           # seconds between checks in the fast phas
 RECONNECT_EXTENDED_POLL_INTERVAL = 30  # seconds between checks in the extended phase
 
 
+def _recording_output_size(raw_file):
+    """Return bytes written to the recording output, including yt-dlp's MP4 variant.
+
+    A capture process can exit before creating a file (for example, when a
+    platform plugin finds no playable stream). That is a capture failure, not
+    evidence that a live broadcast ended, so callers use this to gate offline
+    events and reconnect-grace transitions.
+    """
+    candidates = (raw_file, os.path.splitext(raw_file)[0] + ".mp4")
+    seen = set()
+    for path in candidates:
+        if path in seen:
+            continue
+        seen.add(path)
+        try:
+            if os.path.isfile(path):
+                return os.path.getsize(path)
+        except OSError:
+            continue
+    return 0
+
+
+def _should_report_stream_end(stop_requested, split_requested, output_size):
+    """Only report a stream end after an unsplit capture wrote media."""
+    return not stop_requested and not split_requested and output_size > 0
+
+
 class ReconnectWindow:
     """Post-drop polling schedule: fast phase, extended phase, then normal.
 
@@ -3184,15 +3211,27 @@ def record_worker(args):
             else:
                 tool_name = "yt-dlp"
             logger.info(f"{tool_name} exited with code: {exit_code}")
+            recorded_output_size = _recording_output_size(raw_file)
+
+            # An exited process with no media output did not establish a
+            # recording. Do not announce the LIVE as ended or enter reconnect
+            # grace based on a failed Streamlink/yt-dlp startup.
+            if recorded_output_size <= 0 and not split_requested:
+                reconnect_mode = False
+                logger.warning(
+                    "Capture process exited without writing media data — "
+                    "not treating this as a LIVE ending"
+                )
 
             # If the recording ended on its own (not user-initiated stop) and
-            # we captured at least some data, the stream likely dropped.
-            # Enter fast reconnect mode to re-check quickly.
-            # Exception: a size-based split should skip the grace period entirely —
-            # the stream is still live, so remux and immediately start the next segment.
+            # actually wrote media, the stream likely dropped. Enter fast
+            # reconnect mode to re-check quickly. A size-based split skips the
+            # grace period and proceeds directly to remux/restart.
             if split_requested:
                 reconnect_mode = False   # don't wait — fall straight through to remux+restart
-            elif not stop_event.is_set() and elapsed > 10:
+            elif _should_report_stream_end(
+                stop_event.is_set(), split_requested, recorded_output_size
+            ) and elapsed > 10:
                 reconnect_mode = True
                 reconnect_window.reset()  # armed at the first post-remux check
                 logger.info(
@@ -3200,8 +3239,10 @@ def record_worker(args):
                     f"reconnect grace period (+{reconnect_extended_minutes}min at {RECONNECT_EXTENDED_POLL_INTERVAL}s), "
                     f"starting after remux"
                 )
-            if not stop_event.is_set() and not split_requested:
-                # agent control: the stream ended on its own -> "offline" event (msr.agent_status)
+            if _should_report_stream_end(
+                stop_event.is_set(), split_requested, recorded_output_size
+            ):
+                # agent control: a media capture ended -> "offline" event (msr.agent_status)
                 status_queue.put((channel_key, {
                     "status": "Offline",
                     "detail": "stream ended" + (", reconnect grace period" if reconnect_mode else ""),
@@ -3213,7 +3254,7 @@ def record_worker(args):
             # a CDN reset storm), count consecutive short recordings and apply
             # a growing backoff.  This prevents dozens of tiny files accumulating
             # and reduces unnecessary load on the server.
-            if not stop_event.is_set() and not split_requested:
+            if not stop_event.is_set() and not split_requested and recorded_output_size > 0:
                 if elapsed < MICRO_FRAG_MIN_SECONDS:
                     _consecutive_micro_frags += 1
                     if _consecutive_micro_frags >= MICRO_FRAG_LIMIT:

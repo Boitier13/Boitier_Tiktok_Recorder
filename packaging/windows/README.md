@@ -93,7 +93,7 @@ La génération et l’installation Windows/Python 3.12 restent à valider sur u
 
 ## FFmpeg et vérification d’intégrité
 
-`tools-win-x64.lock.json` fixe l’asset candidat BtbN n9.0, variante étiquetée LGPL, taille 171,848,467 octets et SHA-256 `c6ba688c964ab8b2e5d357100a49be25491c60b5d48cdaac46d20ba0dded6260`. La source utilise une URL `latest` mutable; le hash obligatoire refuse tout payload différent. `fetch_ffmpeg.ps1` copie les deux exécutables et les notices/licences présentes dans l’archive. Le lock de l’asset et ces notices sont placés sous `tools/ffmpeg-licenses/`.
+`tools-win-x64.lock.json` fixe l’asset candidat BtbN n9.0.2-61-gd59078794d, variante étiquetée LGPL, taille 171,850,214 octets et SHA-256 `c0231e389cf6afaa81ef9673c7ff0d05f8e3890268ebc698b1d462e9685a2b43`. L’URL utilise le tag immuable `autobuild-2026-11-22-12-36`, et le hash obligatoire refuse tout payload différent. `fetch_ffmpeg.ps1` copie les deux exécutables et les notices/licences présentes dans l’archive. Le lock de l’asset et ces notices sont placés sous `tools/ffmpeg-licenses/`.
 
 Ce contrôle d’intégrité ne vaut pas approbation de redistribution. Lire `THIRD_PARTY_NOTICES.md` : l’audit des licences, composants natifs, configuration exacte et obligations source/relinkabilité reste un **release gate**.
 

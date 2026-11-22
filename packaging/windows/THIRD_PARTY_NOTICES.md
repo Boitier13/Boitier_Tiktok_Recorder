@@ -37,10 +37,12 @@ the license texts shipped by each package.
   and falls back to the browser if the native shell cannot start. The runtime is
   serviced by Microsoft and is not bundled in this ZIP.
 - FFmpeg and **ffprobe** are distributed together from the same Windows x64 LGPL
-  archive. Candidate: BtbN `n9.0`, asset recorded in `tools-win-x64.lock.json`,
-  SHA-256 `c6ba688c964ab8b2e5d357100a49be25491c60b5d48cdaac46d20ba0dded6260`.
-  The URL's `latest` tag is mutable; the digest is therefore mandatory and any
-  byte change must fail the build. This archive has not been downloaded or tested.
+  archive. Candidate: BtbN `n9.0.2-61-gd59078794d`, asset recorded in
+  `tools-win-x64.lock.json`, SHA-256
+  `c0231e389cf6afaa81ef9673c7ff0d05f8e3890268ebc698b1d462e9685a2b43`.
+  The URL uses the pinned `autobuild-2026-11-22-12-36` release tag and the digest
+  is mandatory; any byte change must fail the build. This pinned archive still
+  requires successful Windows download, hash, executable and license checks.
 - BtbN describes its `lgpl` variant as excluding GPL-only libraries (notably
   libx264/libx265); that name alone is not proof of the actual contents or of
   LGPL compliance. Preserve the archive's license texts and configuration/build

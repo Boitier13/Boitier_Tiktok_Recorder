@@ -30,8 +30,8 @@ try {
         if ($Matches.Count -ne 1) { throw "Expected exactly one $Name in the verified archive; found $($Matches.Count)." }
         Copy-Item -LiteralPath $Matches[0].FullName -Destination (Join-Path $Destination $Name) -Force
         $VersionOutput = (& (Join-Path $Destination $Name) -version 2>&1 | Out-String)
-        if ($LASTEXITCODE -ne 0 -or $VersionOutput -notmatch 'n9\.0') {
-            throw "$Name did not run or did not report the pinned n9.0 release."
+        if ($LASTEXITCODE -ne 0 -or $VersionOutput -notmatch 'n9\.0\.2-61-gd59078794d') {
+            throw "$Name did not run or did not report the pinned n9.0.2-61-gd59078794d release."
         }
     }
 
@@ -49,7 +49,7 @@ try {
     }
     Copy-Item -LiteralPath $LockPath -Destination (Join-Path $LicenseDir 'tools-win-x64.lock.json') -Force
 
-    Write-Host "Verified FFmpeg n9.0 and ffprobe n9.0 staged in $Destination."
+    Write-Host "Verified FFmpeg n9.0.2-61-gd59078794d and ffprobe staged in $Destination."
     Write-Warning 'This verifies bytes and executable versions only; it does not clear redistribution licensing.'
 } finally {
     Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue

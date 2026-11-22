@@ -122,34 +122,61 @@ def _claim_or_activate_windows_instance(*, title="Boitier Tiktok Live", kernel32
         return False, False
 
 
-def _capture_tool_version(command, args, *, timeout=45, runner=None, diagnostics=None, diagnostic_key=None):
-    """Probe one packaged console launcher with enough time for onefile cold-start extraction."""
+def _capture_tool_version(command, args, *, timeout=45, runner=None, diagnostics=None,
+                          diagnostic_key=None, retries=0, retry_delay=1.0,
+                          total_timeout=None):
+    """Probe a capture tool; retry transient onefile/antivirus startup failures."""
     from msr.nowindow import no_window_kwargs
 
     if runner is None:
         runner = subprocess.run
     key = diagnostic_key or str(command)
     started = time.monotonic()
-    try:
-        result = runner(
-            [command, *args], capture_output=True, text=True, timeout=timeout,
-            **no_window_kwargs(),
-        )
-        elapsed = time.monotonic() - started
-        stdout = (result.stdout or "").strip()
-        stderr = (result.stderr or "").strip()
-        if result.returncode == 0:
-            if diagnostics is not None:
-                diagnostics[key] = f"OK en {elapsed:.1f}s; {stdout[:300]}"
-            return stdout or "available"
-        if diagnostics is not None:
+    attempts = max(1, int(retries) + 1)
+    failures = []
+    for attempt in range(1, attempts + 1):
+        remaining = None if total_timeout is None else total_timeout - (time.monotonic() - started)
+        if remaining is not None and remaining <= 0:
+            failures.append("budget total du contrôle dépassé")
+            break
+        attempt_timeout = timeout if remaining is None else min(timeout, remaining)
+        try:
+            result = runner(
+                [command, *args], capture_output=True, text=True, timeout=attempt_timeout,
+                **no_window_kwargs(),
+            )
+            stdout = (result.stdout or "").strip()
+            stderr = (result.stderr or "").strip()
+            if result.returncode == 0:
+                elapsed = time.monotonic() - started
+                if diagnostics is not None:
+                    diagnostics[key] = (
+                        f"OK en {elapsed:.1f}s (tentative {attempt}/{attempts}); {stdout[:300]}"
+                    )
+                return stdout or "available"
             details = stderr or stdout or "aucune sortie"
-            diagnostics[key] = f"code {result.returncode} en {elapsed:.1f}s; {details[:1000]}"
-        return None
-    except Exception as exc:
-        if diagnostics is not None:
-            diagnostics[key] = f"{type(exc).__name__} après {time.monotonic() - started:.1f}s: {exc}"
-        return None
+            failures.append(f"code {result.returncode}: {details[:500]}")
+        except FileNotFoundError as exc:
+            # A missing bundled file cannot be repaired by retrying the same path.
+            failures.append(f"{type(exc).__name__}: {exc}")
+            break
+        except Exception as exc:
+            failures.append(f"{type(exc).__name__}: {exc}")
+
+        elapsed = time.monotonic() - started
+        if attempt >= attempts or (
+            total_timeout is not None and elapsed + retry_delay >= total_timeout
+        ):
+            break
+        time.sleep(max(0.0, retry_delay))
+
+    elapsed = time.monotonic() - started
+    if diagnostics is not None:
+        diagnostics[key] = (
+            f"échec après {len(failures)} tentative(s), {elapsed:.1f}s: "
+            + " | ".join(failures)
+        )
+    return None
 
 
 def _sync_engine_tool_status(status):
@@ -206,11 +233,13 @@ def capture_tools_status():
     # Windows 10 antivirus scanning can make them slow, especially when launched at
     # the same time. Probe sequentially with generous caps; ffmpeg/ffprobe are native.
     yt_dlp_version = _capture_tool_version(
-        commands["yt-dlp"], ["--version"], timeout=45,
+        commands["yt-dlp"], ["--version"], timeout=45, retries=2,
+        retry_delay=2.0, total_timeout=90,
         diagnostics=diagnostics, diagnostic_key="yt-dlp",
     )
     streamlink_version = _capture_tool_version(
-        commands["streamlink"], ["--version"], timeout=45,
+        commands["streamlink"], ["--version"], timeout=45, retries=2,
+        retry_delay=2.0, total_timeout=90,
         diagnostics=diagnostics, diagnostic_key="streamlink",
     )
     ffmpeg_output = _capture_tool_version(
@@ -247,7 +276,18 @@ def capture_tools_status():
             f"Working directory: {Path.cwd()}",
         ]
         report_lines.extend(f"{name}: {diagnostics.get(name, 'inconnu')}" for name in status)
-        report_path.write_text("\n".join(report_lines) + "\n", encoding="utf-8-sig")
+        report_text = "\n".join(report_lines) + "\n"
+        if any(version is None for version in status.values()):
+            report_path.write_text(report_text, encoding="utf-8-sig")
+            report_path.with_name("btl-tools-check-last-failure.txt").write_text(
+                report_text, encoding="utf-8-sig"
+            )
+        else:
+            # Keep the last failed preflight available after a later successful launch.
+            success_path = report_path.with_name("btl-tools-check-last-success.txt")
+            success_path.write_text(report_text, encoding="utf-8-sig")
+            if not report_path.exists():
+                report_path.write_text(report_text, encoding="utf-8-sig")
     except OSError:
         pass
     return status

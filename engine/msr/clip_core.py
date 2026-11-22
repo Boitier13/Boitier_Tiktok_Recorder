@@ -1,0 +1,628 @@
+"""Clip Editor engine, Tk-free: how long a (still growing) recording is, preview frames,
+the cut itself and output names.
+
+Everything here only reads the source. A recording's .ts is opened with shared access by
+Python and ffmpeg, so the recorder keeps writing undisturbed. Every ffmpeg/ffprobe runs
+hidden (msr.nowindow).
+"""
+
+from __future__ import annotations
+
+import datetime
+import json
+import os
+import re
+import subprocess
+import time
+from dataclasses import dataclass
+
+from msr.nowindow import no_window_kwargs
+
+MEDIA_EXTS = (".ts", ".mp4", ".mkv", ".mov", ".m4v", ".flv", ".webm")
+PTS_WRAP = 1 << 33
+_SCAN = 2 * 1024 * 1024        # bytes read at each end of a .ts to find its first / last timestamp
+
+
+class ClipError(Exception):
+    """A cut that cannot be made; the text is shown to the user as is."""
+
+
+TEXT = {"text": True, "encoding": "utf-8", "errors": "replace"}   # ffmpeg/ffprobe print UTF-8
+
+
+def reap(proc) -> None:
+    """Stop a preview/sound ffmpeg and release its pipe and process handle."""
+    for step in (lambda: proc.kill(), lambda: proc.wait(timeout=2), lambda: proc.stdout.close()):
+        try:
+            step()
+        except Exception:
+            pass
+
+
+# ------------------------------------------------------------------ times
+def parse_time(text, length: float | None = None) -> float:
+    """'90', '1:30', '01:02:03.5' -> seconds. A leading '-' counts back from the end
+    (length, e.g. the live edge); 'end' / 'live' is the end itself."""
+    s = str(text).strip().lower()
+    if s in ("end", "live", "now"):
+        if length is None:
+            raise ClipError("'end' needs a known length.")
+        return float(length)
+    neg = s.startswith("-")
+    if neg:
+        s = s[1:]
+    try:
+        total = 0.0
+        for part in s.split(":"):
+            total = total * 60 + float(part)
+    except ValueError:
+        raise ClipError(f"Not a time: {text!r} (use seconds, M:SS or H:MM:SS).") from None
+    if neg:
+        if length is None:
+            raise ClipError("A time counted from the end needs a known length.")
+        return max(0.0, float(length) - total)
+    return total
+
+
+def fmt_time(seconds: float | None, tenths: bool = True) -> str:
+    if seconds is None:
+        return "--:--"
+    seconds = max(0.0, float(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    sec = f"{s:04.1f}" if tenths else f"{int(s):02d}"
+    return f"{int(h)}:{int(m):02d}:{sec}" if h >= 1 else f"{int(m)}:{sec}"
+
+
+# ------------------------------------------------------------------ length of a growing .ts
+def _sync_offset(buf: bytes) -> int | None:
+    for i in range(min(188, len(buf))):
+        if all(i + k * 188 < len(buf) and buf[i + k * 188] == 0x47 for k in range(3)):
+            return i
+    return None
+
+
+def _pts_values(buf: bytes):
+    """PTS of every PES start (audio or video) in a chunk of an MPEG-TS, in file order."""
+    off = _sync_offset(buf)
+    if off is None:
+        return
+    for i in range(off, len(buf) - 187, 188):
+        pkt = buf[i:i + 188]
+        if pkt[0] != 0x47 or not pkt[1] & 0x40:
+            continue
+        afc = (pkt[3] >> 4) & 3
+        p = 4
+        if afc & 2:
+            p += 1 + pkt[4]
+        if not afc & 1 or p + 14 > 188:
+            continue
+        pes = pkt[p:]
+        if pes[:3] != b"\x00\x00\x01" or not (0xC0 <= pes[3] <= 0xEF):
+            continue
+        if not (pes[7] >> 6) & 2:
+            continue
+        b = pes[9:14]
+        yield ((b[0] >> 1) & 7) << 30 | b[1] << 22 | (b[2] >> 1) << 15 | b[3] << 7 | b[4] >> 1
+
+
+def _tick_step(later: int, earlier: int) -> int:
+    """later − earlier in 90 kHz ticks, wrap-safe around the 33-bit PTS."""
+    return (later - earlier + PTS_WRAP // 2) % PTS_WRAP - PTS_WRAP // 2
+
+
+# A later packet this far behind one already seen is a PCR reset, not B-frame
+# reordering (a frame or two) or audio sitting slightly ahead of video.
+_RESET_BEHIND = 2 * 90000
+# Consecutive timestamps inside one read. A real frame step is a fraction of
+# a second; tens of seconds between two packets in the same window is a splice.
+_RESET_AHEAD = 30 * 90000
+_TIMELINE_SAMPLES = 9
+
+
+def _timeline_spans(size: int, samples: int = _TIMELINE_SAMPLES, scan: int = _SCAN) -> list[tuple[int, int]]:
+    """Non-overlapping ``(offset, length)`` reads covering the start and the end.
+
+    A file that fits in ``samples`` windows is read through, so a reset cannot
+    hide between them. A longer recording is sampled (head, tail, and a few
+    windows between) so a multi-gigabyte file is not read whole.
+    """
+    if size <= 0:
+        return []
+    if size <= scan * 2:
+        return [(0, size)]
+    spans = [(0, scan)]
+    gap_lo = scan
+    gap_hi = size - scan
+    room = gap_hi - gap_lo
+    budget = max(0, samples - 2)
+    if room > 0 and budget > 0:
+        need = (room + scan - 1) // scan
+        if need <= budget:
+            off = gap_lo
+            while off < gap_hi:
+                length = min(scan, gap_hi - off)
+                spans.append((off, length))
+                off += length
+        else:
+            n = budget
+            stride = (room - scan) / (n - 1) if n > 1 else 0
+            for i in range(n):
+                off = gap_lo + int(round(i * stride))
+                read = scan
+                prev_end = spans[-1][0] + spans[-1][1]
+                if off < prev_end:
+                    off = prev_end
+                if off + read > gap_hi:
+                    read = gap_hi - off
+                if read >= 188 * 8 and off >= prev_end:
+                    spans.append((off, read))
+    tail = (size - scan, scan)
+    if tail[0] >= spans[-1][0] + spans[-1][1]:
+        spans.append(tail)
+    return spans
+
+
+def _assess_pts(windows: list[list[int]]) -> dict | None:
+    """Elapsed seconds from PTS windows (90 kHz ticks, file order).
+
+    The first window is the start of the file and the last is the end, same
+    as ``ts_length`` (earliest tick in the head, latest in the tail). A step
+    backwards of more than a couple of seconds — inside a window, or from an
+    earlier window to a later one — is a mid-file PCR reset: ``continuous``
+    is false and ``elapsed`` is None, because last−first is then not how long
+    the file is. A large *forward* step between windows is the unread gap, not
+    a reset. None when the ends have no timestamps.
+    """
+    if not windows or not windows[0] or not windows[-1]:
+        return None
+    ref = windows[0][0]
+    continuous = True
+    high = None
+    for window in windows:
+        if not window:
+            continue
+        prev = None
+        for p in window:
+            if prev is not None:
+                step = _tick_step(p, prev)
+                if step < -_RESET_BEHIND or step > _RESET_AHEAD:
+                    continuous = False
+            elif high is not None and _tick_step(p, high) < -_RESET_BEHIND:
+                continuous = False
+            prev = p
+            if high is None or _tick_step(p, high) > 0:
+                high = p
+    first = min(_tick_step(p, ref) for p in windows[0])
+    last = max(_tick_step(p, ref) for p in windows[-1])
+    elapsed = (last - first) / 90000.0 if continuous and last >= first else None
+    return {
+        "first": (ref + first) / 90000.0,
+        "last": (ref + last) / 90000.0,
+        "elapsed": elapsed,
+        "continuous": elapsed is not None,
+    }
+
+
+def ts_timeline(path: str, samples: int = _TIMELINE_SAMPLES) -> dict | None:
+    """Packet clock of an MPEG-TS: first PTS, last PTS, elapsed, continuous.
+
+    Reads the head, the tail, and — on a long file — a few windows between
+    them. Fast on a multi-gigabyte recording and safe while it is still
+    growing (shared read). ``elapsed`` is last−first only when timestamps
+    move forward; a backward jump sets ``continuous`` false. None when the
+    ends have no PTS.
+    """
+    with open(path, "rb") as f:   # shared read: the recorder keeps writing
+        size = os.fstat(f.fileno()).st_size
+        windows = []
+        for off, length in _timeline_spans(size, samples, _SCAN):
+            f.seek(off)
+            windows.append(list(_pts_values(f.read(length))))
+    return _assess_pts(windows)
+
+
+def ts_length(path: str) -> float | None:
+    """Seconds from the first to the last timestamp of an MPEG-TS, read from both ends of the
+    file (fast on a 20 GB recording, works while it grows). None when none are found."""
+    with open(path, "rb") as f:   # shared read: the recorder keeps writing
+        head = f.read(_SCAN)
+        size = os.fstat(f.fileno()).st_size
+        f.seek(max(0, size - _SCAN))
+        tail = f.read(_SCAN)
+    heads = list(_pts_values(head))
+    lasts = list(_pts_values(tail))
+    if not heads or not lasts:
+        return None
+    ref = heads[0]
+    signed = lambda p: (p - ref + PTS_WRAP // 2) % PTS_WRAP - PTS_WRAP // 2  # noqa: E731 (wrap-safe)
+    first = min(signed(p) for p in heads)
+    last = max(signed(p) for p in lasts)
+    return max(0.0, (last - first) / 90000.0)
+
+
+def probe_length(path: str, ffprobe: str = "ffprobe") -> float | None:
+    try:
+        r = subprocess.run([ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "json", path],
+                           capture_output=True, timeout=30, **TEXT, **no_window_kwargs())
+        return float(json.loads(r.stdout or "{}").get("format", {}).get("duration"))
+    except (OSError, ValueError, TypeError, subprocess.SubprocessError):
+        return None
+
+
+def media_length(path: str, ffprobe: str = "ffprobe") -> float | None:
+    """Length in seconds of a recording (a growing .ts too), or None if unreadable."""
+    if path.lower().endswith(".ts"):
+        try:
+            n = ts_length(path)
+        except OSError:
+            return None
+        if n is not None:
+            return n
+    return probe_length(path, ffprobe)
+
+
+def keyframe_at_or_before(src: str, t: float, ffprobe: str = "ffprobe", run=subprocess.run) -> float | None:
+    """Time (from the start) of the video keyframe a stream copy from t begins at, or None."""
+    try:
+        r = run([ffprobe, "-v", "error", "-show_entries", "format=start_time", "-of", "csv=p=0", src],
+                capture_output=True, timeout=30, **TEXT, **no_window_kwargs())
+        base = float((r.stdout or "0").strip().splitlines()[0] or 0)
+        at = base + t
+        r = run([ffprobe, "-v", "error", "-select_streams", "v:0", "-read_intervals", f"{max(0.0, at - 15):.3f}%{at + 0.05:.3f}",
+                 "-show_entries", "packet=pts_time,flags", "-of", "csv=p=0", src],
+                capture_output=True, timeout=60, **TEXT, **no_window_kwargs())
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        return None
+    best = None
+    for line in (r.stdout or "").splitlines():
+        parts = line.split(",")
+        if len(parts) >= 2 and "K" in parts[1]:
+            try:
+                pts = float(parts[0])
+            except ValueError:
+                continue
+            if pts <= at + 0.001 and (best is None or pts > best):
+                best = pts
+    return None if best is None else max(0.0, best - base)
+
+
+def ffprobe_for(ffmpeg: str) -> str:
+    d, name = os.path.split(ffmpeg or "ffmpeg")
+    return os.path.join(d, name.lower().replace("ffmpeg", "ffprobe")) if d else name.lower().replace("ffmpeg", "ffprobe")
+
+
+# ------------------------------------------------------------------ preview frame
+def frame_command(ffmpeg: str, src: str, t: float, width: int = 640, keyframe: bool = False) -> list[str]:
+    """One preview frame at t. keyframe=True: the keyframe at or before t, decoded alone (input
+    seek, no decoding forward), which is the fast first look after a far jump."""
+    fast = ["-skip_frame", "nokey", "-noaccurate_seek"] if keyframe else []
+    return [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", *fast, "-ss", f"{max(0.0, t):.3f}",
+            "-i", src, "-frames:v", "1", "-an", "-vf", f"scale={width}:-2:flags=fast_bilinear",
+            "-f", "image2pipe", "-vcodec", "ppm", "pipe:1"]
+
+
+def grab_frame(ffmpeg: str, src: str, t: float, width: int = 640, keyframe: bool = False,
+               cancel=None, spawn=None) -> bytes | None:
+    """One PPM frame at t (seconds from the start), or None. cancel() returning True kills the
+    ffmpeg at once (a newer scrub position wins), so stale decodes never queue up on the disk."""
+    try:
+        proc = (spawn or subprocess.Popen)(frame_command(ffmpeg, src, t, width, keyframe), stdin=subprocess.DEVNULL,
+                                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, **no_window_kwargs())
+    except OSError:
+        return None
+    deadline = time.monotonic() + 20
+    while True:
+        try:
+            out, _ = proc.communicate(timeout=0.03)
+            break
+        except subprocess.TimeoutExpired:
+            if (cancel is not None and cancel()) or time.monotonic() > deadline:
+                proc.kill()
+                try:
+                    proc.communicate(timeout=2)
+                except (subprocess.SubprocessError, OSError):
+                    pass
+                return None
+    return out if proc.returncode == 0 and out and out.startswith(b"P6") else None
+
+
+def video_info(src: str, ffprobe: str = "ffprobe", run=subprocess.run):
+    """(width, height, fps) of the first video stream, or None."""
+    try:
+        r = run([ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries",
+                 "stream=width,height,avg_frame_rate,r_frame_rate", "-of", "json", src],
+                capture_output=True, timeout=30, **TEXT, **no_window_kwargs())
+        st = (json.loads(r.stdout or "{}").get("streams") or [{}])[0]
+        w, h = int(st["width"]), int(st["height"])
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        return None
+    fps = 30.0
+    for key in ("avg_frame_rate", "r_frame_rate"):
+        num, _, den = str(st.get(key, "")).partition("/")
+        try:
+            v = float(num) / float(den or 1)
+        except (ValueError, ZeroDivisionError):
+            continue
+        if 1 <= v <= 240:
+            fps = v
+            break
+    return w, h, fps
+
+
+def preview_size(w: int, h: int, width: int = 640) -> tuple[int, int]:
+    """Preview frame size for a w x h source: width wide (never upscaled), even height."""
+    width = min(width, w - w % 2)
+    return width, max(2, int(round(width * h / w / 2)) * 2)
+
+
+def raw_video_command(ffmpeg: str, src: str, t: float, size: tuple[int, int], fps: float) -> list[str]:
+    """One continuous stream of rgb24 frames at preview size for playback."""
+    w, h = size
+    return [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", f"{max(0.0, t):.3f}", "-i", src,
+            "-an", "-sn", "-vf", f"fps={fps:g},scale={w}:{h}:flags=fast_bilinear", "-pix_fmt", "rgb24",
+            "-f", "rawvideo", "pipe:1"]
+
+
+def video_command(ffmpeg: str, src: str, t: float, fps: int = 12, width: int = 640) -> list[str]:
+    return [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", f"{max(0.0, t):.3f}", "-i", src,
+            "-an", "-sn", "-vf", f"fps={fps},scale={width}:-2", "-f", "image2pipe", "-vcodec", "ppm", "pipe:1"]
+
+
+def read_ppm(stream) -> bytes | None:
+    """One binary PPM (P6) frame from a pipe, or None at the end."""
+    header = b""
+    fields = []
+    while len(fields) < 4:
+        ch = stream.read(1)
+        if not ch:
+            return None
+        header += ch
+        if ch.isspace() and header.strip():
+            fields = header.split()
+    w, h, maxval = int(fields[1]), int(fields[2]), int(fields[3])
+    size = w * h * (3 if maxval < 256 else 6)
+    data = b""
+    while len(data) < size:
+        chunk = stream.read(size - len(data))
+        if not chunk:
+            return None
+        data += chunk
+    return header + data
+
+
+# ------------------------------------------------------------------ in / out marks
+class Marks:
+    """In and out points on a timeline that may grow (a live recording)."""
+
+    MIN = 0.2
+
+    def __init__(self, length: float = 0.0):
+        self.length = max(0.0, length)
+        self.cut_in: float | None = None
+        self.cut_out: float | None = None
+
+    def _clamp(self, t: float) -> float:
+        return min(max(0.0, t), self.length)
+
+    def set_in(self, t: float) -> None:
+        self.cut_in = self._clamp(t)
+        if self.cut_out is not None and self.cut_out - self.cut_in < self.MIN:
+            self.cut_out = None
+
+    def set_out(self, t: float) -> None:
+        self.cut_out = self._clamp(t)
+        if self.cut_in is not None and self.cut_out - self.cut_in < self.MIN:
+            self.cut_in = None
+
+    def nudge(self, which: str, delta: float) -> None:
+        if which == "in" and self.cut_in is not None:
+            hi = (self.cut_out - self.MIN) if self.cut_out is not None else self.length
+            self.cut_in = min(max(0.0, self.cut_in + delta), hi)
+        elif which == "out" and self.cut_out is not None:
+            lo = (self.cut_in + self.MIN) if self.cut_in is not None else 0.0
+            self.cut_out = max(min(self.length, self.cut_out + delta), lo)
+
+    def grow(self, length: float) -> None:
+        self.length = max(self.length, length)
+
+    @property
+    def clip_length(self) -> float | None:
+        if self.cut_in is None or self.cut_out is None:
+            return None
+        return self.cut_out - self.cut_in
+
+    @property
+    def ready(self) -> bool:
+        return self.clip_length is not None and self.clip_length >= self.MIN
+
+
+# ------------------------------------------------------------------ the cut
+@dataclass
+class CutResult:
+    path: str
+    requested_start: float
+    requested_end: float
+    start: float          # actual start (the keyframe a stream copy begins at)
+    end: float
+    duration: float
+    exact: bool
+
+    @property
+    def snapped(self) -> bool:
+        return not self.exact and abs(self.start - self.requested_start) > 0.05
+
+    def as_dict(self) -> dict:
+        r = {k: getattr(self, k) for k in ("path", "requested_start", "requested_end", "start", "end",
+                                           "duration", "exact")}
+        r = {k: (round(v, 3) if isinstance(v, float) else v) for k, v in r.items()}
+        r["snapped"] = self.snapped
+        r["file"] = self.path
+        return r
+
+
+def cut_command(ffmpeg: str, src: str, start: float, end: float, out: str, exact: bool = False) -> list[str]:
+    cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-ss", f"{start:.3f}", "-i", src,
+           "-t", f"{end - start:.3f}", "-map", "0:v:0?", "-map", "0:a:0?"]
+    if exact:   # re-encoded: frame-exact in and out
+        cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", "192k"]
+    else:       # stream copy: instant and lossless, starts at the keyframe at or before start
+        cmd += ["-c", "copy", "-avoid_negative_ts", "make_zero"]
+    return cmd + ["-movflags", "+faststart", "-f", "mp4", out]
+
+
+def unique_path(path: str) -> str:
+    stem, ext = os.path.splitext(path)
+    n, out = 1, path
+    while os.path.exists(out):
+        n += 1
+        out = f"{stem}_{n}{ext}"
+    return out
+
+
+def clip_name(src: str, start: float, end: float, now: datetime.datetime | None = None) -> str:
+    stem = os.path.splitext(os.path.basename(src))[0]
+    stem = re.sub(r"[^\w.\-]+", "_", stem)[:80].strip("_") or "clip"
+    stamp = (now or datetime.datetime.now()).strftime("%Y%m%d_%H%M%S")
+    t = lambda s: fmt_time(s, tenths=False).replace(":", "-")  # noqa: E731
+    return f"{stem}_clip_{t(start)}_to_{t(end)}_{stamp}.mp4"
+
+
+def clips_folder_for(src: str, clips_base: str) -> str:
+    """Clips/<platform>/<channel> when src sits in Recorded|Processed/<platform>/<channel>/,
+    else Clips/ itself."""
+    parts = os.path.normpath(os.path.abspath(src)).split(os.sep)
+    for i in range(len(parts) - 3, -1, -1):
+        if parts[i].lower() in ("recorded", "processed", "pendingdeletion"):
+            rest = parts[i + 1:-1]
+            if rest:
+                from msr.util import reuse_path
+                return reuse_path(clips_base, *rest)
+            break
+    return clips_base
+
+
+def make_clip(ffmpeg: str, src: str, start: float, end: float, out_dir: str, *, exact: bool = False,
+              length: float | None = None, ffprobe: str | None = None, run=subprocess.run) -> CutResult:
+    """Cut [start, end] of src into out_dir. Returns the actual times (a stream copy starts at
+    the keyframe at or before start; its real start is end - the output's length)."""
+    if not os.path.isfile(src):
+        raise ClipError(f"The recording is not there any more: {src}")
+    if length is not None:
+        end = min(end, length)
+    if start < 0 or end - start < 0.2:
+        raise ClipError("Mark an in point before the out point (at least 0.2 s).")
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+    except OSError as e:
+        raise ClipError(f"Cannot create the clips folder {out_dir}: {e}") from None
+    probe = ffprobe or ffprobe_for(ffmpeg)
+    cut_from = start
+    if not exact:   # a stream copy can only begin at a keyframe: cut from there, and say so
+        kf = keyframe_at_or_before(src, start, probe, run=run)
+        if kf is not None:
+            cut_from = kf
+    final = unique_path(os.path.join(out_dir, clip_name(src, start, end)))
+    part = final[:-4] + ".part.mp4"
+    try:
+        # +1 ms: a copy from exactly the keyframe's time can start one GOP early
+        r = run(cut_command(ffmpeg, src, cut_from + (0.001 if not exact else 0.0), end, part, exact),
+                capture_output=True, timeout=3600, stdin=subprocess.DEVNULL, **TEXT, **no_window_kwargs())
+    except (OSError, subprocess.SubprocessError) as e:
+        _remove(part)
+        raise ClipError(f"ffmpeg could not run: {e}") from None
+    if r.returncode != 0 or not os.path.isfile(part) or os.path.getsize(part) < 1024:
+        _remove(part)
+        err = (r.stderr or "").strip().splitlines()[-1:] or ["no output"]
+        raise ClipError(f"The cut failed: {err[0][:300]}")
+    try:
+        os.replace(part, final)
+    except OSError as e:   # e.g. the drive went away during the cut
+        _remove(part)
+        raise ClipError(f"Could not save the clip: {e}") from None
+    got = probe_length(final, probe)
+    if got is None:
+        got = end - cut_from
+    real_end = min(end, cut_from + got)   # the container may round the last frame up a little
+    return CutResult(final, start, end, cut_from, real_end, real_end - cut_from, exact)
+
+
+# ------------------------------------------------------------------ clip -> source link
+CLIP_META_KIND = "msr-clip"
+CLIP_META_SUFFIX = ".meta.json"
+_CLIP_NAME_RE = re.compile(r"^(?P<stem>.+)_clip_(?P<a>\d+(?:-\d\d){1,2})_to_(?P<b>\d+(?:-\d\d){1,2})"
+                           r"_\d{8}_\d{6}(?:_\d+)?\.mp4$", re.I)
+
+
+def clip_meta_path(clip: str) -> str:
+    return os.path.splitext(clip)[0] + CLIP_META_SUFFIX
+
+
+def write_clip_meta(res: CutResult, src: str, now: datetime.datetime | None = None) -> str | None:
+    """Sidecar next to a saved clip naming its source and in/out times. It travels with the clip
+    (library moves take sidecars along); the source is found again by its file name. Best effort."""
+    data = {"kind": CLIP_META_KIND, "source": os.path.abspath(src), "source_name": os.path.basename(src),
+            "in": round(res.start, 3), "out": round(res.end, 3), "requested_in": round(res.requested_start, 3),
+            "exact": bool(res.exact), "created": (now or datetime.datetime.now()).isoformat(timespec="seconds")}
+    path = clip_meta_path(res.path)
+    try:
+        with open(path + ".tmp", "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2, ensure_ascii=False)
+        os.replace(path + ".tmp", path)
+        return path
+    except OSError:
+        _remove(path + ".tmp")
+        return None
+
+
+def safe_stem(name: str) -> str:
+    """A recording's stem as clip_name() writes it into a clip's name."""
+    stem = os.path.splitext(os.path.basename(name))[0]
+    return re.sub(r"[^\w.\-]+", "_", stem)[:80].strip("_") or "clip"
+
+
+def _dash_time(text: str) -> float:
+    total = 0
+    for part in text.split("-"):
+        total = total * 60 + int(part)
+    return float(total)
+
+
+def read_clip_link(clip: str) -> dict | None:
+    """{'source_name', 'source', 'stem', 'in', 'out', 'guessed'} for a clip: from its sidecar, else
+    (older clips) from the Clip Editor's name pattern, whole seconds only. None if neither."""
+    try:
+        with open(clip_meta_path(clip), "r", encoding="utf-8") as fh:
+            meta = json.load(fh)
+        if isinstance(meta, dict) and meta.get("kind") == CLIP_META_KIND and meta.get("source_name"):
+            return {"source_name": str(meta["source_name"]), "source": str(meta.get("source") or ""),
+                    "stem": safe_stem(meta["source_name"]), "in": float(meta.get("in") or 0.0),
+                    "out": float(meta.get("out") or 0.0), "guessed": False}
+    except (OSError, ValueError, TypeError):
+        pass
+    m = _CLIP_NAME_RE.match(os.path.basename(clip))
+    if not m:
+        return None
+    return {"source_name": "", "source": "", "stem": m.group("stem"), "in": _dash_time(m.group("a")),
+            "out": _dash_time(m.group("b")), "guessed": True}
+
+
+def _remove(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def finished_successor(src: str) -> str | None:
+    """After a recording ends its .ts is remuxed to Processed/<same path>/<same name>.mp4 and
+    the .ts moved away; the editor follows it there (same timeline)."""
+    parts = os.path.normpath(src).split(os.sep)
+    for i in range(len(parts) - 1, -1, -1):
+        if parts[i].lower() == "recorded":
+            parts[i] = "Processed" if parts[i] == "Recorded" else "processed"
+            cand = os.sep.join(parts)
+            cand = os.path.splitext(cand)[0] + ".mp4"
+            return cand if os.path.isfile(cand) else None
+    return None

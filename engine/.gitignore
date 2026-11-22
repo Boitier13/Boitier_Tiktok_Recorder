@@ -1,0 +1,91 @@
+# Recordings and data
+Recorded/
+Processed/
+PendingDeletion/
+Clips/
+
+# User configuration (contains paths, preferences)
+# config.ini also holds the [Fishtank] email/password in plain text.
+config.ini
+window_state.json
+# YouTube video ids already recorded from the start (msr/yt_live_start.py)
+yt_from_start/
+channels.json
+kick_channel_ids.json
+
+# Cookies (sensitive — never commit!)
+cookies.txt
+cookies*.txt
+*.har
+.env
+run_msr.local.bat
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.spec
+.venv/
+venv/
+
+# Disk-space write probe (only appears if streams_dir is the repo folder)
+.msr_write_probe
+.msr_instance.lock
+msr_update_error.txt
+msr_update_notice.txt
+# previous program files kept by the in-app updater for rollback
+msr_update_backup/
+# Why a start failed under pythonw (traceback without values; written by msr/startup_error.py)
+msr_startup_error.log
+# why setting up MSR's own .venv failed (msr/venv.py; retried next launch)
+msr_venv_error.txt
+# config.ini copies kept when it could not be parsed (they hold the same secrets as config.ini)
+config.ini.broken-*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+# Note: console captures are often saved as .txt, which *.log does not
+# match — hence the explicit entries below.
+*.log
+*.log.[0-9]
+stream_recorder.log*
+console_log.txt
+log_output*.txt
+
+# Cross-process log rotation lock
+*.rotating
+
+# Your own colour themes (themes/*.json in the data folder)
+themes/
+
+# Version history of channels.json / config.ini (Restore previous...)
+msr_history/
+
+# Remembered video lengths for the Library window (Count hours)
+library_cache.json
+library_cache.json.tmp
+library_actions.log
+library_moves.json
+library_moves.json.tmp
+
+# Agent control: port + token of the running copy, and its live status (msr/control.py)
+msr_control.json
+msr_status.json
+msr_control.json.*.tmp
+msr_status.json.*.tmp
+
+# Twitch push authorization (access + refresh token; msr/twitch_eventsub.py)
+twitch_token.json
+twitch_token.json.tmp

@@ -1,0 +1,62 @@
+[
+  {
+    "name": "fishtank:director-as-seen-on",
+    "enabled": true
+  },
+  {
+    "name": "fishtank:fx-as-seen-on",
+    "enabled": true
+  },
+  {
+    "name": "fishtank:first-floor-as-seen-on",
+    "enabled": true
+  },
+  {
+    "name": "fishtank:first-floor-alt-as-seen-on",
+    "enabled": true
+  },
+  {
+    "name": "fishtank:first-floor-ptz-as-seen-on",
+    "enabled": true
+  },
+  {
+    "name": "fishtank:counter-as-seen-on",
+    "enabled": true
+  },
+  {
+    "name": "fishtank:dressing-room-as-seen-on",
+    "enabled": true
+  },
+  {
+    "name": "fishtank:break-room-as-seen-on",
+    "enabled": true
+  },
+  {
+    "name": "fishtank:second-floor-as-seen-on",
+    "enabled": true
+  },
+  {
+    "name": "fishtank:basement-as-seen-on",
+    "enabled": true
+  },
+  {
+    "name": "fishtank:vault-as-seen-on",
+    "enabled": true
+  },
+  {
+    "name": "fishtank:inventory-as-seen-on",
+    "enabled": true
+  },
+  {
+    "name": "fishtank:second-floor-ptz-as-seen-on",
+    "enabled": true
+  },
+  {
+    "name": "fishtank:rathew-as-seen-on",
+    "enabled": true
+  },
+  {
+    "name": "fishtank:grid-as-seen-on",
+    "enabled": false
+  }
+]

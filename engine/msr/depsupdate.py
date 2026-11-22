@@ -1,0 +1,360 @@
+"""Dependencies: what MSR runs on, what is newer, and pip updates. Tk-free (GUI dialog, control
+API and msr_ctl.py share it).
+
+Rows: MSR itself (GitHub releases; installed by the existing in-app updater), the recording
+tools yt-dlp and streamlink, ffmpeg (reported only: MSR never installs it, so a system/PATH copy is
+left to its owner), and the Python packages from requirements.txt.
+
+pip runs in this interpreter, hidden, one package at a time. A running recording keeps the
+program it already started; the new version is used from the next recording on. If an update
+fails, the version that was there before is put back.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+
+from msr.nowindow import no_window_kwargs
+from msr.venv import in_venv
+
+SYSTEM_REFUSED = ("MSR is not running in its own environment (.venv), so pip would change the Python "
+                  "that other programs on this computer use. Start MSR with run_msr.pyw (it sets up .venv), "
+                  "or update with pip yourself. (msr_ctl.py deps update --system overrides this.)")
+
+# (distribution name on PyPI, label, kind) - kind "tool" = runs as a program while recording
+PACKAGES = (
+    ("yt-dlp", "yt-dlp", "tool"),
+    ("streamlink", "streamlink", "tool"),
+    ("curl_cffi", "curl_cffi", "package"),
+    ("websocket-client", "websocket-client", "package"),
+    ("psutil", "psutil", "package"),
+    ("Pillow", "Pillow", "package"),
+    ("pystray", "pystray", "package"),
+    ("plyer", "plyer", "package"),
+    ("colorama", "colorama", "package"),
+)
+NAMES = ("msr", "ffmpeg") + tuple(p[0].lower() for p in PACKAGES)
+STATE_KEY = "deps_check"            # window_state.json: last check time and what had updates
+DAY = 24 * 3600
+PIP_TIMEOUT = 600
+_UPDATING = threading.Lock()   # one pip run at a time (dialog, control API, msr_ctl)
+
+
+class DepsError(Exception):
+    """Shown to the user as is."""
+
+
+# ------------------------------------------------------------------ versions
+def vkey(v: str | None):
+    """A sortable key for version strings like 2026.10.22, 8.0.0, 0.16.3b1."""
+    parts = []
+    for tok in re.split(r"[.\-+_]", str(v or "")):
+        m = re.match(r"(\d+)(.*)", tok)
+        if m:
+            parts.append((int(m.group(1)), m.group(2) == "", m.group(2)))
+        elif tok:
+            parts.append((-1, False, tok))
+    return tuple(parts)
+
+
+def installed_version(dist: str) -> str | None:
+    try:
+        from importlib import metadata
+        return metadata.version(dist)
+    except Exception:
+        return None
+
+
+def _get_json(url: str, timeout: float = 10.0, opener=None):
+    req = urllib.request.Request(url, headers={"User-Agent": "MultiStreamRecorder-deps",
+                                               "Accept": "application/json"})
+    if opener is None:
+        from msr.tls import https_context
+        ctx = https_context()
+        opener = lambda r, timeout: urllib.request.urlopen(r, timeout=timeout, context=ctx)  # noqa: E731
+    with opener(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def latest_pypi(dist: str, opener=None) -> str:
+    return pypi_info(dist, opener)[0]
+
+
+def pypi_info(dist: str, opener=None, installed: str | None = None) -> tuple[str, str | None]:
+    """(latest version, upload date of `installed` or None) from ONE PyPI request; the date lets
+    the health check say how old the installed yt-dlp / streamlink is."""
+    data = _get_json(f"https://pypi.org/pypi/{dist}/json", opener=opener)
+    released = None
+    try:
+        files = (data.get("releases") or {}).get(installed or "") or []
+        released = min(str(f.get("upload_time_iso_8601") or f.get("upload_time")) for f in files) if files else None
+    except (AttributeError, TypeError, ValueError):
+        released = None
+    return str(data["info"]["version"]), released
+
+
+def latest_msr(opener=None) -> tuple[str, str, str]:
+    """(tag without v, html url, zipball url) from GitHub ``releases/latest``.
+
+    The zipball is whatever the API returns (usually ``api.github.com/.../zipball/<tag>``).
+    Callers still reject it unless ``zipball_url_is_allowed``.
+    """
+    from msr.util import GITHUB_OWNER, GITHUB_REPO
+    data = _get_json(f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest", opener=opener)
+    return (str(data.get("tag_name", "")).lstrip("vV"), str(data.get("html_url", "")),
+            str(data.get("zipball_url") or ""))
+
+
+def _offline(e: Exception) -> bool:
+    return isinstance(e, (urllib.error.URLError, OSError, TimeoutError))
+
+
+# ------------------------------------------------------------------ ffmpeg
+def ffmpeg_row(ffmpeg_path: str = "ffmpeg") -> dict:
+    from msr import deps
+    path = (ffmpeg_path or "ffmpeg").strip() or "ffmpeg"
+    resolved = shutil.which(path) if not os.path.isabs(path) else (path if os.path.isfile(path) else None)
+    version = deps.check_ffmpeg(path) if resolved else None
+    if not resolved:
+        source = "not found"
+    elif os.path.isabs(path):
+        source = f"set in config.ini ([Advanced] ffmpeg_path): {resolved}"
+    else:
+        source = f"system PATH: {resolved}"
+    return {"name": "ffmpeg", "label": "ffmpeg", "kind": "tool", "installed": version, "latest": None,
+            "status": "not_installed" if not version else "external", "source": source, "updatable": False,
+            "note": "Not installed by MSR, so MSR does not update it. Update it where it came from "
+                    "(e.g. gyan.dev build or winget)." if version else
+                    "ffmpeg is needed to finish recordings. Install it and put it on PATH."}
+
+
+# ------------------------------------------------------------------ rows
+def _status(installed, latest):
+    if not installed:
+        return "not_installed"
+    if not latest:
+        return "unknown"
+    return "update_available" if vkey(latest) > vkey(installed) else "up_to_date"
+
+
+def _annotate_msr(msr: dict, running: str) -> None:
+    """Note a git checkout, or a copy whose files are already newer than this process.
+
+    A release-zip overwrite of a git working tree would leave it dirty and diverged, so the
+    Source / note column says to update with git. Files already newer than the running
+    process (a pull that has not been restarted) are a restart, not a download. A failed
+    version check keeps its own error text, unless the files on disk are already newer.
+    """
+    try:
+        from msr.update import GIT_NOTE, RESTART_TITLE, disk_version, source_note
+        from msr.util import application_dir
+        folder = application_dir()
+        note = source_note(folder, running)
+    except Exception:
+        return
+    if note == RESTART_TITLE:
+        msr["note"] = RESTART_TITLE
+        msr["updatable"] = True
+        if msr.get("status") in ("unchecked", "unknown", "up_to_date", "", None):
+            msr["status"] = "update_available"
+        if not msr.get("latest"):
+            on_disk = disk_version(folder)
+            if on_disk:
+                msr["latest"] = on_disk
+        return
+    if note == GIT_NOTE and msr.get("status") != "unknown":
+        msr["note"] = GIT_NOTE
+        return
+    if msr.get("updatable") and not msr.get("note"):
+        msr["note"] = ZIP_NOTE
+
+
+def rows(check: bool = False, *, ffmpeg_path: str = "ffmpeg", opener=None, version_of=installed_version) -> list[dict]:
+    """One dict per item. check=False lists installed versions only (no network)."""
+    from msr import __version__
+    out = []
+    msr = {"name": "msr", "label": "Multi-Stream Recorder", "kind": "app", "installed": __version__,
+           "latest": None, "status": "unchecked", "source": "this app", "updatable": False, "note": ""}
+    if check:
+        try:
+            tag, url, zipball = latest_msr(opener)
+            msr.update(latest=tag or None, status=_status(__version__, tag or None), url=url,
+                       zipball=zipball or "")
+            msr["updatable"] = msr["status"] == "update_available"
+            if msr["updatable"]:
+                msr["note"] = "Installed by the app's own updater (the banner / Update in the window)."
+        except Exception as e:
+            msr.update(status="unknown", note=_why(e))
+    _annotate_msr(msr, __version__)
+    out.append(msr)
+    out.append(ffmpeg_row(ffmpeg_path))
+    for dist, label, kind in PACKAGES:
+        ver = version_of(dist)
+        row = {"name": dist.lower(), "label": label, "kind": kind, "installed": ver, "latest": None,
+               "status": "unchecked" if ver else "not_installed",
+               "source": python_label(), "updatable": False, "note": ""}
+        if check:
+            try:
+                latest, released = pypi_info(dist, opener, ver)
+                row.update(latest=latest, status=_status(ver, latest))
+                if released:
+                    row["installed_released"] = released
+            except Exception as e:
+                row.update(status="unknown" if ver else "not_installed", note=_why(e))
+            row["updatable"] = row["status"] in ("update_available",) or (row["status"] == "not_installed"
+                                                                          and row["latest"] is not None)
+        out.append(row)
+    return out
+
+
+def python_label() -> str:
+    return "MSR .venv" if in_venv() else "system Python (updates off)"
+
+
+def _why(e: Exception) -> str:
+    if isinstance(e, urllib.error.HTTPError):
+        return "No published release found." if e.code == 404 else f"Update server answered HTTP {e.code}."
+    from msr.tls import is_cert_error
+    if is_cert_error(e):
+        return ("Secure connection failed: the server's certificate is not trusted on this PC "
+                f"({str(getattr(e, 'reason', e))[:120]}).")
+    if _offline(e):
+        reason = str(getattr(e, "reason", "") or e)[:120]
+        return f"Could not reach the update server (offline? {reason})." if reason else \
+            "Could not reach the update server (offline?)."
+    return f"Check failed: {type(e).__name__}: {str(e)[:150]}"
+
+
+def summary_text(rs: list[dict]) -> str:
+    """Footer after a check: never "up to date" when an item could not be checked."""
+    n = len(updates_available(rs))
+    failed = [r["label"] for r in rs if r.get("status") == "unknown"]
+    if failed:
+        rest = f"{n} update(s) available for the rest." if n else "other items are up to date."
+        return f"Could not check {', '.join(failed)}; {rest}"
+    return f"{n} update(s) available." if n else "Everything is up to date."
+
+
+def updates_available(rs: list[dict]) -> list[str]:
+    return [r["name"] for r in rs if r.get("status") == "update_available"]
+
+
+# ------------------------------------------------------------------ pip
+def pip_command(python: str, spec: str) -> list[str]:
+    return [python, "-m", "pip", "install", "--upgrade", "--disable-pip-version-check", "--no-input",
+            "--progress-bar", "off", spec]
+
+
+def classify_pip_error(text: str) -> str:
+    t = text or ""
+    low = t.lower()
+    if any(s in low for s in ("permission denied", "access is denied", "winerror 5", "winerror 32",
+                              "being used by another process")):
+        return ("Windows would not let pip replace the files: a recording may be using this tool right now, "
+                "or the Python folder needs administrator rights. Try again when no recording runs.")
+    if any(s in low for s in ("could not fetch", "newconnectionerror", "temporary failure in name resolution",
+                              "failed to establish a new connection", "no matching distribution",
+                              "connection aborted", "read timed out", "getaddrinfo failed")):
+        return "pip could not download the package (offline, or PyPI not reachable)."
+    if "no module named pip" in low:
+        return "pip is not installed for this Python."
+    tail = [ln for ln in t.strip().splitlines() if ln.strip()][-1:] or ["pip failed"]
+    return tail[0][:300]
+
+
+def update_packages(names, *, python: str | None = None, run=subprocess.run, version_of=installed_version,
+                    log=None, allow_system: bool = False) -> list[dict]:
+    """pip-upgrade each named package (PyPI names, any case) in this interpreter's venv. Refused
+    outside a venv unless allow_system. Puts the old version back when an update fails or leaves
+    the package unimportable. Returns one result per name."""
+    if not in_venv() and not allow_system:
+        return [{"name": str(n).lower(), "ok": False, "error": SYSTEM_REFUSED, "code": "not_venv"} for n in names]
+    if not _UPDATING.acquire(blocking=False):
+        return [{"name": str(n).lower(), "ok": False, "code": "busy",
+                 "error": "Another package update is still running; try again when it has finished."} for n in names]
+    try:
+        return _update_packages(names, python or sys.executable, run, version_of, log)
+    finally:
+        _UPDATING.release()
+
+
+def _pip(run, cmd):
+    return run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=PIP_TIMEOUT,
+               stdin=subprocess.DEVNULL, **no_window_kwargs())
+
+
+def _update_packages(names, python, run, version_of, log) -> list[dict]:
+    known = {p[0].lower(): p[0] for p in PACKAGES}
+    results = []
+    for name in names:
+        key = str(name).lower()
+        if key in ("msr", "ffmpeg"):
+            results.append({"name": key, "ok": False, "error": "Use the app's own updater (the banner in the window)."
+                            if key == "msr" else "ffmpeg is not installed by MSR; update it where it came from."})
+            continue
+        if key not in known:
+            results.append({"name": key, "ok": False, "error": f"Unknown package: {name}"})
+            continue
+        dist = known[key]
+        old = version_of(dist)
+        res = {"name": key, "old": old, "new": old, "ok": False, "rolled_back": False}
+        if log:
+            log(f"Updating {dist} (installed {old or 'none'})\u2026")
+        try:
+            r = _pip(run, pip_command(python, dist))
+            failed = r.returncode != 0
+            err = classify_pip_error((r.stderr or "") + "\n" + (r.stdout or "")) if failed else ""
+        except subprocess.TimeoutExpired:
+            failed, err = True, f"pip took longer than {PIP_TIMEOUT // 60} minutes and was stopped."
+        except (OSError, ValueError) as e:
+            failed, err = True, f"Could not run pip: {e}"
+        new = version_of(dist)
+        if not failed and new is None:
+            failed, err = True, "pip finished but the package is gone."
+        if failed:
+            res["error"] = err
+            if old and version_of(dist) != old:
+                try:   # put the previous version back
+                    rb = _pip(run, pip_command(python, f"{dist}=={old}"))
+                    res["rolled_back"] = rb.returncode == 0 and version_of(dist) == old
+                except (OSError, subprocess.SubprocessError):
+                    pass
+                if not res["rolled_back"]:
+                    res["error"] += f" Putting {old} back also failed: run 'python -m pip install {dist}=={old}'."
+            res["new"] = version_of(dist)
+        else:
+            res.update(ok=True, new=new)
+        if log:
+            log(f"{dist}: " + (f"{old} -> {new}" if res["ok"] else res["error"]))
+        results.append(res)
+    return results
+
+
+# ------------------------------------------------------------------ daily check bookkeeping
+def due(state: dict, now: float | None = None) -> bool:
+    last = (state.get(STATE_KEY) or {}).get("time", 0)
+    try:
+        return (now or time.time()) - float(last) >= DAY
+    except (TypeError, ValueError):
+        return True
+
+
+def remember(state_file: str, rs: list[dict], now: float | None = None) -> None:
+    from msr import winstate
+    released = {r["name"]: {"version": r.get("installed"), "date": r["installed_released"]}
+                for r in rs if r.get("installed_released")}
+    winstate.merge(state_file, {STATE_KEY: {"time": now or time.time(), "updates": updates_available(rs),
+                                            "released": released}})
+
+
+def remembered_updates(state: dict) -> list[str]:
+    return list((state.get(STATE_KEY) or {}).get("updates") or [])

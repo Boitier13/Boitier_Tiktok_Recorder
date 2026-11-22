@@ -1,0 +1,51 @@
+# Multi-Stream Recorder — Python Dependencies
+# Install with: python -m pip install -r requirements.txt
+# Tested 2026-10 on Windows, Python 3.12: yt-dlp 2026.8.19, streamlink 8.6.2,
+# curl_cffi 0.16.3, websocket-client 1.9.2, psutil 7.2.2, Pillow 13.0.
+# yt-dlp and streamlink run as commands; MSR adds this interpreter's Scripts
+# folder to PATH, so a venv works without activating it.
+
+# ── Required ──────────────────────────────────────
+yt-dlp[default]>=2025.11.12   # Stream detection & recording (YouTube, Rumble, TikTok, custom URLs).
+                              # [default] pulls in yt-dlp-ejs, needed for YouTube's JS challenge —
+                              # without it YouTube recordings drop out every ~15 seconds.
+streamlink>=8.0.0             # Kick and Twitch detection & recording. 8.x includes the built-in
+                              # Cloudflare JS challenge solver that Kick requires.
+
+# ── Recommended ───────────────────────────────────
+psutil>=5.9.0             # Clean process shutdown & orphan cleanup
+curl_cffi>=0.10.0         # Browser impersonation for Cloudflare-protected sites (Rumble);
+                          # Fishtank.live API (HTTP/3); Kick push channel-ID lookup
+websocket-client>=1.6.0   # Kick push notifications — recordings start within seconds of
+                          # go-live via Kick's WebSocket event feed (v1.7.0+)
+
+# ── Optional (GUI enhancements) ──────────────────
+pywebview>=5.4; sys_platform == "win32"  # Native desktop window backed by Microsoft Edge WebView2.
+pystray>=0.19.0           # System tray icon (minimize to tray). On Linux the XEmbed
+                          # backend cannot dock on Hyprland/GNOME; PyGObject below is
+                          # the AppIndicator (StatusNotifierItem) backend.
+Pillow>=9.0.0             # Required by pystray for tray icon rendering (previews use Tk's PNG)
+plyer>=2.1.0              # Desktop notifications (stream started/stopped)
+colorama>=0.4.6           # Colored console/log output (Windows terminal support)
+# Linux only (Windows and macOS skip this line). Source-only: pip builds it, so the
+# system needs gobject-introspection, cairo headers and a C compiler first (see README).
+# pycairo is pulled in as its dependency. If gi cannot be imported, the tray stays off
+# (one info line, no traceback) and recording still runs.
+PyGObject>=3.50; sys_platform == "linux"
+
+# ── External tools (not pip-installable) ──────────
+# ffmpeg — required for remuxing .ts → .mp4
+#   Download: https://www.gyan.dev/ffmpeg/builds/ (Windows)
+#   Or: sudo apt install ffmpeg (Linux) / brew install ffmpeg (macOS)
+#   Must be available in PATH
+#
+# Deno — recommended for YouTube recording reliability
+#   yt-dlp uses Deno to solve YouTube's JS-based n-challenge. Without it,
+#   YouTube recordings will drop out roughly every 15 seconds.
+#   Download: https://deno.com/
+#   Must be available in PATH
+#
+# tkinter — required for the GUI (default mode, i.e. running without --headless).
+#   Bundled with the standard Windows/macOS python.org installers, but on
+#   Linux it's a separate OS package, not something pip can install:
+#   sudo apt install python3-tk (Debian/Ubuntu) / sudo dnf install python3-tkinter (Fedora)

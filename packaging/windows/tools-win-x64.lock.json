@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "target": "windows-x86_64",
+  "tools": [
+    {
+      "name": "FFmpeg",
+      "version_label": "n9.0.2-61-gd59078794d (BtbN autobuild pinned by immutable release tag)",
+      "asset": "ffmpeg-n9.0.2-61-gd59078794d-win64-lgpl-9.0.zip",
+      "url": "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-11-22-12-36/ffmpeg-n9.0.2-61-gd59078794d-win64-lgpl-9.0.zip",
+      "size_bytes": 171850214,
+      "sha256": "c0231e389cf6afaa81ef9673c7ff0d05f8e3890268ebc698b1d462e9685a2b43",
+      "binaries": ["ffmpeg.exe", "ffprobe.exe"],
+      "license_family": "FFmpeg LGPL build variant; verify exact configure flags and included component licenses before distribution",
+      "redistribution_status": "blocked-pending-license-and-notice-audit"
+    }
+  ]
+}

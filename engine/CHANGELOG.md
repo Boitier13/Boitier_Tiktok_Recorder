@@ -1,0 +1,382 @@
+# Changelog
+
+## Unreleased
+
+### Fixed
+- CI (Linux): the clip-audio pause test read the process state immediately after SIGSTOP, before the kernel had stopped the process. It now polls until the state is stopped, and until it has left that state after resume, for up to 5 seconds.
+- Library: when the same recording is linked into both `processed` and `Processed`, both folders are remembered. Previously the folder that directory listing returned second was dropped, so the Recordings list could open only one of them. Which one depended on the order the disk returned the names.
+- Status header disk rate on Linux no longer sits at 0 MB/s between page-cache flushes. The device write counter is averaged over 45 s (oldest sample to newest), long enough to cover write-back, and while recordings are growing the figure stays at least the recording file growth. A single flush no longer paints the meter busy. Windows still uses the one-second counter delta. The tooltip says the Linux rate is averaged.
+
+### Tests
+- Checks for edit mistakes that had already landed more than once: the version lives only in `msr/__init__.py` (README, CHANGELOG and the release-notes filename must match; agent notes must not copy it), release notes stay under `docs/release_notes/`, the Windows folder-case answer is tested on Linux, a drive-letter PATH is not joined on `os.pathsep` without an OS check, tests do not read `/proc` or `time.monotonic` too soon, there is one tooltip window and it does not fight the compositor's resize, and a Linux-only pip line needs `sys_platform == "linux"`.
+
+## v3.1.5 (2026-11-16)
+
+Release notes: [docs/release_notes/RELEASE_NOTES_v3.1.5.md](docs/release_notes/RELEASE_NOTES_v3.1.5.md).
+
+### Fixed
+- Updates: choosing Multi-Stream Recorder and pressing Update selected or Update all uses the release that check just found. A window left open since before that release no longer asks to continue and then does nothing (the banner tag from the startup check was empty, and the click returned without a message). The header banner takes the same release, and a long-running window checks again with the daily update pass. If an update cannot start, the window says why and the log records it. There is one confirmation, not two.
+- A git checkout is not overwritten with a release zip. When the tree is clean and the branch tracks origin, MSR offers `git pull --ff-only` and a restart. Otherwise it explains and shows the command. The Updates row says "git checkout: updates with git pull".
+- When the files on disk are already newer than the running copy (a pull that has not been restarted), MSR says "Restart to finish updating" and restarts instead of downloading. A normal install still downloads the GitHub zip.
+
+## v3.1.4 (2026-11-16)
+
+Release notes: [docs/release_notes/RELEASE_NOTES_v3.1.4.md](docs/release_notes/RELEASE_NOTES_v3.1.4.md).
+
+### Fixed
+
+**Clips**
+- Clip Now on a long recording sought about an hour behind the live edge, on every OS. A 120s clip of a still-growing `.ts` (PCR start ~2658s, elapsed ~10186s, ffprobe duration already the elapsed length) landed near 4800s: any duration greater than a large start time was treated as a last-PTS, and that subtraction ran twice. Elapsed time now comes from the first and last packet timestamps. A mid-file PCR reset (timestamps jump backwards) still seeks from the end of the file, including on volumes with no file birth time. Screenshot and the live-preview fallback use the same elapsed time.
+- Space no longer opens another Clip Editor, or presses Clip Now, Screenshot, Clips or Streams, while an editor is open. Those status-row buttons ignore Space. Opening an editor takes the keyboard, so Space plays and pauses that editor. Clicking DVR (or Shift+click on Clip Now) still opens another one. The channel list's Space toggle is unchanged.
+- Clip Editor on Linux plays at real speed, with sound. A long live `.ts` was decoded and volume-scaled as fast as the CPU allowed (there was no player, only a sink that accepted every sample at once), which held the GIL so the picture stalled and then skipped ahead. Linux now plays through PipeWire (`pw-play` or `pw-cat`) or PulseAudio (`paplay`); the picture follows that clock, with the data still in the pipe and the player's requested latency taken out of the position. With no player, or no sound device on any OS, audio is paced to real time. Steady volume is applied by ffmpeg, so the default slider does not scale every sample in Python; moving the slider still takes effect on the next chunk. Windows playback is still waveOut.
+
+**Logs**
+- The Logs tab shows lines from the per-channel worker processes (live checks, recording, split, remux progress) as they are written. The level filter and the text filter apply to them the same way as to lines from the window. Each line is still written to `stream_recorder.log` once, in the same format. Headless and `msr_ctl logs` are unchanged (they read that file). A worker killed while logging cannot stall shutdown.
+
+**Library**
+- A short window scrolls the overview to the "Recorded per month" chart instead of squashing it to an empty sliver. The chart keeps its height, and a tall window still stretches the overview to fill the tab. Scrolling uses the same frame as Options. Wheeling over Channels, Recordings, PendingDeletion or Clean up still scrolls that list. The Library toolbar wraps onto a second line when the pane is too narrow for "Remove folder".
+- On Linux the Library counts `processed` / `recorded` / `PendingDeletion` / `Clips` (and the platform and channel folders under them) whatever their case is, and merges every variant that exists. A drive that still has the lowercase folders Windows wrote no longer shows up as a handful of files in a new `Processed` folder. New recordings and remuxes reuse the existing folder instead of creating a differently-cased sibling. Windows paths are unchanged.
+
+**Status preview**
+- After minimize/restore (or leaving the tray), the strip refreshes at once. Restoring clears the failure back-off, refreshes the age badge immediately, and if a grab was already running the kick waits for it and then runs once more instead of being dropped. The pinned still is 960x540 from the live edge. Strip tiles stay 160x90; there is still no full-window 1080p preview.
+
+**Linux window**
+- Hover tooltips no longer flash an unthemed frame. The tip is one withdrawn, theme-coloured window (`msr/tooltip.py`), sized and then shown, with window class `TkTooltip`. On X11 the window is marked as a tooltip. Windows tips are unchanged.
+- A right-click opens the menu and leaves it open until an item is chosen, the pointer clicks elsewhere, or Esc. X11 was posting the menu on button press, so the release invoked the item under the pointer (Enable on a channel, for example). Channel list, status list, and the Library menus open on button release there (`msr/context_menu.py`). Windows still opens on button press.
+- The mouse wheel scrolls the Options tab, the channel-list badge strip, the Clip Editor timeline, and the Library overview. X11 sends Button-4/Button-5 rather than MouseWheel; those go through `msr/wheel.py`. Channel, recording and log lists already scrolled (Tk's own Button-4/5 bindings).
+- On Hyprland / Omarchy, floating workspaces resize Tk menus, combobox lists and tooltips to about 1100x760. A user float rule for classes `Menu`, `ComboboxPopdown` and `TkTooltip` leaves them at the size Tk posted. The tooltip window uses that class. The rule is in the README.
+- The tray prefers pystray's AppIndicator backend when PyGObject and AyatanaAppIndicator3 or AppIndicator3 import (an already-set `PYSTRAY_BACKEND` is kept). If nothing can dock — Hyprland has no XEmbed tray, or `gi` did not import — the tray stays off with one INFO line and no traceback, and minimize/close does not hide the window into a tray that is not there. `requirements.txt` installs `PyGObject>=3.50` on Linux only; Windows and macOS skip that line.
+
+### Changed
+- Library tab: **Add folder…** and **Remove folder** remember extra folders in `[Library] extra_dirs` (the same `;`-separated setting as Options). Videos in those folders are attributed to a site and channel from the `.meta.json` sidecar, then from a parent folder named like a known platform, then left under Other / (unsorted). The date prefers the sidecar, then the date in the file name. The scan only reads; it never writes inside a recordings folder. Count hours still uses `duration_seconds` from the sidecar. `msr_ctl config set Library.extra_dirs` changes the same list.
+
+### Tests
+- GitHub Actions runs the suite on Windows and Linux, Python 3.12 and 3.14 (`fail-fast` off).
+- CI (Windows): Chocolatey exits 0 when the community feed times out and installs nothing, so the ffmpeg step stayed green while ffmpeg was missing. A subscribe test then received `health_problem` ("ffmpeg is not installed") on the line where it expected the server's bye. The install step retries and fails unless `ffmpeg -version` runs. The test reads until that bye, within 10 seconds, and still requires `{"type": "bye", "reason": "server stopping"}`.
+- The health-bar test dates its yt-dlp version from today, so a fixture older than 14 days does not turn Health OK into a stale-version warning.
+- The Twitch validate-401 refresh test forces the hourly validate path, so it does not depend on process uptime.
+
+## v3.1.3 (2026-11-05)
+
+Release notes: [docs/release_notes/RELEASE_NOTES_v3.1.3.md](docs/release_notes/RELEASE_NOTES_v3.1.3.md).
+
+### Fixed
+- Twitch instant alerts no longer turn off after a few hours with "Twitch sign-in is no longer valid". Refreshes now go through one locked token store (shared by the listener, Options, control and the health check), so a single-use refresh token is never sent twice; a refused refresh reloads and retries once with a newer saved token; a 401 from validate or Helix forces one refresh and retries; the startup health check refreshes before validating. Successful refreshes are logged (no token values).
+
+## v3.1.2 (2026-11-03)
+
+Release notes: [docs/release_notes/RELEASE_NOTES_v3.1.2.md](docs/release_notes/RELEASE_NOTES_v3.1.2.md).
+
+### Added
+- Clip Editor: timeline zoom and scrub (Alt+wheel zooms at the pointer, Ctrl+wheel zoom-scaled step, wheel/Shift+wheel pan, +/-/0 keys, double-click reset, a zoom-window indicator, playhead follow while playing).
+- Clip Editor: optional waveform strip under the timeline (off by default, remembered). Read in the background with ffmpeg astats, cached in LocalAppData, incremental for live files, with one last read when the live edge stops growing.
+
+## v3.1.1 (2026-11-03)
+
+Release notes: [docs/release_notes/RELEASE_NOTES_v3.1.1.md](docs/release_notes/RELEASE_NOTES_v3.1.1.md).
+
+**Upgrading:** on PCs missing the Sectigo Root E46 certificate, 3.0.0 and 3.1.0 may not show the update notice; download 3.1.1 from the release page.
+
+### Fixed
+- Update check and in-app update download: HTTPS uses the Windows store plus certifi's roots (`msr/tls.py`), so api.github.com (Sectigo E46 root) verifies on PCs whose store lacks that root. Before, Updates showed "Could not check" and the banner never appeared.
+- Updates notes name the real failure (untrusted certificate, or offline with the reason) instead of always "offline?".
+- Updates footer says "Could not check X; other items are up to date" instead of "Everything is up to date" when a check failed.
+- Agent control: `*_dpapi` keys are refused as `invalid` before the known-key check, the same on every OS (was `not_found` on Linux).
+- Library > Recordings: narrower channel/search boxes, so the Library fits the minimum window with Linux fonts.
+- Tests: the Windows ACL test accepts the SDDL alias `LA` (built-in Administrator, as on CI runners).
+
+## v3.1.0 (2026-11-03)
+
+Release notes: [docs/release_notes/RELEASE_NOTES_v3.1.0.md](docs/release_notes/RELEASE_NOTES_v3.1.0.md).
+
+### Added
+
+**YouTube: record from the start (experimental)**
+- A YouTube broadcast found live within its first 15 minutes is recorded from its start (yt-dlp `--live-from-start`), then follows live, so a start between two checks is not lost. Older broadcasts record live only.
+- Only the first segment of a broadcast does this; reconnects, size/time splits and a second sighting of the same video record live as before.
+- The limit is in **Options > YouTube** (`[YouTube] live_from_start_max_minutes`, 15, 0-7200, 0 = no limit). It is never below the check interval + jitter + 2 min. `live_from_start = false` turns it off.
+- While it catches up the status says **catching up from start**. Clip Now, Screenshot and the live Clip Editor are refused with "Available once caught up to live" (in the window and in agent control, code `busy`); before, they failed with "no active recording" or could cut an older leftover file. The preview shows the downloaded point, not live.
+- Once caught up, MSR ends the from-start part and continues with a normal live recording (an overlap split, no gap), so clips work again. yt-dlp writes video and audio as separate parts; MSR merges them when the recording ends, or at the next start if MSR was stopped.
+- yt-dlp calls `--live-from-start` experimental. Downloading a finished broadcast (VOD) is a separate, future feature.
+
+**Twitch go-live push (opt-in)**
+- Options > Twitch > **Connect** signs in once with a device code (twitch.tv/activate) and turns on EventSub push: a go-live is seen within seconds. Up to 10 channels (Twitch's limit), recording ones first; polling always keeps running. MSR's own public client id is built in.
+- After a push connection (Kick or Twitch) drops and reconnects, one catch-up check runs (at most every 5 min, spread over up to 60 s); ordinary drops log one INFO line.
+
+**Options tab (new)**
+- Grouped, scrollable settings with a hint for what 0/blank means and when each applies; Fishtank Test login, ffmpeg Check, Updates shortcut. The recordings folder can't change while recording; the poll and clip-length selectors stay in sync.
+
+**Sounds (off by default)**
+- Go-live chime, problem alert and clip tick, each with a Test button; quiet while Windows is locked (`[Sounds]`).
+
+**Health checks**
+- At start (tools, recordings folder writable + free space, Twitch sign-in) and every `[Health] check_minutes` (10, 0 = off): free space, stalled recordings, sites whose checks all fail. One-line status in the bottom bar with details and Updates; a note when yt-dlp/streamlink are over 14 days behind a newer release.
+
+**Library > Recordings**
+- Per-channel list (date, length, stream title) with search, sort, Open folder, Play and Clip Editor. Clips made in the Clip Editor record their source in a `.meta.json`; clips are listed under the recording they came from (older ones matched by name).
+
+**First-time setup window**
+- Live status for each step (environment, each package, install), elapsed time and a small pip log; on failure the log stays open with the path to `msr_venv_setup.log` and a Continue button. Themed from the first frame (no white flash), resizable.
+
+**Agent control v2** (`msr_ctl.py`, `api_version` stays 1)
+- `twitch status | connect | disconnect` (same as Options > Twitch); only one Twitch sign-in can run at a time, from the window or control.
+- `config set` uses the same checks and save as the Options tab (types, ranges, recordings-folder guards, secrets encrypted, `--stdin` for secrets).
+- `sound-test live|problem|clip`, `health --check-now` (reruns the window's Health check).
+- `recordings browse` and `recordings clips` (like Library > Recordings).
+- `subscribe`: a live stream of events as JSON lines with heartbeats, at most 8 at once.
+- New app-wide events: `health_problem`, `disk_low`, `update_available`, `library_action`.
+
+**Options tab**
+- **Manage on Twitch** button (opens your Twitch connections page). **Disconnect** revokes the token at Twitch in the background and always deletes it locally.
+
+### Changed
+- In the window, control commands now run through a queue the Tk thread drains, so no command touches the window from another thread. A command that cannot start within 30 s gets `busy`.
+- Library: the Files tab is folded into **Clean up** (single files to tick and delete are listed below the suggestions).
+
+### Security
+- `twitch_token.json` and the Fishtank password in `config.ini` are encrypted with Windows DPAPI (`password_dpapi`); existing plain values are migrated. Other systems keep plain text as before. **Older MSR versions see the Fishtank password as blank** after this; enter it again there if you go back.
+- `msr_control.json` (control port and token) is readable only by your Windows user.
+- Twitch reconnect URLs must be `wss://*.twitch.tv`, and only `twitch.tv/activate` links are opened.
+- Options warns when `cookies.txt` is in a synced folder (OneDrive, Dropbox, Google Drive...).
+
+## v3.0.0 (2026-10-30)
+
+The biggest release so far (over 60 commits since v2.1.0): a **Clip Editor** for cutting clips while a stream records, a **Library** tab that shows and safely cleans up what your recordings take, **agent and headless control** (`msr_ctl.py`) for scripts, bots and AI agents, MSR's **own Python environment** set up on first launch, an **Updates** dialog for yt-dlp/streamlink and the other packages, **sixteen themes**, an **app icon**, and a long list of safety fixes (drive loss, verified remuxes, redacted logs, hidden consoles, all-or-nothing updates, recording starts at once after a crash). No new Python packages; your `config.ini`, `channels.json`, cookies and recordings are used as before. Release notes: [docs/release_notes/RELEASE_NOTES_v3.0.0.md](docs/release_notes/RELEASE_NOTES_v3.0.0.md).
+
+**Upgrading from 2.1.0:** download the new release (ZIP or `git pull`) rather than the in-app update. The 2.1.0 updater only replaces `Multi-Stream-Recorder.py`, `requirements.txt`, `channels_fishtank.json` and `msr/`, so it would not bring the new `run_msr.pyw` (the `.venv` setup), `msr_ctl.py`, `create_shortcut.py`, `assets/` or `docs/`. The app still runs after an in-app update, without those. From 3.0 on, in-app updates bring all of them (launchers, `msr_ctl.py`, `create_shortcut.py`, `assets/`, `docs/`), never user files or `.venv`.
+
+### Removed
+- `[Advanced] concurrent_fragments`: it was never used. An existing `config.ini` that still has it loads normally and the value is ignored.
+- `screenshots/fill.txt` (empty placeholder). Old release notes moved from the repository root to `docs/release_notes/`.
+
+### Added
+
+**MSR's own environment (new)**
+- The launchers create `.venv` in the MSR folder on first launch (small progress window, no console, about a minute), install `requirements.txt` into it and start MSR from it; later launches use it at once.
+- If setup fails (offline, no `venv` module, no write access) MSR runs on the current Python, says why and retries next launch. A damaged or half-built `.venv`, a removed base Python or a moved MSR folder leads to a rebuild; a changed `requirements.txt` to a reinstall.
+- Opt out with `MSR_NO_VENV=1` or `[Advanced] use_venv = false`. Package updates (Updates dialog, `msr_ctl.py deps update`) only install into a venv; on a system Python they are refused unless `--system`.
+- `msr_ctl.py deps` uses `.venv`'s Python automatically; shortcuts from `create_shortcut.py` point at the base pythonw + `run_msr.pyw` so they survive a rebuild.
+
+**Updates dialog for tools and packages (new)**
+- Click the version at the bottom left or **Updates…** next to About: MSR, yt-dlp, streamlink, ffmpeg and the Python packages with installed version, latest version and status; Check now, Update selected, Update all.
+- pip updates run hidden in the background; running recordings are not touched and the next recording uses the new version. A failed update puts the previous version back; offline, pip and permission errors get a clear message.
+- ffmpeg is reported (version and source) but not updated, because MSR did not install it. MSR itself uses the existing in-app updater.
+- A daily background check (on by default, `[Updates] daily_check`) marks the button **Updates •**. It starts a minute after launch and never delays recording.
+- Agents: `msr_ctl.py deps list|check|update [names|--all]` and control command `deps` (api_version stays 1).
+
+**App icon (new)**
+- Multi-Stream Recorder has its own icon: a blue video camera with a red record dot (drawn as a vector in `assets/icon.svg`, with thicker shapes and a bigger dot at 16-48 px), as a Windows `.ico` (16-256 px) and PNGs (16-512 px).
+- The window, every dialog and the Clip Editor show it; the taskbar groups MSR as its own app (not "Python") with this icon; the tray icon is the camera with the record dot red while recording and grey when idle.
+- `python create_shortcut.py` makes a desktop shortcut with the icon (never replaces an existing one); `--set-icon` changes only the icon of an existing shortcut; `--linux` prints a `.desktop` file. Headless mode is unchanged.
+
+**Clip Editor (new)**
+- A small DVR-style editor for cutting a clip out of a recording, also while it is still recording. Open it with the **DVR** button next to Clip Now (or **Shift+click on Clip Now**), **right-click a channel > Clip Editor…** (its recording in progress, or its newest finished recording), or **Library > Files > right-click > Clip Editor…** for any finished file.
+- Timeline over the whole recording so far (the live edge keeps growing; **Jump to live**), click or drag to scrub with a preview frame (a far jump shows the nearest keyframe at once, then the exact frame; newer positions cancel older ones; recent frames are cached), **Play with sound** and a **Volume** slider so you can cut on dialogue (smooth playback: one continuous decoded stream at preview size at the recording's own frame rate, up to 60 fps, kept in step with the sound; late frames are skipped rather than lagging; **Limit preview to 30 fps** for slower PCs, remembered), **Mark In / Mark Out** (I / O keys), nudge buttons, **Replay In / Out** (2 s around the point) and the clip length.
+- **Save clip** (Ctrl+S or Enter) makes a lossless stream copy into the Clips folder. It starts at the keyframe at or before your In point and tells you the real start; tick **Exact (re-encode)** for frame-exact edges. Names never overwrite.
+- It only reads the recording (shared access): the recorder keeps writing. When the recording ends the editor follows the finished `.mp4` (same timeline); if the file disappears (drive unplugged) your marks stay and Save waits until it is back. Nothing to install: sound uses ffmpeg and Windows' own audio output, and every ffmpeg runs hidden.
+- Agents: `msr_ctl.py clip CHANNEL --from T --to T` cuts from a recording in progress, `clip --file PATH --from T --to T [--exact]` from any finished file (no running copy needed). Times are seconds, M:SS or H:MM:SS; `--from=-60` counts back from the end and `--to end` is the live edge. The reply has the requested and actual start/end, `snapped` and the file. `api_version` stays 1.
+
+
+**Library tab (new)**
+- Size of your recordings per site, channel and month: headline numbers, donut and bar charts with hover details, a sortable channel table with **Open folder**, **Copy summary**, and an optional **Count hours**. It scans on a background thread with Cancel, only lists folders and reads file sizes, and never changes anything. Extra folders can be added with `[Library] extra_dirs` in `config.ini`.
+- **File management**: click a donut slice, bar or month to drill in; select channels and press **Delete...** (button, right-click or Delete key) to get a preview with filters (older than N days, keep the newest N files or GB, date range). The default is a reversible **Move to PendingDeletion** with **Undo**; **Delete permanently** needs a typed confirmation; the Recycle Bin is offered when it is large enough. New **Files**, **PendingDeletion** (Empty now / Restore) and **Clean up** tabs.
+- Safety guards: only the Processed, Recorded, PendingDeletion and Clips folders are touched, never a channel that is recording, never a recent file, nothing while a scan is running, and every action is written to `library_actions.log`.
+
+**Themes (new)**
+- A **Theme...** button in the bottom bar opens a list; the whole window changes live as you click, **OK** keeps the choice and **Cancel** puts the old theme back. No restart.
+- Six built-in themes: **PowerShell Blue** (still the default), Neutral Dark, Light, High Contrast, Midnight Purple, Paper.
+- Ten more, built from the palettes of community themes on [Omarchy](https://omarchy.org/themes/) (colours only): dark **Arc Blueberry**, **Catppuccin Mocha OLED**, **Rose Pine**, **Gruvbox Material**, **Dracula**, **Flexoki Dark**, **Vesper**, **Tokyo Night OLED**; light **Tokyo Day**, **Solarized Light**. A colour that would be too faint to read is nudged until it meets the same contrast rules as every other theme (text 4.5:1, charts 3:1), and Start/Stop, OK/Error and the six chart colours are tested to stay clearly different. The Theme window shows each theme's credit; sources and licences are in `THIRD_PARTY_NOTICES.md`.
+- Your own themes: put `*.json` files in a `themes` folder in the data folder (the window has **Open themes folder** and **Reload**, and writes a sample). Only known colour names with `#rrggbb` values are accepted; a bad file is ignored and listed.
+- The Library charts, tooltips, roster, log, dialogs, drop-downs, menus and the Windows title bar follow the theme.
+
+**Logs and window**
+- Logs tab: filter box, level drop-down, search highlighting, coloured warnings and errors, **Ctrl+F**, **Open log file**.
+- Windows and dialogs remember their size and place (moved back on screen if a monitor is gone) and can be dragged by their background, including the empty part of the tab bar.
+- **Restore previous...** (the `...` button beside About) keeps the last 20 versions of `channels.json` and `config.ini` in `msr_history/` and restores one in a themed window. Passwords and other secrets are masked in the list.
+- **Streams** button beside Clips opens the recordings folder. It creates nothing and tells you if the folder does not exist yet.
+
+**For scripts and AI assistants**
+- `--json` prints a read-only status snapshot (settings, roster, tools, problems) and exits; no secrets and no personal paths. `--json --library` adds the Library numbers.
+- `llms.txt` is a manual for AI assistants.
+- **Agent control**: everything the window does can now be done by a script, a bot or an AI agent, in the window or `--headless`. A running copy accepts commands on a local, token-protected channel (127.0.0.1 only, token in `msr_control.json`), writes a live `msr_status.json`, and `msr_ctl.py` is the command-line client (JSON output, exit codes). With nothing running, it edits `channels.json` and `config.ini` safely. Destructive commands need an explicit confirmation. You can turn it off with `[Control] enabled = false` or `MSR_CONTROL=0`.
+- `docs/AGENT_GUIDE.md`: a quick start for agents. `msr_ctl.py help --json` prints a machine-readable catalog of every command (arguments, safety level, exit codes, examples), and `api_version` (in `msr_control.json`, `ping`, the status file and the catalog) makes `msr_ctl.py` refuse a copy of another version with exit code 7.
+- Agent control, more: `msr_ctl.py health` (tools, free disk on the main and fallback drives, cookie expiry without values, Fishtank login set, problems), `recordings [--since]`, `recordings pending`, `recordings retry`, `wait --event live|finished|error [--channel] [--timeout]` (exit code 6 on timeout), `events`, `library suggest`, `library log`, `library restore --last`, `enable/disable --all`. `msr_status.json` adds a health block, the recordings finished this run, the cleanup queue and per-channel URL, last error, error and restart counts, last live and last recorded times. Headless now shows disabled channels' live/offline state, checks for updates, and can `update install --yes` (it restarts headless with the same data folder).
+- `--headless` no longer exits when no channel is enabled or `channels.json` is missing; it waits for commands, and the first channel added or enabled starts recording at once (no `start` needed).
+
+**Unplugged drives**
+- New setting `[Paths] fallback_dir` (blank = a folder in the system temp folder, `off` = pause): where recording continues if the recordings folder becomes unreachable while MSR runs. See Fixed below.
+
+### Changed
+- Status tab buttons are ordered by how often you need them: **Clip Now** (highlighted in the theme's accent colour), the new **DVR** button (opens the Clip Editor; with no channel selected it says what to do), **Clips**, **Screenshot**, **Streams**. Shift+click on Clip Now still opens the editor.
+- The About window is updated for 3.0: tools and Python packages with versions, whether MSR runs in its own `.venv`, a pointer to the Updates button and `msr_ctl.py`, where the recordings, clips and settings are, and a neutral responsibility notice (site terms and local laws, including age-restricted or adult sites) instead of naming one site.
+- The **Dark Mode** checkbox is replaced by the Theme window. The choice is saved as `[GUI] theme`. Existing installs migrate by themselves (`dark_mode = true` becomes PowerShell Blue, `false` becomes Light) and the old key is kept in step, so an older version still works.
+- All popups and dialogs are themed, centred and attached to the window; the native Windows message boxes are gone.
+- The Logs tab follows new lines only while you are at the bottom; a **New lines** button appears when you have scrolled back.
+- The disk/network meter has its own thin row under the Status header so the buttons fit at the default width.
+- Leftover `.ts` files from a previous session are now remuxed in the background (see Fixed): one file at a time, at below-normal CPU priority, and cancelled cleanly when you stop or quit (the `.ts` is left for the next pass; a `.ts` is still only moved to PendingDeletion after its MP4 is verified).
+- Theme credits are fuller: Tokyo Night / Tokyo Night OLED / Tokyo Day credit Enkia (MIT), Arc Blueberry credits BeardedBear (Bearded Theme: MIT as of 2021, GPL-3.0 since 2023-04-14; only colour values are used) and Vale's Omarchy theme, and Omarchy itself is credited once. The Theme window shows the author and licence, and `THIRD_PARTY_NOTICES.md` now holds the full licence text of every source and says plainly where a port has no licence file (Catppuccin's README claims MIT; the repository has no LICENSE file).
+- The live preview grab is cheaper: ffmpeg decodes on one thread and only key frames (`-threads 1 -skip_frame nokey`). On two real recordings that cut the CPU time per grab about 10x and about 2x and the run time per grab from roughly 130 to 80 ms and from 125 to 100 ms; the frames are the same as the full decode gives. The picture can now be up to one key-frame interval (typically 2-4 s) older than the live edge. If a stream gives no frame that way, the old full decode is tried as a last resort.
+- Each channel remembers which seek worked (3 s from the end, else 6 s, else the elapsed-time seek) instead of trying the 3 s one first every tick, and retries a shorter one after every 10 good grabs in case the stream's key-frame spacing changed. A channel whose grabs all fail is retried after 4, 8, 16, 32 and then 60 s, so a stream with no usable video no longer spawns several ffmpeg and ffprobe runs every 4 s.
+- The preview strip is not refreshed while the Status tab is hidden or the window is minimised or in the tray, and refreshes at once when it is shown again.
+
+### Fixed
+- `create_shortcut.py --data-dir`: the shortcut now starts through `run_msr.pyw` (which accepts `--data-dir`) and so uses `.venv`; before, it started the app directly on the base Python.
+- Signed stream URLs are redacted in the console, log file, status file and events: YouTube googlevideo URLs (which carry your IP address and signatures) are logged as `manifest.googlevideo.com … id=VIDEO itag=311 [redacted]`, and `sig`, `token`, `ip`, `expire` and similar query values (Twitch/Kick m3u8 and others) as `***`, including the "Starting recording" command line. The command that actually runs is unchanged.
+- Agent control: `record-stop` or `channel remove` on a channel that is not recording no longer emits a `stopped` event (the reply still says `was_idle`).
+- Agent control: new `offline` event when a stream ends on its own (with `was_recording`, `duration_seconds` and `in_grace_period`) and `ended` when the reconnect grace period runs out; `wait --event offline` works. Additive, `api_version` stays 1.
+- Agent control: a `live` event now fires for every recording start, including a restart or a channel removed and added again in the same session; `wait --event live --channel X` returns at once (`"already": true`) when X is already recording.
+- Agent control: removing a channel that is recording (by command or in the window) emits `stopped`, so `wait --event finished` works for it. Disabling a channel does not stop a running recording, so it emits nothing until that recording ends.
+- Per-channel cleanup after a stop no longer logs "some files were busy, retrying" because another channel is recording; it retries only while this channel's own raw files are still locked.
+- Quitting or stopping the session waits about 3 seconds (not 30) before the cleanup pass when every recorder process tree is confirmed gone.
+- After `record-stop`, `wait --event finished` no longer warns "not recording" while the stopped recording is still being remuxed, and it also returns a finish that happened between the stop and the wait. The status shows `finishing` per channel, and new `stopped` / `remux_started` events are emitted. Stopping one channel now starts its remux after about 3 seconds instead of 30 when its processes are confirmed gone; files that are still locked are retried as before.
+- Each channel's first live check now runs at once when recording starts or a channel is added (there was a random wait of up to 10 seconds first); later checks keep their spacing. Same in the window and headless.
+- `msr_ctl.py`: Ctrl+C exits with a short "Interrupted." and code 130 instead of a traceback, also during `wait`; `record-stop` says per channel whether a recording was stopped or the channel was idle; `wait --event finished` warns when the channel is not recording.
+- Headless start with an empty channel list no longer says "Add channels via the GUI": it names `msr_ctl.py add NAME`.
+- **In-app updates are complete.** Besides `Multi-Stream-Recorder.py`, `requirements.txt` and `msr/`, an update now also installs `run_msr.pyw`, `run_msr.bat`, `msr_ctl.py`, `create_shortcut.py`, `assets/` and `docs/`; private files (config, cookies, channels, logs, history) and `.venv` are never taken from the download or touched. When `requirements.txt` changed, the notice says the next launch installs the new packages into `.venv`.
+- **An in-app update can no longer leave a half-updated install.** The update now checks that every downloaded Python file is intact, keeps the current program files in `msr_update_backup/`, checks each copied file, and puts the old files back (removing any the update added) if anything goes wrong; the reason is shown at the next start. If the update changes `requirements.txt`, the next start says to run `pip install -r requirements.txt` (with MSR's own `.venv`, the launcher installs them by itself).
+- **The Fishtank password is no longer copied into `msr_history/`.** History copies of `config.ini` hold a placeholder instead of any password, secret or token, and **Restore previous...** keeps your current password. Copies made before this version are unchanged (delete `msr_history/config.ini/` to remove them). The password can also be given in the `MSR_FISHTANK_PASSWORD` environment variable instead of `config.ini`.
+- The window state and the Kick channel id cache are written atomically, so a crash or a full disk mid-save keeps the previous file.
+- **Faster start-up, and recording starts sooner.** Measured on a Windows PC with a temporary data folder and three placeholder channels (median of 5 runs): the window appears in about 1.4 s instead of 3.1 s, and a headless start reaches its first recording worker in about 1.8 s instead of 5.9 s. Each recording worker no longer loads the GUI, tkinter, the tray and notification libraries, or re-runs the four yt-dlp/streamlink/ffmpeg/deno version checks (the main process runs them once, in parallel, and passes the result on); the leftover-recorder check before the window no longer asks every process for its parent one by one (about 1 s on its own).
+- **A remux that is cut off can no longer cost you the recording.** The remux wrote straight to the final MP4, so a crash or Stop mid-remux left half a file that the next cleanup took for finished (it only compared sizes) and then moved the `.ts` to PendingDeletion, which is purged after 7 days. The remux now writes `name.mp4.part`, checks it (big enough, readable, no shorter than the `.ts`), and only then renames it onto the final name; a failed attempt leaves any existing MP4 and the `.ts` untouched, and an existing MP4 is only trusted after the same check. Unfinished `.mp4.part` files are deleted at startup.
+- **A failed remux keeps the `.ts` where it is.** ffmpeg missing, a timeout, a full disk or an antivirus lock used to send the only copy to PendingDeletion; it now stays in Recorded and is retried on the next pass or start. Genuinely junk output ("output too small") still goes to PendingDeletion.
+- **A hung ffmpeg no longer blocks a remux forever.** The timeout was only checked after ffmpeg closed its output, so a stalled one (network share, locked file) never timed out and a cancel was never seen. ffmpeg is now killed after `ffmpeg_timeout` seconds without progress (or at once on cancel).
+- **Files with `.ts` inside the name** (`name.tsunami.ts`) were converted to `name.mp4unami.mp4` by the stop-time cleanup; only the extension is replaced now.
+- **A recording stranded by an interrupted cleanup comes back.** If MSR died between the two renames of the in-use check, `x.ts` stayed hidden as `x.ts.cleanupprobe` and was never processed; it is renamed back (never over another file) at the next pass. A stitched reconnect file is also verified before its segments are moved away.
+- **`max_record_hours` is enforced.** The setting (default 12) only drove the progress bar, so a 24/7 stream recorded until the size split. A recording now starts a new part when it reaches the limit, with the same overlapping hand-off as the size split, so no live seconds are lost. `0` still means no limit.
+- **Fishtank: an expired token or a server error is no longer "live".** The direct stream probe treated every status except 404 as live, so 401/403 (token expired), 429 and 5xx started a capture that could not work. 401/403 now refresh the token and 429/5xx count as an error. The token's expiry is also read correctly (it is base64url, and some tokens decoded to a wrong 23-hour expiry).
+- **Secrets are redacted from every log line.** The redaction filter sat on the root logger, which does not see records from named loggers, so those could reach the log file, console or Logs tab with a `?jwt=` intact. The file, console and Logs-tab handlers now carry the filter too.
+- **Stream titles with a newline or tab no longer stop a recording.** Control characters are replaced in file and folder names, and Windows device names (`nul`, `con`, `com1`...) get a `_` prefix. `Foo`, `foo` and `foo.` on Kick or Twitch are one channel (one folder on Windows), so the second is skipped on load and refused when adding.
+- **An error inside a worker no longer leaves its capture running.** The capture process is now stopped on the worker's error paths, so the worker cannot start a second capture of the same stream after its back-off. Its unused stdout is no longer a pipe that could fill up and stall it.
+- Kick-only rosters no longer get the "Deno not found" YouTube warning; a blank `ffmpeg_path` falls back to `ffmpeg` everywhere; a beta build (`3.2b`) is now offered the final `3.2` release; `importlib.util` is imported explicitly in `msr/deps.py`.
+- **No console window flashes at startup while leftover recordings are remuxed.** After an abrupt close, the background remux of the unfinished `.ts` files started ffmpeg at below-normal priority, and that priority setting switched off the "no console window" default, so a window titled with the ffmpeg path opened and closed for every file. Every child process (ffmpeg, ffprobe, streamlink, yt-dlp, deno, taskkill) now goes through one helper, `msr.nowindow.no_window_kwargs()`, and the global default keeps the flag even when a launch sets other creation flags. A test fails if a new launch skips the helper.
+- **A second MSR instance's recordings can no longer be killed by this one's start-up cleanup.** The "leftover recorder" check matched the recordings folder as plain text, so with `E:\streams` it also hit workers recording into `E:\streams2` or `E:\streams-test` (or a copy inside the folder). Paths are now compared by folder, only for the places MSR itself writes (`Recorded`, `processed`, `PendingDeletion`, `Clips`, the log, the instance lock), a worker whose parent MSR is still running is never treated as a leftover, and a leftover that was recording into the fallback folder is found too. The default fallback folder is now one per recordings folder.
+- **A recorder killed from outside is restarted.** Exit code 15 used to count as "stopped by the user", so a worker ended by another program (or another instance's cleanup) stayed dead until a manual restart. MSR now remembers which workers it stopped itself and treats every other exit as a crash.
+- **A worker that keeps dying right after it starts no longer restarts every 2 seconds.** Quick exits (under a minute) back off 5 s, 10 s, 20 s ... up to 5 minutes, log a few lines instead of one per try, and the channel row shows when the next try is. A worker that ran for a minute or more restarts at once as before, and starting a channel by hand clears the history.
+- **One error no longer ends the recorder supervisor.** A failure while reading status updates, checking storage, or starting one worker (for example out of handles) is logged once and retried; the other channels keep being watched and restarted. A dead status manager no longer raises into the window's timer.
+- **Recording starts immediately after a crash or abrupt close.** Leftover `.ts` files used to be remuxed before any recorder launched, so a few big files meant minutes of missed stream. Recorders now start first and the leftovers are remuxed afterwards; only files that existed before launch are touched. If `filename_pattern` has no timestamp (a new recording could reuse a leftover's name) the old clean-up-first order is kept.
+- A partial MP4 left by a remux that a crash interrupted is detected and redone instead of being trusted.
+- Leftover `x.tsb.ts` style names map to `x.tsb.mp4` (only the extension is replaced).
+- The large preview and the strip tile no longer freeze on an old frame: when ffmpeg decoded no frame near the live edge (a key frame farther away than 3 s) it exited 0 and the PNG left by an earlier grab or stream was taken for a new one, so the later seeks were never tried. The grab now deletes the old file first, and pinning a tile starts from the current tile instead of the cached large PNG.
+- A preview that stops updating is now visible: after 10 s without a fresh frame the tile name and the large pane title show the age (for example `binxbasilisk · 12 s`) and the border turns to the theme's warning colour. A channel that stopped recording keeps its last frame for 90 s, marked `ended`, instead of vanishing.
+- Streams whose key frames are about 4 s apart (the old fixed 3 s seek found no frame there, so every tick ran a second seek) are grabbed with one ffmpeg run once the working seek is known.
+- Starting from a redirected Windows console (cp1252) no longer fails on characters the console cannot show.
+- A `%` in `config.ini` is no longer a crash. A Fishtank password such as `P@ss%word` or a `filename_pattern` with `100%` used to make the settings unreadable, so MSR did not start or no worker could start. Values are read as typed. (If you ever wrote `%%` to work around this, write a single `%` now.)
+- A `config.ini` that cannot be parsed (an option twice, text before the first `[section]`, a file saved in another encoding) no longer stops MSR from starting silently. A UTF-8 BOM or a Windows-1252 file is simply read. Otherwise MSR runs with its built-in settings, says so in the log, and leaves your file as it is. Only when it has to rewrite the file does it first save a copy next to it as `config.ini.broken-<date>-<time>`.
+- A recordings folder on a drive that is not there (an unplugged external disk) now shows the "Drive ... does not exist" message instead of MSR vanishing. The log file goes to the data folder until the drive is back.
+- A start that fails under `pythonw` (the double-click launcher) now leaves `msr_startup_error.log` in the data folder, with the error and no passwords or tokens, and shows a message window when it can.
+- Headless mode (`--headless`): Ctrl+C now stops, then finishes the clean-up of leftover `.ts` files (about 30 s plus the remux time; press Ctrl+C again to skip) before it exits. It used to exit at once and leave them for the next start.
+- `ffmpeg_path` in `[Advanced]` is honoured at start-up: ffmpeg no longer has to be on PATH when the configured path works, a wrong path is reported with the setting's name, and ffprobe next to it is checked (a warning if it is missing).
+- Unplugging the recordings drive (USB, external, a dropped network share) while MSR runs no longer ends in silent failures. Each channel notices before its next recording, keeps recording into a fallback folder (`fallback_dir`, default: a folder in the Windows temp folder; `off` = pause), and records into the main folder again once it is back. A live recording already running on the lost drive is ended after 30 s instead of hanging, and the channel carries on in the fallback at once instead of waiting through the 60 s crash back-off.
+- The Status tab shows a red line while the folder is unreachable (and one notification), `--json` reports `drive_available`, and the log says it once instead of once per check.
+- When the drive returns, what was recorded in the fallback folder is moved back to the same place under `streams_dir` (a copy is checked before the original is removed; a file that may still be written is left for a later pass; nothing is ever overwritten), and unfinished `.ts` files go through the same clean-up as after a crash.
+- Pressing Start while the drive is gone no longer fails; `config.ini` and `channels.json` are written in one step and a failed save is a warning (settings stay in memory, the old file is kept) instead of an error in the window; the Library cache and action log, window state and Kick id cache warn once instead of failing silently.
+
+### Developer notes
+- Every colour comes from `msr/themes.py` (semantic tokens) and the palette data in `msr/theme_palettes.py`; a test fails on any hard-coded colour elsewhere. Adding a theme is one entry in `msr/theme_palettes.py`.
+- The test suite grew from 299 to 1095 tests (652 before the Clip Editor, agent control and environment work), including a hidden-window smoke test that launches the real UI in every theme. `AGENTS.md` documents the new modules.
+- New files that stay out of git: `themes/`, `msr_history/`, `library_cache.json`, `library_moves.json`, `library_actions.log`, `msr_startup_error.log`, `config.ini.broken-*`, `.venv/`, `msr_venv_error.txt`, `msr_control.json`, `msr_status.json`, `msr_update_backup/`. Recordings made while the drive was away are in `fallback_dir` (outside the repo).
+
+## v2.1.0 (2026-10)
+
+New roster panel, Kick realtime fix, reconnect fix, install cleanup.
+
+### Roster and GUI
+- Left panel redesigned: automatic **Recording / Watching / Off** groups, platform tags, search, **All / Enabled / Live** filter, **+ Add channel** dialog (paste a name, `platform:name` or URL), right-click menu, and an amber per-row cookie badge when a site needs or rejected your cookies.
+- Live presence for every channel. Off channels are never recorded but still show as live in the Live filter (Kick push, plus a slow ~10 min check for other platforms). The per-row status dots from the first draft were removed.
+- Dark title bars on dialogs in dark mode (shared `msr/wintheme.py`).
+- Status tab live preview strip (click to select, double-click to pin a larger preview); Recording first ordering.
+
+### Recording
+- **Kick push fixed.** Kick retired the old Pusher key; MSR now negotiates the realtime transport the way kick.com does and speaks Centrifugo (Pusher kept as a fallback). No key is hardcoded. Connection failures back off up to ~10 min and are logged about once an hour.
+- **Reconnect window** now starts after the remux finishes, with a 30 s follow-up phase (`reconnect_extended_minutes`, default 10) after the 15 s grace phase.
+- Log rotation during a run (cross-process lock), not only at startup.
+- `--data-dir` / `MSR_HOME` to keep config, cookies and channels outside the code folder.
+- Child console windows are hidden under `pythonw`; `run_msr.pyw` / `run_msr.bat` launchers.
+
+### Install
+- Launchers are generic: data folder is `MSR_DATA` if set, else the repo folder; they use `.venv` automatically; per-machine overrides go in an untracked `run_msr.local.bat`.
+- MSR puts its own interpreter's `Scripts` folder first on PATH, so a venv works without activation (previously yt-dlp was not found, or a different system streamlink was used).
+- `yt-dlp[default]>=2025.11.12` (needs `yt-dlp-ejs` for YouTube).
+- README rewritten; Fishtank camera reference moved to `docs/fishtank.md`.
+
+### Also in this release (from the status-previews branch)
+- Status tab live-frame strip for Recording/Remuxing channels: ffmpeg writes a 160×90 PNG every 4s on a worker thread. Worker status includes `raw_file` so the GUI does not `listdir` the recordings folder on the 1s tick.
+- Roster **Filter** + **Enabled** only; status **Recording first**; preview / roster / status share roster order and selection. Do not nest `update()` / `update_idletasks` inside `<<TreeviewSelect>>` (that froze the GUI on Windows).
+- Double-click a strip tile to pin a 480×270 preview above the others (Close, double-click the same tile, or double-click the large image to dismiss).
+- **One instance per recordings folder.** A second launch focuses the existing window (or tells you a `--headless` copy is running) instead of starting another worker set. Stop / quit / relaunch also kill leftover `record_worker` processes, not only ffmpeg — killing ffmpeg alone left ghost workers that treated SIGTERM as a drop and reconnected.
+- Status-bar **vX available** installs the GitHub release zipball (launcher + `msr/`, optional `requirements.txt` / `channels_fishtank.json`). Confirm → download → stop recordings → quit → helper copies files → relaunch. `config.ini`, `channels.json`, cookies, and recordings are not touched. `--headless` still only logs; it does not auto-update.
+- Clip Now / Screenshot follow the live edge after a Kick HLS ad splice (PCR reset). Previews already used `-sseof`; screenshots had preferred `-ss duration-N`, and clips used lastPTS−start. Screenshots try `-sseof` first. Clips distrust elapsed when it is far behind the file’s age and cut from EOF.
+
+## v2.0.2
+
+User-facing summary: [RELEASE_NOTES_v2.0.2.md](docs/release_notes/RELEASE_NOTES_v2.0.2.md).
+
+- Fishtank As Seen On mini-season (catalog 2026-09-07): stream ids are slugs (`director-as-seen-on`) rather than `name-5`. Raw hyphenated catalog ids are accepted; `fishtank:director` records the current Director cam (S5 `dirc-5` still works as a raw id). `channels_fishtank.json` is the new house roster. Grid mosaic (`grid-as-seen-on`) is treated as live when it appears only in `liveStreamStatus`.
+
+## v2.0.1
+
+User-facing summary: [RELEASE_NOTES_v2.0.1.md](docs/release_notes/RELEASE_NOTES_v2.0.1.md).
+
+- Size splits are **make-before-break**: when a file hits `max_file_size_gb`, the next capture starts while the current one is still writing. The old file is closed only after the new `.ts` has data, so the seam overlaps instead of dropping live seconds. Remux of the closed file still runs in a background thread; status stays Recording with a `remuxing N%` suffix (row uses the remux color). Clip Now / Screenshot keep working. If the next file does not appear in time, it falls back to a short gap. Resolution-change splits still stop the old file first (mixed resolutions in one file corrupt playback). Stream-end remux is still on the worker. Previously an 8 GB Kick split paused capture for ~90s of remux (kimmee 2026-09-03: 21:11:51–21:13:32).
+- TikTok: when yt-dlp reports offline, confirm via `/api-live/user/room`, `roomId` on the profile **and** `/live` page, then both Webcast hosts. Misses log at info (24/7 news LIVEs such as `@aljazeeraenglish` often omit `roomId` on the profile, so the old fallback stayed silent).
+
+## v2.0.0
+
+User-facing summary and upgrade steps: [RELEASE_NOTES_v2.0.0.md](docs/release_notes/RELEASE_NOTES_v2.0.0.md).
+
+Code lives in the `msr` package; `Multi-Stream-Recorder.py` is the launcher only. Fully quit and relaunch after pulling these changes — a running GUI does not reload modules. This is a major version because v1.8.0 was a single file; installing v2 without `msr/` will not run.
+
+### Clips
+
+- **Clip Now** and **Screenshot** buttons on the Status header (same actions as right-click).
+- Keyframe alignment uses **elapsed** file time (`kf_pts - format.start_time`), not MPEG-TS PCR PTS. Using `-copyts` plus output `-ss` of a ~10000s Kick PCR left audio at 0s and video at ~2s (frozen first GOP). 15s Kick clips after the fix start video at ~0.18s.
+- Twitch `format.duration` can be the last PCR (e.g. 12686s) rather than elapsed file time. Clip Now then sought near EOF (powdur 15s request → **2.6s** clip; Screenshot Now wrote no frame). Duration is converted with `_elapsed_media_duration()` before the cut.
+- Rumble: channel-page HLS playlist is recorded with ffmpeg (Rumble Referer) so yt-dlp never has to fetch Cloudflare-gated `/vXXXX` pages. If that playlist is missing, the first yt-dlp call uses `--impersonate chrome` instead of 403ing and retrying. Misleading “cookies expired?” log on Rumble 403 is gone.
+- One in-flight clip/screenshot per channel; extra clicks are ignored until it finishes.
+- **Open Clips Folder** on the status-row context menu.
+
+Live 15s Clip Now checked on Kick, YouTube, TikTok, Twitch (after the duration fix), Rumble HLS, and Chaturbate CMAF: audio and video start together; lengths are ~15–20s. The pre-fix Twitch powdur clip was 2.6s.
+
+### GUI / session
+
+- Status header meters (left of Screenshot / Clip Now) show **whole-disk write** (`MB/s`) and **NIC download** (`Mbps`). Hover for this app’s recording write rate and summed stream Mbps. Requires `psutil`; the text turns yellow/red when the recordings disk stays write-busy.
+- Bottom toolbar labels sit immediately left of their own dropdowns: `Clip Length: [15 sec]` then `Polling: [Normal]`. Check Now is no longer next to the clip-length combo.
+- **Clips** button on the Status header (left of Screenshot) opens Explorer on that channel’s clips/screenshots folder. Same action on status-row and roster right-click.
+- Custom Chaturbate (and other `site.com/user/` URLs) record into `custom/<site>/<user>/` instead of one bag per site. Direct `.m3u8` / unparseable paths keep the old `custom/<site>/` folder. TikTok custom URLs stay `custom/<handle>/`.
+- Clip/screenshot filenames use the room handle only. Using the nested folder path (`chaturbate\\mode_bad`) as the filename created an extra `chaturbate` directory under the room folder.
+- Channel keys are allowlisted on add and on `channels.json` load. Kick names cannot contain `:`, `/`, or `\\` (a colon used to be treated as a platform folder). Custom entries must be `http://` or `https://`.
+- yt-dlp’s ffmpeg downloader gets the same network protocol whitelist as direct ffmpeg (`file` omitted) via `--downloader-args ffmpeg_i:…`.
+- Log redaction applies to ffmpeg/yt-dlp stderr, exception text, and the worker channel tag, not only constructed argv. Fishtank auth failures no longer dump raw JSON.
+- Fresh `config.ini` defaults `streams_dir` to `%USERPROFILE%\Videos\Multi-Stream Recorder` (Windows) or `~/Videos/Multi-Stream Recorder` (POSIX), not `E:\Streams`. Existing configs are unchanged.
+- Invalid numeric/boolean `config.ini` values are reset to defaults and saved, instead of warning and then crashing the worker on `getfloat`.
+- GitHub Actions runs `python -m unittest discover -s tests -t .` on Windows and Ubuntu, Python 3.10 and 3.12.
+- README **Legal / acceptable use** plus [SECURITY.md](SECURITY.md): personal archival, site ToS, cookies are your login, Chaturbate is adult.
+- Status-header MSR write rate uses worker `size_bytes` instead of `listdir` on the GUI tick. **Stop Recording** and per-channel stop join workers off the UI thread.
+- About lists all platforms, Deno, recordings vs clips folders, and that those paths are changed in `config.ini`.
+- Roster **Top** button (next to ▲ ▼) and right-click **Move to Top** / **Move to Bottom** jump selected channels as a block so a new row does not need dozens of arrow clicks.
+- Status table updates rows in place (no full rebuild every 2.5s).
+- Status selection is the hidden `_key` channel id, not the display name.
+- “Recording Complete” notifications fire once per recording, not every refresh.
+- Removing a channel from the roster stops its worker (`StreamRecorder.remove_channel`).
+- **Open in Browser** works for Rumble, TikTok, and Fishtank (previously all opened as Kick). YouTube handles stored with `@` no longer become `@@handle`.
+- Rumble channels use `rumble.com` cookies in the roster indicator, not Kick's.
+- Fishtank: room names/IDs are a seasonal snapshot, not a live map. Raw catalog ids (`bar-5`, `ben-5`, `computer-lab2-5`) can be added without an alias. `fishtank:bar` now resolves to `bar-5` (current catalog); `brrr-5` is still accepted. README documents the stable API/HLS endpoints.
+
+### Safety / logging
+
+- Command and URL logs redact `jwt=`, tokens, Cookie, and Authorization.
+- Network ffmpeg whitelist is `http,https,tcp,tls,crypto,hls` (no `file://`).
+- `psutil` is exported from `msr.deps` for orphan-ffmpeg cleanup.
+- Missing yt-dlp is a warning, not a fatal startup error (Kick/Twitch only need streamlink). Kick channels require streamlink to add, not yt-dlp.
+- Cookie dots redraw on scroll/data change, not every 500ms while idle.
+- GUI log queue is bounded (drop-oldest at 2000 pending lines) so verbose sessions cannot grow RAM without bound.
+- `check_disk_space` fails closed if the streams directory is unreadable *and* unwritable; a usage-stat error on a still-writable path no longer pretends free space is 0 GB while continuing.
+- Kick no longer logs “yt-dlp failed” on a streamlink miss; the retry is an alternate streamlink command. Exit logs name streamlink for Kick/Twitch/TikTok.
+- Orphan-ffmpeg shutdown only kills network ffmpeg whose command line includes the streams directory (local remux and unrelated encodes are skipped).
+- ffprobe path is derived once (`ffprobe_from_ffmpeg`); no more `str.replace("ffmpeg", "ffprobe")` that rewrote a directory named `ffmpeg`.
+
+`.gitignore` also excludes `.venv/`, `venv/`, and `.msr_write_probe`. `msr/`, `tests/`, `AGENTS.md`, `CHANGELOG.md`, `SECURITY.md`, and `.github/` are source and must be committed when this ships.
+
+## v1.8.0
+
+See [RELEASE_NOTES_v1.8.0.md](docs/release_notes/RELEASE_NOTES_v1.8.0.md).

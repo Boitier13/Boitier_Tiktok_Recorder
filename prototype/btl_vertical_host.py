@@ -55,6 +55,7 @@ from windows_desktop import (  # noqa: E402
     DesktopUnavailable,
     FrontendDevServer,
     WindowsDesktopShell,
+    enable_edge_default_context_menus,
     show_windows_message,
     webview2_runtime_version,
 )
@@ -1573,6 +1574,17 @@ def run_smoke(data_dir: Path | None = None):
             def start(self, **kwargs):
                 self.start_options = kwargs
 
+        class FakeEdgeChrome:
+            def on_webview_ready(self, sender, _args):
+                sender.CoreWebView2.Settings.AreDefaultContextMenusEnabled = False
+                return "initialized"
+
+        fake_edgechromium = SimpleNamespace(EdgeChrome=FakeEdgeChrome)
+        fake_context_settings = SimpleNamespace(AreDefaultContextMenusEnabled=False)
+        fake_context_sender = SimpleNamespace(
+            CoreWebView2=SimpleNamespace(Settings=fake_context_settings)
+        )
+
         class FakeUser32:
             def __init__(self):
                 self.calls = []
@@ -1595,7 +1607,8 @@ def run_smoke(data_dir: Path | None = None):
 
         fake_webview = FakeWebview()
         desktop_shell = WindowsDesktopShell(
-            "http://127.0.0.1:8765/", webview_module=fake_webview, platform="win32"
+            "http://127.0.0.1:8765/", webview_module=fake_webview, platform="win32",
+            edgechromium_module=fake_edgechromium,
         ).prepare()
         desktop_shell.attach_tray(tray)
         tray.window = desktop_shell
@@ -1604,6 +1617,9 @@ def run_smoke(data_dir: Path | None = None):
         desktop_shell.show()
         tray._open()
         desktop_shell.run()
+        context_patch_result = fake_edgechromium.EdgeChrome().on_webview_ready(
+            fake_context_sender, SimpleNamespace(IsSuccess=True)
+        )
         tray._quit()
         close_after_quit = desktop_shell.window.events.closing.fire()
         shell_works = (close_results == [False] and close_after_quit == [None]
@@ -1614,6 +1630,11 @@ def run_smoke(data_dir: Path | None = None):
                        and fake_webview.start_options == {"gui": "edgechromium", "debug": False})
         result.check("minimiser conserve la fenêtre dans la barre des tâches; fermer la masque au tray",
                      shell_works)
+        result.check(
+            "menu contextuel WebView2 réactivé en production sans activer le mode debug",
+            context_patch_result == "initialized"
+            and fake_context_settings.AreDefaultContextMenusEnabled,
+        )
         try:
             WindowsDesktopShell("", platform="linux").prepare()
             desktop_platform_rejected = False

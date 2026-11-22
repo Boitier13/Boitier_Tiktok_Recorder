@@ -21,6 +21,29 @@ WEBVIEW2_INSTALL_URL = "https://developer.microsoft.com/microsoft-edge/webview2/
 WEBVIEW2_CLIENTS_KEY = r"SOFTWARE\Microsoft\EdgeUpdate\Clients"
 
 
+def enable_edge_default_context_menus(edgechromium_module):
+    """Re-enable WebView2's native editing menu while keeping pywebview debug off.
+
+    pywebview 6.2.1 ties ``AreDefaultContextMenusEnabled`` to its debug flag,
+    which is false in production. Consequently right-click Paste is disabled
+    even though keyboard paste works. Patch the backend's ready callback so the
+    default menu is restored after pywebview applies its production settings.
+    """
+    edge_chrome = edgechromium_module.EdgeChrome
+    original = edge_chrome.on_webview_ready
+    if getattr(original, "_btl_context_menu_patch", False):
+        return
+
+    def on_webview_ready(self, sender, args):
+        result = original(self, sender, args)
+        if args.IsSuccess:
+            sender.CoreWebView2.Settings.AreDefaultContextMenusEnabled = True
+        return result
+
+    on_webview_ready._btl_context_menu_patch = True
+    edge_chrome.on_webview_ready = on_webview_ready
+
+
 def webview2_runtime_version(platform=None, winreg_module=None):
     """Return the installed Evergreen WebView2 Runtime version, or None.
 
@@ -170,11 +193,12 @@ class WindowsDesktopShell:
     """Native titlebar/window hosting the actual React app through Microsoft Edge WebView2."""
 
     def __init__(self, ui_url: str, *, webview_module=None, platform=None,
-                 runtime_probe=webview2_runtime_version):
+                 runtime_probe=webview2_runtime_version, edgechromium_module=None):
         self.ui_url = ui_url
         self.platform = sys.platform if platform is None else platform
         self.webview = webview_module
         self.runtime_probe = runtime_probe
+        self.edgechromium_module = edgechromium_module
         self.window = None
         self.tray = None
         self._allow_close = False
@@ -250,6 +274,18 @@ class WindowsDesktopShell:
     def run(self):
         if self.window is None:
             raise DesktopUnavailable("La fenêtre WebView2 n’a pas été préparée.")
+        try:
+            edgechromium = self.edgechromium_module
+            if edgechromium is None:
+                from webview.platforms import edgechromium
+            enable_edge_default_context_menus(edgechromium)
+        except Exception as exc:
+            raise DesktopUnavailable(
+                "Le menu contextuel natif WebView2 n’a pas pu être configuré. "
+                "Réextrayez l’archive complète et relancez BTL. Détail : "
+                f"{exc}"
+            ) from exc
+
         try:
             self.webview.start(gui="edgechromium", debug=False)
         except Exception as exc:

@@ -131,10 +131,10 @@ class CommandLineTests(Base):
 
 class LibrarySectionTests(Base):
     def fill(self):
-        for rel, size in (("Processed/kick/alice/alice_20260101_120000.mp4", 3000),
-                          ("Processed/twitch/bob/bob_20260201_120000.mp4", 1000),
-                          ("Processed/twitch/stranger/s_20260201_120000.mp4", 500),
-                          ("Recorded/kick/alice/alice_20260301_120000.ts.part", 700)):
+        for rel, size in ((f"{util.PROCESSED_FOLDER}/kick/alice/alice_20260101_120000.mp4", 3000),
+                          (f"{util.PROCESSED_FOLDER}/twitch/bob/bob_20260201_120000.mp4", 1000),
+                          (f"{util.PROCESSED_FOLDER}/twitch/stranger/s_20260201_120000.mp4", 500),
+                          (f"{util.RECORDED_FOLDER}/kick/alice/alice_20260301_120000.ts.part", 700)):
             path = self.rec / rel
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"x" * size)
@@ -181,8 +181,8 @@ class LibraryCommandLineTests(Base):
                               capture_output=True, text=True, timeout=120, cwd=str(ROOT))
 
     def test_json_library_flag_adds_the_section_and_writes_nothing(self):
-        (self.rec / "Processed" / "kick" / "alice").mkdir(parents=True)
-        (self.rec / "Processed" / "kick" / "alice" / "alice_20260101_120000.mp4").write_bytes(b"x" * 123)
+        (self.rec / util.PROCESSED_FOLDER / "kick" / "alice").mkdir(parents=True)
+        (self.rec / util.PROCESSED_FOLDER / "kick" / "alice" / "alice_20260101_120000.mp4").write_bytes(b"x" * 123)
         before = self.listing(self.dir)
         done = self.run_cli("--library")
         self.assertEqual(done.returncode, 0, done.stderr)

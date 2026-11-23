@@ -251,7 +251,7 @@ class TestHealth(Base):
         api.spent.add("rt0")
         issue = health.twitch_issue(api.file, True, api.validate, te.TwitchAuthError,
                                     fresh=te.TokenStore(self.d, api).get_fresh)
-        self.assertIn("no longer valid", issue.text if hasattr(issue, "text") else str(issue))
+        self.assertIn("n’est plus valide", issue.text if hasattr(issue, "text") else str(issue))
 
     def test_offline_is_not_reported(self):
         api = OneTimeApi()

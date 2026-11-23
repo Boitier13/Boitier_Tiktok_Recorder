@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import msr.recorder as recorder_mod
 import msr.worker as worker_mod
+from msr.util import PROCESSED_FOLDER, RECORDED_FOLDER, PENDING_DELETION_FOLDER
 from msr.recorder import StreamRecorder, _cleanup_lock
 from tests.fake_ffmpeg import FakeFfmpeg, write_media
 
@@ -99,9 +100,9 @@ def make_recorder(tmp, channels=("chanA", "chanB"), pattern="{username}_{timesta
     rec.presence = None
     rec.watch_channels = []
     rec.root_path = streams
-    rec.recorded_base = os.path.join(streams, "Recorded")
-    rec.processed_base = os.path.join(streams, "Processed")
-    rec.pending_base = os.path.join(streams, "PendingDeletion")
+    rec.recorded_base = os.path.join(streams, RECORDED_FOLDER)
+    rec.processed_base = os.path.join(streams, PROCESSED_FOLDER)
+    rec.pending_base = os.path.join(streams, PENDING_DELETION_FOLDER)
     for d in (rec.recorded_base, rec.processed_base, rec.pending_base):
         os.makedirs(d, exist_ok=True)
     rec.status_queue = queue.Queue()

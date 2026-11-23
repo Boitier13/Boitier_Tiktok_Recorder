@@ -52,6 +52,27 @@ def quiet_logger(name):
     return log
 
 
+class TikTokStartupRetryTests(unittest.TestCase):
+    def test_tiktok_uses_configured_file_creation_timeout(self):
+        self.assertEqual(worker_mod._capture_file_creation_timeout(60), 60)
+        self.assertEqual(worker_mod._capture_file_creation_timeout(90), 90)
+
+    def test_from_start_capture_keeps_its_longer_manifest_timeout(self):
+        self.assertEqual(worker_mod._capture_file_creation_timeout(60, from_start=True), 120)
+        self.assertEqual(worker_mod._capture_file_creation_timeout(180, from_start=True), 180)
+
+    def test_empty_capture_retry_backoff_is_bounded(self):
+        delays = [worker_mod._tiktok_start_retry_delay(n) for n in range(1, 6)]
+        self.assertEqual(delays, [15, 30, 60, 60, 60])
+
+    def test_tiktok_is_not_reported_recording_before_media_is_written(self):
+        tiktok = worker_mod._initial_capture_status("tiktok")
+        twitch = worker_mod._initial_capture_status("twitch")
+        self.assertEqual(tiktok["status"], "Checking...")
+        self.assertEqual(tiktok["size"], "")
+        self.assertEqual(twitch["status"], "Recording")
+
+
 # ── M1: max_record_hours ─────────────────────────────────────────────
 
 class MaxRecordHoursTests(unittest.TestCase):

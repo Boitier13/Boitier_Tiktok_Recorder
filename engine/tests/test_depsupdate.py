@@ -147,7 +147,7 @@ class RowTests(unittest.TestCase):
         self.assertEqual(row["latest"], "9.9.9")
         self.assertEqual(row["zipball"],
                          "https://api.github.com/repos/ManletPride/Multi-Stream-Recorder/zipball/v9.9.9")
-        self.assertEqual(row["note"], "git checkout: updates with git pull")
+        self.assertEqual(row["note"], "Dépôt Git : mises à jour avec git pull")
         self.assertNotIn("own updater", row["note"])
 
     def test_disk_newer_than_the_running_copy_offers_a_restart(self):
@@ -364,7 +364,7 @@ class CliTests(unittest.TestCase):
     def test_human(self):
         out = msr_ctl.human("deps", {"ok": True, "result": {"results": [
             {"name": "yt-dlp", "ok": False, "error": "x", "rolled_back": True}], "note": "n"}})
-        self.assertIn("previous version restored", out)
+        self.assertIn("version précédente restaurée", out)
 
 
 class DialogTests(unittest.TestCase):
@@ -439,7 +439,7 @@ class DialogTests(unittest.TestCase):
         from msr import deps_dialog, dialogs
         msr = {"name": "msr", "label": "Multi-Stream Recorder", "installed": "3.1.3", "latest": "3.1.4",
                "status": "update_available", "source": "this app", "updatable": True,
-               "note": "git checkout: updates with git pull",
+               "note": "Dépôt Git : mises à jour avec git pull",
                "url": "https://github.com/ManletPride/Multi-Stream-Recorder/releases/tag/v3.1.4",
                "zipball": "https://api.github.com/repos/ManletPride/Multi-Stream-Recorder/zipball/v3.1.4"}
         ytdlp = {"name": "yt-dlp", "label": "yt-dlp", "installed": "1", "latest": "2",
@@ -465,7 +465,7 @@ class DialogTests(unittest.TestCase):
                 root, config=cfg, state_file=os.path.join(d, "ws.json"),
                 on_msr_update=decline, check_now=False)
             tree = self._tree(win)
-            self.assertIn("git checkout: updates with git pull", tree.item("msr", "values")[-1])
+            self.assertIn("Dépôt Git : mises à jour avec git pull", tree.item("msr", "values")[-1])
             tree.selection_set("msr")
             root.update()
             [b for b in self._buttons(win) if b.cget("text") == "Update selected"][0].invoke()
@@ -518,7 +518,7 @@ class DialogTests(unittest.TestCase):
 
     def test_summary(self):
         s = deps_dialog_summary = __import__("msr.deps_dialog", fromlist=["summary"]).summary
-        self.assertIn("previous version restored",
+        self.assertIn("version précédente restaurée",
                       s([{"name": "a", "ok": False, "error": "e", "rolled_back": True}]))
         self.assertIn("1 -> 2", deps_dialog_summary([{"name": "a", "ok": True, "old": "1", "new": "2"}]))
 

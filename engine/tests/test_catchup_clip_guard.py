@@ -13,6 +13,7 @@ sys.path.insert(0, ROOT)
 import msr.control as control  # noqa: E402
 from msr import worker  # noqa: E402
 from msr.config import Config  # noqa: E402
+from msr.util import RECORDED_FOLDER  # noqa: E402
 from tests.test_control import in_dir, make_data  # noqa: E402
 from tests.test_yt_live_start import MonitorTests  # noqa: E402
 
@@ -22,7 +23,7 @@ KEY = "youtube:@x"
 class ReasonTests(unittest.TestCase):
     def test_reason_only_for_from_start_rows(self):
         self.assertEqual(worker.clip_unavailable_reason({"status": "Recording", "from_start": True}),
-                         "Available once caught up to live")
+                         worker.CATCHUP_UNAVAILABLE)
         self.assertIsNone(worker.clip_unavailable_reason({"status": "Recording"}))
         self.assertIsNone(worker.clip_unavailable_reason(None))
 
@@ -41,7 +42,7 @@ class ControlGuardTests(unittest.TestCase):
         self._cd = in_dir(self.data)
         self._cd.__enter__()
         self.c = control.Controller(control.OfflineApp(Config(os.path.join(self.data, "config.ini"))))
-        base = os.path.join(self.streams, "Recorded")
+        base = os.path.join(self.streams, RECORDED_FOLDER)
         folder = os.path.join(base, "youtube", "x")
         os.makedirs(folder)
         # an older leftover .ts: must never be cut while the from-start parts are written
@@ -67,7 +68,7 @@ class ControlGuardTests(unittest.TestCase):
             r = self.call(cmd, {"channel": KEY})
             self.assertFalse(r["ok"], r)
             self.assertEqual(r["code"], "busy")
-            self.assertIn("Available once caught up to live", r["error"])
+            self.assertIn(worker.CATCHUP_UNAVAILABLE, r["error"])
 
     def test_clip_from_to_refused_with_reason(self):
         r = self.call("clip", {"channel": KEY, "from": "-30"})

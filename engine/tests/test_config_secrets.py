@@ -98,14 +98,14 @@ class TestWindows(Base):
             return v
         p = op.OptionsPanel(root, c, self.tmp.name, apply, api=FakeApi(), environ={})
         h = p.hints[("Fishtank", "password")]
-        self.assertEqual(h.cget("text"), "not set")
+        self.assertEqual(h.cget("text"), "non défini")
         v = p.vars[("Fishtank", "password")]
         v.set(FAKE_PW)
         p._commit_field(next(r for r in op.all_rows() if r["key"] == "password"), v)
         self.assertEqual(v.get(), "")
         self.assertNotIn(FAKE_PW, self.text())
         self.assertNotIn(FAKE_PW, p.message.cget("text"))
-        self.assertEqual(h.cget("text"), "saved - type to replace")
+        self.assertEqual(h.cget("text"), "enregistré — saisir une nouvelle valeur pour remplacer")
         self.assertEqual(cm.fishtank_password(cm.Config(self.path)), FAKE_PW)
 
 

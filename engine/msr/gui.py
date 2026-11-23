@@ -37,6 +37,7 @@ from msr import storage as _storage
 from msr import winstate as _winstate
 from msr import restore_dialog as _restore_dialog
 from msr import logview
+from msr.status_text import french_status_detail as _french_status_detail
 from msr import themes as _themes
 from msr.context_menu import bind_context_menu
 from msr.tooltip import Tooltip, popup
@@ -204,27 +205,6 @@ def _french_status_label(status):
         return value.replace("Processing...", "Traitement…", 1)
     if low.startswith("checking"):
         return value.replace("Checking...", "Vérification…", 1)
-    return value
-
-
-def _french_status_detail(detail):
-    """Translate the short worker fragments shown beside a status, not the diagnostic log."""
-    value = str(detail or "")
-    low = value.lower().strip()
-    exact = {
-        "starting": "démarrage",
-        "retry (streamlink)": "nouvel essai (streamlink)",
-        "fallback (streamlink)": "solution de repli (streamlink)",
-        "no cookie": "aucun cookie",
-    }
-    if low in exact:
-        return exact[low]
-    for prefix, translated in (("remuxing", "Conversion"), ("processing", "Traitement"),
-                               ("checking", "Vérification"), ("retry", "Nouvel essai"),
-                               ("fallback", "Solution de repli")):
-        if low.startswith(prefix):
-            suffix = value[len(prefix):].strip()
-            return translated + (f" {suffix}" if suffix else "…")
     return value
 
 
@@ -3303,13 +3283,13 @@ def main_gui(config):
                 if "recording" in curr:
                     detail = st.get("detail", "")
                     if detail:
-                        display = f"Capture en cours  {_french_status_detail(detail)}"
+                        display = f"Capture en cours  {_french_status_detail(detail, channel_key=ch_name)}"
                     else:
                         display = "Capture en cours"
                 else:
                     display = _french_status_label(st["status"])
                     if st.get("detail"):
-                        display += f" ({_french_status_detail(st['detail'])})"
+                        display += f" ({_french_status_detail(st['detail'], channel_key=ch_name)})"
 
                 platform_label = _get_platform_label(ch_name)
 
@@ -3344,7 +3324,7 @@ def main_gui(config):
                     _notified_live.discard(ch_name)
                     if notifications_enabled and ch_name not in _notified_complete:
                         _notified_complete.add(ch_name)
-                        send_notification("Capture terminée", f"{ch_name} : {_french_status_detail(st.get('detail', ''))}",
+                        send_notification("Capture terminée", f"{ch_name} : {_french_status_detail(st.get('detail', ''), channel_key=ch_name)}",
                                           category="complete", channel=ch_name)
                 elif "offline" in curr:
                     tag = "offline"

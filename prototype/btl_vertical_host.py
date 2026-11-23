@@ -39,6 +39,52 @@ if getattr(sys, "frozen", False):
     BUNDLED_TOOLS = Path(sys.executable).resolve().parent / "tools"
     if BUNDLED_TOOLS.is_dir():
         os.environ["PATH"] = str(BUNDLED_TOOLS) + os.pathsep + os.environ.get("PATH", "")
+
+
+def _capture_tool_commands():
+    if getattr(sys, "frozen", False):
+        tools_dir = Path(sys.executable).resolve().parent / "tools"
+        return {
+            "yt-dlp": str(tools_dir / "yt-dlp.exe"),
+            "streamlink": str(tools_dir / "streamlink.exe"),
+            "ffmpeg": str(tools_dir / "ffmpeg.exe"),
+            "ffprobe": str(tools_dir / "ffprobe.exe"),
+        }
+    return {name: name for name in ("yt-dlp", "streamlink", "ffmpeg", "ffprobe")}
+
+
+def _capture_tool_presence(commands):
+    """Check tool files/PATH without starting any executables."""
+    status = {}
+    for name, command in commands.items():
+        path = Path(command)
+        present = path.is_file() if path.is_absolute() or path.parent != Path(".") else bool(shutil.which(command))
+        status[name] = "present" if present else None
+    return status
+
+
+def _seed_engine_tool_presence(commands=None, environ=None):
+    """Seed MSR's import-time cache before importing it, avoiding four slow --version launches."""
+    environ = os.environ if environ is None else environ
+    key = "MSR_TOOL_VERSIONS"
+    try:
+        cached = json.loads(environ.get(key, ""))
+    except (TypeError, ValueError):
+        cached = None
+    if isinstance(cached, dict) and all(name in cached for name in ("yt-dlp", "streamlink", "ffmpeg")):
+        return False
+    commands = dict(_capture_tool_commands() if commands is None else commands)
+    commands.setdefault("deno", "deno")
+    environ[key] = json.dumps(_capture_tool_presence(commands))
+    return True
+
+
+# msr.deps probes yt-dlp, Streamlink, FFmpeg and Deno synchronously during import.
+# BTL already validates required files by presence later in main(); seed equivalent
+# hints first so import doesn't block GUI startup while onefile tools initialize.
+if sys.platform == "win32":
+    _seed_engine_tool_presence()
+
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ENGINE))
 
@@ -215,16 +261,6 @@ def _sync_engine_tool_status(status):
                 setattr(module, name, value)
 
 
-def _capture_tool_presence(commands):
-    """Fast startup gate: check bundled/discoverable files without launching onefile tools."""
-    status = {}
-    for name, command in commands.items():
-        path = Path(command)
-        present = path.is_file() if path.is_absolute() or path.parent != Path(".") else bool(shutil.which(command))
-        status[name] = "present" if present else None
-    return status
-
-
 def capture_tools_status(*, quick=False):
     """Check capture tools; use file presence at normal startup, deep probes on request.
 
@@ -234,16 +270,7 @@ def capture_tools_status(*, quick=False):
     still performs the full runnable/version probes for diagnostics.
     """
     diagnostics = {}
-    if getattr(sys, "frozen", False):
-        tools_dir = Path(sys.executable).resolve().parent / "tools"
-        commands = {
-            "yt-dlp": str(tools_dir / "yt-dlp.exe"),
-            "streamlink": str(tools_dir / "streamlink.exe"),
-            "ffmpeg": str(tools_dir / "ffmpeg.exe"),
-            "ffprobe": str(tools_dir / "ffprobe.exe"),
-        }
-    else:
-        commands = {name: name for name in ("yt-dlp", "streamlink", "ffmpeg", "ffprobe")}
+    commands = _capture_tool_commands()
 
     if quick:
         status = _capture_tool_presence(commands)

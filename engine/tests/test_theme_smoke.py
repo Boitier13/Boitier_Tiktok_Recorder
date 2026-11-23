@@ -17,6 +17,7 @@ from tkinter import ttk
 sys.path.insert(0, sys.argv[1])
 os.chdir(sys.argv[2])
 os.environ["MSR_SMOKE_TEST"] = "1"
+os.environ["MSR_SMOKE_KEEP"] = "1"
 mode = sys.argv[3]
 out = {"errors": []}
 

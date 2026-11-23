@@ -100,7 +100,7 @@ class TestOptionsRows(unittest.TestCase):
         p = op.OptionsPanel(root, FakeConfig(), ".", lambda s, k, v: v, api=FakeApi(),
                             environ={}, sound_test=called.append)
         box, _ = p.groups["Sons"]
-        buttons = [w for w in box.winfo_children() if w.winfo_class() == "TButton" and w.cget("text") == "Test"]
+        buttons = [w for w in box.winfo_children() if w.winfo_class() == "TButton" and w.cget("text") == "Tester"]
         self.assertEqual(len(buttons), 3)
         for b in buttons:
             b.invoke()

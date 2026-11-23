@@ -124,7 +124,7 @@ class DeleteChannelTests(ManageCase):
         self.settle(win)
         self.assertFalse(self.exists("Processed/kick/alice/alice_20260101_120000.mp4"))
         self.assertFalse(self.exists("PendingDeletion/kick/alice/alice_20260101_120000.mp4"))
-        self.assertIn("Deleted", win.status.cget("text"))
+        self.assertIn("Supprimés définitivement", win.status.cget("text"))
         self.assertFalse(win.undo_btn.winfo_manager())  # nothing to undo
 
     def test_several_channels_need_the_word_delete(self):
@@ -144,7 +144,7 @@ class DeleteChannelTests(ManageCase):
     def test_no_action_while_busy_or_unscanned(self):
         win = self.make(manage_ctx=self.ctx(), activate=False)
         win.mgr.delete_channels([lib.ChannelStat("kick", "alice")])
-        self.assertIn("not been scanned", self.infos[-1])
+        self.assertIn("pas encore été analysée", self.infos[-1])
         win.activate()
         win.mgr.delete_channels([lib.ChannelStat("kick", "alice")])  # scan still running
         self.assertIn("still running", self.infos[-1])
@@ -153,7 +153,7 @@ class DeleteChannelTests(ManageCase):
     def test_refuses_when_the_log_cannot_be_written(self):
         win = self.managed(log_path=str(self.data))  # a folder: cannot be a log file
         win.mgr.delete_channels([self.channel(win, "alice")])
-        self.assertIn("action log", self.infos[-1])
+        self.assertIn("journal d’actions", self.infos[-1])
         self.assertTrue(self.exists("Processed/kick/alice/alice_20260101_120000.mp4"))
 
     def test_filter_older_than_keeps_newer_files(self):
@@ -181,7 +181,7 @@ class PendingTabTests(ManageCase):
     def test_card_shows_size_and_count(self):
         win = self.managed()
         text = win.mgr.pending.info.cget("text")
-        self.assertIn("1 file", text)
+        self.assertIn("1 fichier(s)", text)
 
     def test_empty_now_deletes_permanently(self):
         win = self.managed()
@@ -196,7 +196,7 @@ class PendingTabTests(ManageCase):
         win.mgr.empty_pending()
         self.settle(win)
         win.mgr.empty_pending()
-        self.assertIn("empty", self.infos[-1])
+        self.assertIn("vide", self.infos[-1])
 
     def test_restore_all_puts_files_back(self):
         win = self.managed()

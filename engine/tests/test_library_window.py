@@ -130,7 +130,7 @@ class WindowTests(Case):
     def test_scan_fills_text_charts_and_table(self):
         win = self.scanned()
         text = win.headline.cget("text")
-        self.assertIn("of recordings in 4 files", text)
+        self.assertIn("dans 4 fichiers", text)
         self.assertIn("alice", text)
         self.assertEqual(len(win.tree.get_children()), 3)
         first = win.tree.item(win.tree.get_children()[0], "values")
@@ -273,7 +273,7 @@ class WindowTests(Case):
             win = self.make()
             self.pump(lambda: err.called)
         self.assertIn("boom", err.call_args[0][2])
-        self.assertEqual(win.status.cget("text"), "Scan failed")
+        self.assertEqual(win.status.cget("text"), "Échec de l’analyse")
 
     def test_missing_folder_still_opens(self):
         win = self.scanned(get_roots=lambda: lib.Roots(str(self.base / "nope")))

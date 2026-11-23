@@ -50,7 +50,7 @@ class ListTests(unittest.TestCase):
         self.assertLess(max(names.index(n) for n in dark), min(names.index(n) for n in light))
         groups = theme_dialog.theme_groups()
         self.assertEqual([label for label, _ in groups],
-                         ["Built-in", "Dark, from Omarchy palettes", "Light, from Omarchy palettes", "Your themes"])
+                         ["Built-in", "Dark, from Omarchy palettes", "Light, from Omarchy palettes", "Vos thèmes"])
         shown = [t.name for _, group in groups for t in group]
         self.assertEqual(shown, list(themes.THEME_NAMES))              # every theme once, in list order
         self.assertTrue(all(themes.THEMES[n].dark for n in themes.GROUP_DARK))

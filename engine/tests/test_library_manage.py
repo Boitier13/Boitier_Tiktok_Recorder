@@ -147,7 +147,7 @@ class DeleteChannelTests(ManageCase):
         self.assertIn("pas encore été analysée", self.infos[-1])
         win.activate()
         win.mgr.delete_channels([lib.ChannelStat("kick", "alice")])  # scan still running
-        self.assertIn("still running", self.infos[-1])
+        self.assertIn("en cours", self.infos[-1])
         self.pump(lambda: not win.busy)
 
     def test_refuses_when_the_log_cannot_be_written(self):

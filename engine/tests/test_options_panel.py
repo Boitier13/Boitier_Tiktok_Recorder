@@ -187,7 +187,7 @@ class TestPanel(unittest.TestCase):
 
     def test_initial_status_and_tooltip_text(self):
         p = self.make()
-        self.assertEqual(p.status.cget("text"), "Not connected")
+        self.assertEqual(p.status.cget("text"), "Non connecté")
         self.assertEqual(str(p.disconnect_btn.cget("state")), "disabled")
         self.assertIn("about 10 channels", op.TWITCH_TIP)
         self.assertIn("No permissions requested", op.TWITCH_TIP)
@@ -209,19 +209,19 @@ class TestPanel(unittest.TestCase):
         p.frame.clipboard_append = clip.append  # never touch the real clipboard
         p.copy_code()
         self.assertEqual(clip, ["ABCDEFGH"])
-        self.pump(lambda: p.status.cget("text").startswith("Connected"))
-        self.assertEqual(p.status.cget("text"), "Connected as davidtest")
+        self.pump(lambda: p.status.cget("text").startswith("Connecté"))
+        self.assertEqual(p.status.cget("text"), "Connecté en tant que davidtest")
         self.assertIn(("Twitch", "push_enabled", "true"), self.saved)
         self.assertTrue(self.changed)
         self.assertFalse(p.code_row.winfo_ismapped())
         p.disconnect()
-        self.pump(lambda: p.status.cget("text") == "Not connected")
-        self.assertEqual(p.status.cget("text"), "Not connected")
+        self.pump(lambda: p.status.cget("text") == "Non connecté")
+        self.assertEqual(p.status.cget("text"), "Non connecté")
         self.assertEqual(self.api.revoked, ["at"])
 
     def test_manage_opens_connections_page(self):
         p = self.make()
-        self.assertEqual(p.manage_btn.cget("text"), "Manage on Twitch")
+        self.assertEqual(p.manage_btn.cget("text"), "Gérer sur Twitch")
         p.manage_btn.invoke()
         self.assertEqual(self.opened, ["https://www.twitch.tv/settings/connections"])
 
@@ -233,11 +233,11 @@ class TestPanel(unittest.TestCase):
         p = self.make()
         with self.assertLogs("msr.options", "WARNING") as logs:
             p.disconnect()
-            self.pump(lambda: p.status.cget("text") == "Not connected")
+            self.pump(lambda: p.status.cget("text") == "Non connecté")
         self.assertIsNone(self.api.tok)
-        self.assertIn("Manage on Twitch", logs.output[0])
+        self.assertIn("paramètres Twitch", logs.output[0])
         self.assertNotIn("SECRETTOK", "".join(logs.output))
-        self.assertIn("Manage on Twitch", p.message.cget("text"))
+        self.assertIn("paramètres Twitch", p.message.cget("text"))
 
 
     def test_generic_setting_validates(self):
@@ -263,10 +263,10 @@ class TestPanel(unittest.TestCase):
                         "refresh_token": "rt", "login": "me"}
         self.api.validate_fails = True
         p = self.make()
-        self.assertEqual(p.status.cget("text"), "Connected as me")
+        self.assertEqual(p.status.cget("text"), "Connecté en tant que me")
         p.activate()
-        self.pump(lambda: p.status.cget("text").startswith("Expired"))
-        self.assertTrue(p.status.cget("text").startswith("Expired"))
+        self.pump(lambda: p.status.cget("text").startswith("Code expiré"))
+        self.assertTrue(p.status.cget("text").startswith("Code expiré"))
 
 
 class TestDisconnectRealFile(unittest.TestCase):

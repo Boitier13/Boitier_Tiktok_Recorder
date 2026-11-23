@@ -135,7 +135,7 @@ class WindowTests(Case):
         self.assertEqual(len(win.tree.get_children()), 3)
         first = win.tree.item(win.tree.get_children()[0], "values")
         self.assertEqual(first[0], "alice")
-        self.assertEqual(first[-1], "yes")
+        self.assertEqual(first[-1], "oui")
         self.assertEqual(len(win.bars.data), 3)
         self.assertEqual(win.donut.center_text, lib.fmt_size(9400))
         self.assertIn("alice (Kick)", win.bars.tooltip_at(5, 6 + 12))

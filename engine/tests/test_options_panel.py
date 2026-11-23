@@ -189,8 +189,8 @@ class TestPanel(unittest.TestCase):
         p = self.make()
         self.assertEqual(p.status.cget("text"), "Non connecté")
         self.assertEqual(str(p.disconnect_btn.cget("state")), "disabled")
-        self.assertIn("about 10 channels", op.TWITCH_TIP)
-        self.assertIn("No permissions requested", op.TWITCH_TIP)
+        self.assertIn("environ 10 chaînes", op.TWITCH_TIP)
+        self.assertIn("Aucune permission n’est demandée", op.TWITCH_TIP)
 
     def test_connect_flow_shows_code_then_connected(self):
         class Job(tc.ConnectJob):

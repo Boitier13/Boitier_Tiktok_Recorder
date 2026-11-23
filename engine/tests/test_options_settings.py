@@ -72,11 +72,11 @@ class Case(unittest.TestCase):
 
     def test_zero_hints_say_what_zero_means(self):
         hints = {(r["section"], r["key"]): r["hint"] for r in op.all_rows()}
-        self.assertEqual(hints[("Recording", "max_record_hours")], "0 = no limit")
-        self.assertEqual(hints[("Cleanup", "auto_purge_days")], "0 = never delete")
-        self.assertEqual(hints[("Cleanup", "max_log_size_mb")], "0 = never rotate")
-        self.assertIn("0 = never split", hints[("Recording", "max_file_size_gb")])
-        self.assertIn("0 = no free-space check", hints[("Recording", "min_disk_space_gb")])
+        self.assertEqual(hints[("Recording", "max_record_hours")], "0 = sans limite")
+        self.assertEqual(hints[("Cleanup", "auto_purge_days")], "0 = ne jamais supprimer")
+        self.assertEqual(hints[("Cleanup", "max_log_size_mb")], "0 = ne jamais faire tourner")
+        self.assertIn("0 = ne jamais découper", hints[("Recording", "max_file_size_gb")])
+        self.assertIn("0 = ne pas vérifier l’espace libre", hints[("Recording", "min_disk_space_gb")])
         self.assertFalse(any("\u2265" in h for h in hints.values()))
 
     def test_pattern_preview_updates(self):
@@ -111,7 +111,7 @@ class Case(unittest.TestCase):
         p = self.make()
         v = p.vars[("Fishtank", "password")]
         self.assertEqual(v.get(), "")
-        self.assertEqual(p.hints[("Fishtank", "password")].cget("text"), "saved - type to replace")
+        self.assertEqual(p.hints[("Fishtank", "password")].cget("text"), "enregistré — saisir une nouvelle valeur pour remplacer")
         v.set("n3w-pass")
         spec = next(r for r in op.all_rows() if r["key"] == "password")
         p._commit_field(spec, v)
@@ -141,9 +141,9 @@ class Case(unittest.TestCase):
 
     def test_quality_hint_follows_format(self):
         p = self.make()
-        self.assertIn("lower is better", p.hints[("Clipping", "screenshot_quality")].cget("text"))
+        self.assertIn("plus bas = meilleure qualité", p.hints[("Clipping", "screenshot_quality")].cget("text"))
         p._commit("Clipping", "screenshot_format", "webp")
-        self.assertIn("higher is better", p.hints[("Clipping", "screenshot_quality")].cget("text"))
+        self.assertIn("plus élevé = meilleure qualité", p.hints[("Clipping", "screenshot_quality")].cget("text"))
 
     def test_advanced_group_starts_collapsed(self):
         p = self.make()
@@ -157,7 +157,7 @@ class Case(unittest.TestCase):
         p.vars[("Control", "enabled")].set(False)
         p._commit("Control", "enabled", "false")
         self.assertEqual(self.saved[-1], ("Control", "enabled", "false"))
-        self.assertIn("restarting MSR", p.message.cget("text"))
+        self.assertIn("après le redémarrage de MSR", p.message.cget("text"))
 
 
 if __name__ == "__main__":

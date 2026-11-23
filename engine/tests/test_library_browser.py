@@ -252,7 +252,7 @@ class ClipTabTests(TabTests):
         self.assertEqual(str(self.tab.tree.set(rid, "clips")), "2")
         kids = self.tab.tree.get_children(rid)
         self.assertEqual(len(kids), 2)
-        self.assertIn("2 linked clips", self.tab.count.cget("text"))
+        self.assertIn("2 clips associés", self.tab.count.cget("text"))
         self.tab.tree.selection_set(kids[0])
         self.root.update()
         self.assertEqual(self.tab.clip_btn.cget("text"), "Ouvrir la vidéo source")
@@ -355,7 +355,7 @@ class FoldClipFilesTests(unittest.TestCase):
         self.assertFalse(top["alice_cutting_board_20260105_100000.mp4"].orphan)
         self.assertFalse(top["alice_20260101_120000.mp4"].orphan)
         cell = lb._COLUMN["title"][5](top["gone_20250101_000000_trim.mp4"])
-        self.assertIn("source missing", cell)
+        self.assertIn("source introuvable", cell)
 
 
 class FoldClipTabTests(ClipTabTests):
@@ -371,7 +371,7 @@ class FoldClipTabTests(ClipTabTests):
         rid = top["alice_20260101_120000.mp4"]
         self.assertEqual(str(self.tab.tree.set(rid, "clips")), "1")  # Clips column: Clips-folder links only
         self.assertEqual(len(self.tab.tree.get_children(rid)), 4)
-        self.assertIn("source missing", self.tab.tree.set(top["gone_20250101_000000_trim.mp4"], "title"))
+        self.assertIn("source introuvable", self.tab.tree.set(top["gone_20250101_000000_trim.mp4"], "title"))
         kid = self.tab.tree.get_children(rid)[-1]
         self.tab.tree.selection_set(kid)
         self.root.update()

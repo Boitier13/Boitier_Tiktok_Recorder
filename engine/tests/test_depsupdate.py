@@ -364,7 +364,7 @@ class CliTests(unittest.TestCase):
     def test_human(self):
         out = msr_ctl.human("deps", {"ok": True, "result": {"results": [
             {"name": "yt-dlp", "ok": False, "error": "x", "rolled_back": True}], "note": "n"}})
-        self.assertIn("version précédente restaurée", out)
+        self.assertIn("previous version restored", out)
 
 
 class DialogTests(unittest.TestCase):

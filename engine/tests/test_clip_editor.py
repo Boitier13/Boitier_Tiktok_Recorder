@@ -250,7 +250,7 @@ class FakeAudio:
 class EditorWindowTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.src = os.path.join(self.tmp.name, "Recorded", "kick", "knut", "k.ts")
+        self.src = os.path.join(self.tmp.name, RECORDED_FOLDER, "kick", "knut", "k.ts")
         os.makedirs(os.path.dirname(self.src))
         write_ts(self.src, [0, 90000])
         self.root = new_tk_root(self)

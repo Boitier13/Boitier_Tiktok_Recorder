@@ -124,7 +124,7 @@ class PeriodicTests(unittest.TestCase):
         r = health.merge([a], [b])
         self.assertEqual(r.level, health.ERROR)
         self.assertEqual(r.issues[0].key, "tool:yt-dlp")
-        self.assertIn("2 problems", health.summary(r))
+        self.assertIn("2 problèmes", health.summary(r))
         self.assertTrue(health.summary(health.merge()).startswith("\u25cf État : OK"))
         new, cleared = health.changes(None, r)
         self.assertEqual(len(new), 2)

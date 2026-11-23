@@ -53,17 +53,24 @@ def quiet_logger(name):
 
 
 class TikTokStartupRetryTests(unittest.TestCase):
-    def test_tiktok_uses_configured_file_creation_timeout(self):
-        self.assertEqual(worker_mod._capture_file_creation_timeout(60), 60)
-        self.assertEqual(worker_mod._capture_file_creation_timeout(90), 90)
+    def test_tiktok_uses_its_shorter_configured_file_creation_timeout(self):
+        self.assertEqual(worker_mod._effective_capture_file_creation_timeout("tiktok", 60), 30)
+        self.assertEqual(worker_mod._effective_capture_file_creation_timeout("tiktok", 60, 20), 20)
+        self.assertEqual(worker_mod._effective_capture_file_creation_timeout("twitch", 60, 30), 60)
 
     def test_from_start_capture_keeps_its_longer_manifest_timeout(self):
-        self.assertEqual(worker_mod._capture_file_creation_timeout(60, from_start=True), 120)
-        self.assertEqual(worker_mod._capture_file_creation_timeout(180, from_start=True), 180)
+        self.assertEqual(
+            worker_mod._effective_capture_file_creation_timeout("youtube", 60, 30, from_start=True),
+            120,
+        )
+        self.assertEqual(
+            worker_mod._effective_capture_file_creation_timeout("youtube", 180, 30, from_start=True),
+            180,
+        )
 
-    def test_empty_capture_retry_backoff_is_bounded(self):
+    def test_empty_capture_retry_backoff_stays_under_a_minute(self):
         delays = [worker_mod._tiktok_start_retry_delay(n) for n in range(1, 6)]
-        self.assertEqual(delays, [15, 30, 60, 60, 60])
+        self.assertEqual(delays, [10, 20, 40, 40, 40])
 
     def test_tiktok_is_not_reported_recording_before_media_is_written(self):
         tiktok = worker_mod._initial_capture_status("tiktok")

@@ -134,6 +134,8 @@ GROUPS = (
             applies=RESTART, width=28),
     )),
     ("Délais avancés", True, (
+        row("Timeouts", "tiktok_file_creation_timeout", "TikTok — délai du premier fichier (s)",
+            hint="30 s par défaut, avant actualisation du flux"),
         row("Timeouts", "reconnect_grace_minutes", "Vérifications rapprochées après une coupure (min)",
             hint="vérifications toutes les 15 s ; 0 = désactivé"),
         row("Timeouts", "reconnect_extended_minutes", "Puis vérifications toutes les 30 s pendant (min)", hint="0 = désactivé"),

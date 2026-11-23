@@ -126,7 +126,7 @@ def _tiktok_start_retry_delay(failure_count):
         attempt = max(1, int(failure_count))
     except (TypeError, ValueError):
         attempt = 1
-    return min(15 * (2 ** min(attempt - 1, 2)), 60)
+    return min(10 * (2 ** min(attempt - 1, 2)), 40)
 
 
 def _capture_file_creation_timeout(configured_timeout, from_start=False):
@@ -136,6 +136,16 @@ def _capture_file_creation_timeout(configured_timeout, from_start=False):
     except (TypeError, ValueError):
         timeout = 60
     return max(timeout, 120) if from_start else timeout
+
+
+def _effective_capture_file_creation_timeout(
+    platform, configured_timeout, tiktok_timeout=30, from_start=False
+):
+    """Use the TikTok-specific startup deadline without changing other platforms."""
+    if from_start:
+        return _capture_file_creation_timeout(configured_timeout, from_start=True)
+    selected = tiktok_timeout if platform == "tiktok" else configured_timeout
+    return _capture_file_creation_timeout(selected)
 
 
 def _initial_capture_status(platform):
@@ -2342,6 +2352,9 @@ def record_worker(args):
     reconnect_grace_minutes = parser_getint(config, 'Timeouts', 'reconnect_grace_minutes', 3)
     reconnect_extended_minutes = parser_getint(config, 'Timeouts', 'reconnect_extended_minutes', 10)
     file_creation_timeout = parser_getint(config, 'Timeouts', 'file_creation_timeout', 60)
+    tiktok_file_creation_timeout = parser_getint(
+        config, 'Timeouts', 'tiktok_file_creation_timeout', 30
+    )
     filename_pattern = config.get('Recording', 'filename_pattern', fallback='{username}_{timestamp}') or '{username}_{timestamp}'
     from_start_enabled, from_start_max_minutes = yt_live_start.settings(config)
 
@@ -3229,8 +3242,9 @@ def record_worker(args):
                         pass
                     return False
 
-                monitor_file_creation_timeout = _capture_file_creation_timeout(
-                    file_creation_timeout, from_start=from_start is not None
+                monitor_file_creation_timeout = _effective_capture_file_creation_timeout(
+                    platform, file_creation_timeout, tiktok_file_creation_timeout,
+                    from_start=from_start is not None,
                 )
                 last_status, split_requested = monitor_recording_process(
                     proc, raw_file, start_time, max_record_hours,

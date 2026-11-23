@@ -373,11 +373,13 @@ class CleanupSafetyTests(unittest.TestCase):
         self.assertFalse(os.path.exists(self.pending()))
         self.assertTrue(any("kept in Recorded" in o for o in logs.output))
 
-    def test_junk_output_still_goes_to_pending_deletion(self):
+    def test_undersized_remux_keeps_raw_for_recovery(self):
         self.fake.set_modes({"mode": "ok", "size": 100})
-        self.stop_time_pass()
-        self.assertTrue(os.path.exists(self.pending()))
-        self.assertFalse(os.path.exists(self.raw))
+        with self.assertLogs(level="WARNING") as logs:
+            self.stop_time_pass()
+        self.assertTrue(os.path.exists(self.raw))
+        self.assertFalse(os.path.exists(self.pending()))
+        self.assertTrue(any("kept in Recorded" in line for line in logs.output))
 
     def test_timeout_keeps_the_raw(self):
         self.fake.set_modes({"mode": "hang", "seconds": 60})

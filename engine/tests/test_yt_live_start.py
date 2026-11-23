@@ -518,7 +518,7 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(r["hint"])
         hint = rows[("YouTube", "live_from_start_max_minutes")]["hint"]
         self.assertIn("fréquence de détection + 2", hint)
-        self.assertIn("VOD", hint)
+        self.assertIn("récupérer plus d’historique", hint)
 
     def migrated(self, text):
         with tempfile.TemporaryDirectory() as d:

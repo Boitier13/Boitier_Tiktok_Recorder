@@ -99,7 +99,7 @@ class TestOptionsRows(unittest.TestCase):
         called = []
         p = op.OptionsPanel(root, FakeConfig(), ".", lambda s, k, v: v, api=FakeApi(),
                             environ={}, sound_test=called.append)
-        box, _ = p.groups["Sounds"]
+        box, _ = p.groups["Sons"]
         buttons = [w for w in box.winfo_children() if w.winfo_class() == "TButton" and w.cget("text") == "Test"]
         self.assertEqual(len(buttons), 3)
         for b in buttons:

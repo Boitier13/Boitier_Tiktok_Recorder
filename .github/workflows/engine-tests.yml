@@ -83,8 +83,8 @@ jobs:
 
       - name: Run tests (Ubuntu, virtual display)
         if: runner.os == 'Linux'
-        run: xvfb-run -a python -m unittest discover -s engine/tests -t engine
+        run: xvfb-run -a python engine/tests/run_ci.py
 
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
-        run: python -m unittest discover -s engine/tests -t engine
+        run: python engine/tests/run_ci.py

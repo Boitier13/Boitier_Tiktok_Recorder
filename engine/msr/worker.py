@@ -121,12 +121,15 @@ def _should_report_stream_end(stop_requested, split_requested, output_size):
 
 
 def _merge_tiktok_status_checks(ytdlp_title, ytdlp_error, api_live, api_title, api_error):
-    """Treat a failed API cross-check as inconclusive, never as confirmed offline."""
+    """Use TikTok API confirmation to resolve yt-dlp's stale offline/error result."""
     if api_live:
         return True, api_title or ytdlp_title, None
-    if api_error and not ytdlp_error:
-        ytdlp_error = f"TikTok live-status check inconclusive: {api_error}"
-    return False, ytdlp_title, ytdlp_error
+    if api_error:
+        if not ytdlp_error:
+            ytdlp_error = f"TikTok live-status check inconclusive: {api_error}"
+        return False, ytdlp_title, ytdlp_error
+    # A clean negative API result means offline, not a lingering yt-dlp timeout.
+    return False, ytdlp_title, None
 
 
 class ReconnectWindow:

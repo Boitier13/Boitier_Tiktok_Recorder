@@ -33,6 +33,18 @@ class TiktokYtdlpInconclusiveTests(unittest.TestCase):
             (True, "current title", None),
         )
 
+    def test_confirmed_api_offline_clears_ytdlp_timeout(self):
+        self.assertEqual(
+            _merge_tiktok_status_checks("old title", "timeout", False, None, None),
+            (False, "old title", None),
+        )
+
+    def test_inconclusive_api_result_preserves_ytdlp_timeout(self):
+        self.assertEqual(
+            _merge_tiktok_status_checks("old title", "timeout", False, None, "network timeout"),
+            (False, "old title", "timeout"),
+        )
+
     @patch("msr.platforms.HAS_YTDLP", True)
     @patch("msr.platforms.subprocess.run")
     def test_empty_failure_is_not_silently_classified_offline(self, run):

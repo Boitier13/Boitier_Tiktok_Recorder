@@ -2675,19 +2675,30 @@ def record_worker(args):
                 if resolved_url:
                     recording_url = resolved_url
                     logger.info(f"Using resolved URL for recording: {redact_for_log(recording_url)}")
-                # yt-dlp often reports 24/7 / US-TTP LIVEs as offline. Confirm
-                # via api-live/user/room, /live HTML roomId, then Webcast.
-                if not is_live:
-                    logger.info("TikTok: yt-dlp reported offline — cross-checking via TikTok live APIs")
-                    wc_live, _, wc_title, wc_err, tiktok_stream_url = check_tiktok_live_webcast(
+                # yt-dlp often reports 24/7 / US-TTP LIVEs as offline. Also,
+                # it can confirm LIVE without yielding a media URL; in that case
+                # ask TikTok's API for the direct video variant before trying
+                # Streamlink against the profile page.
+                if not is_live or not resolved_url:
+                    if not is_live:
+                        logger.info("TikTok: yt-dlp reported offline — cross-checking via TikTok live APIs")
+                    else:
+                        logger.info("TikTok: yt-dlp confirmed LIVE but returned no media URL — querying TikTok APIs")
+                    wc_live, _, wc_title, wc_err, api_stream_url = check_tiktok_live_webcast(
                         username, cookies_file, logger, stream_check_timeout, quality=quality)
+                    if api_stream_url:
+                        tiktok_stream_url = api_stream_url
                     if wc_live:
-                        logger.info("TikTok: live API confirms LIVE (yt-dlp said offline)")
+                        if not is_live:
+                            logger.info("TikTok: live API confirms LIVE (yt-dlp said offline)")
+                        elif tiktok_stream_url:
+                            logger.info("TikTok: using direct video URL from live API")
                     else:
                         logger.info(f"TikTok live API fallback: {wc_err or 'not live'}")
-                    is_live, stream_title, error = _merge_tiktok_status_checks(
-                        stream_title, error, wc_live, wc_title, wc_err
-                    )
+                    if not is_live:
+                        is_live, stream_title, error = _merge_tiktok_status_checks(
+                            stream_title, error, wc_live, wc_title, wc_err
+                        )
             elif platform in ["youtube", "custom"]:
                 check_info.clear()
                 is_live, stream_title, error, need_impersonate, resolved_url, format_urls = check_stream_ytdlp(
@@ -3124,7 +3135,9 @@ def record_worker(args):
                     stop_event, last_status,
                     # from-start: yt-dlp reads the DASH manifest before any file appears
                     max(file_creation_timeout, 120) if from_start else file_creation_timeout,
-                    verbose=verbose,
+                    # streamlink_debug makes Streamlink emit debug records; tell
+                    # the stderr reader not to discard those records as noise.
+                    verbose=verbose or streamlink_debug,
                     tool_name_override=(
                         "ffmpeg" if platform == "tiktok" and tiktok_stream_url else None
                     ),

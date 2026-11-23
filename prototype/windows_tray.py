@@ -24,6 +24,7 @@ class WindowsTray:
         self.open_url = open_url or webbrowser.open
         self.icon = None
         self.thread = None
+        self._notification_lock = threading.Lock()
 
     def _load_dependencies(self):
         if self.pystray is None:
@@ -64,6 +65,25 @@ class WindowsTray:
         )
         self.thread = threading.Thread(target=self.icon.run, daemon=True, name="btl-windows-tray")
         self.thread.start()
+        return True
+
+    def notify(self, title: str, message: str) -> bool:
+        """Show a balloon on BTL's existing tray icon instead of registering a new icon.
+
+        Plyer's Windows backend creates a distinct Shell_NotifyIcon entry per call;
+        the packaged 2.1.0 implementation retains each entry until process exit.
+        pystray updates the one long-lived BTL icon (NIM_MODIFY), so notifications
+        cannot fill the hidden-icons list.
+        """
+        icon = self.icon
+        if (icon is None or not getattr(icon, "visible", False)
+                or self.thread is None or not self.thread.is_alive()):
+            raise TrayUnavailable("L’icône BTL de la zone de notification n’est pas prête.")
+        notify = getattr(icon, "notify", None)
+        if not callable(notify):
+            raise TrayUnavailable("Les notifications ne sont pas prises en charge par l’icône BTL.")
+        with self._notification_lock:
+            notify(message, title)
         return True
 
     def _open(self, _icon=None, _item=None):

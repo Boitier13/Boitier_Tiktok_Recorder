@@ -21,13 +21,13 @@ from msr import twitch_connect as tc
 from msr import twitch_eventsub as te
 
 MANAGE_URL = "https://www.twitch.tv/settings/connections"
-MANAGE_TIP = "See or remove apps that can access your Twitch account"
-TWITCH_TIP = ("Sign in to Twitch once so MSR gets instant go-live alerts (about 10 channels).\n"
-              "No permissions requested; timed checks keep running as backup.")
+MANAGE_TIP = "Consulter ou retirer les applications autorisées à accéder à votre compte Twitch."
+TWITCH_TIP = ("Connectez-vous une fois à Twitch pour recevoir les alertes de direct instantanées (environ 10 chaînes).\n"
+              "Aucune permission n’est demandée ; les vérifications périodiques restent actives en secours.")
 
 NOW, NEXT, RESTART = "now", "next recording", "restart"
 
-COOKIE_SYNC_WARNING = "Cookies are your browser login; keep this file out of synced or shared folders."
+COOKIE_SYNC_WARNING = "Les cookies donnent accès à votre compte : ne placez pas ce fichier dans un dossier partagé ou synchronisé."
 _SYNCED = ("onedrive", "dropbox", "google drive", "googledrive", "my drive", "desktop", "icloud drive", "iclouddrive")
 
 
@@ -46,101 +46,101 @@ def row(section, key, label, kind="num", hint="", tip="", applies=NEXT, choices=
 
 # 0-meanings verified in worker.py / recorder.py / util.py / storage.py.
 GROUPS = (
-    ("Recording", False, (
-        row("Recording", "quality", "Quality", "choice", "best = highest available",
-            "streamlink / yt-dlp quality name. Unknown names fall back to best.",
+    ("Enregistrement", False, (
+        row("Recording", "quality", "Qualité", "choice", "best = qualité maximale disponible",
+            "Nom de qualité streamlink / yt-dlp. Une valeur inconnue utilise best.",
             choices=("best", "1080p60", "1080p", "720p60", "720p", "480p", "360p", "worst"), width=10),
-        row("Recording", "filename_pattern", "File name", "pattern", "",
-            "Tokens: {username} {platform} {date} {time} {timestamp} {title}\n"
-            "Keep {timestamp} (or {date}+{time}) so files never collide.", width=28),
-        row("Recording", "split_on_resolution_change", "New file when the resolution changes", "bool",
-            tip="Starts a fresh file if the stream changes resolution (e.g. TikTok battles);\n"
-                "mixing two resolutions in one file breaks playback."),
-        row("Recording", "max_record_hours", "Max part length (h)", hint="0 = no limit",
-            tip="Long streams are cut into parts of at most this length (seamless hand-off)."),
-        row("Recording", "max_file_size_gb", "Split files at (GB)", hint="0 = never split by size",
-            tip="The next part starts before this one closes, so nothing is lost."),
-        row("Recording", "min_disk_space_gb", "Min free space (GB)", hint="0 = no free-space check",
-            tip="New recordings wait while the recordings drive has less free space than this."),
+        row("Recording", "filename_pattern", "Nom du fichier", "pattern", "",
+            "Variables : {username} {platform} {date} {time} {timestamp} {title}\n"
+            "Conservez {timestamp} (ou {date}+{time}) pour éviter les noms de fichiers identiques.", width=28),
+        row("Recording", "split_on_resolution_change", "Créer un fichier si la résolution change", "bool",
+            tip="Crée un nouveau fichier si la résolution du direct change (par exemple lors des battles TikTok) ;\n"
+                "mélanger deux résolutions dans un même fichier peut empêcher sa lecture."),
+        row("Recording", "max_record_hours", "Durée maximale d’un segment (h)", hint="0 = sans limite",
+            tip="Les directs longs sont répartis en segments de cette durée maximale, sans coupure."),
+        row("Recording", "max_file_size_gb", "Découper les fichiers à (Go)", hint="0 = ne jamais découper selon la taille",
+            tip="Le segment suivant démarre avant la fermeture du précédent pour ne rien perdre."),
+        row("Recording", "min_disk_space_gb", "Espace libre minimal (Go)", hint="0 = ne pas vérifier l’espace libre",
+            tip="Les nouvelles captures attendent si le disque dispose de moins d’espace libre."),
     )),
     ("YouTube", False, (
-        row("YouTube", "live_from_start", "Record from the start of the broadcast", "bool",
-            hint="keeps what aired before MSR noticed",
-            tip="yt-dlp --live-from-start on the first part of a broadcast: it catches up\n"
-                "faster than real time, then follows live. No DVR = normal live recording."),
-        row("YouTube", "live_from_start_max_minutes", "Only if live for at most (min)",
-            hint="minutes, at least check interval + 2; raise it to grab older footage (more like a VOD download)", width=6,
-            tip="Covers a start missed between checks. Older broadcasts record from now, no backlog.\n"
-                "Never less than the check interval + 2 min. 0 = no limit."),
+        row("YouTube", "live_from_start", "Enregistrer depuis le début du direct", "bool",
+            hint="récupère ce qui a été diffusé avant la détection",
+            tip="yt-dlp --live-from-start au premier segment : le téléchargement rattrape\n"
+                "le direct plus vite que le temps réel, puis le suit. Sans DVR, capture normale."),
+        row("YouTube", "live_from_start_max_minutes", "Uniquement si le direct dure au plus (min)",
+            hint="minutes, au moins fréquence de détection + 2 ; augmentez pour récupérer plus d’historique", width=6,
+            tip="Récupère le début manqué entre deux détections. Pour les directs plus anciens, capture à partir de maintenant.\n"
+                "Jamais moins que la fréquence de détection + 2 min. 0 = sans limite."),
     )),
-    ("Checking", False, (
-        row("Timeouts", "poll_interval_minutes", "Check every (min)", hint="0.5\u2013120",
-            tip="How often offline channels are checked. Kick and Twitch instant alerts\n"
-                "wake a channel sooner; these checks always keep running.", applies=NOW),
+    ("Détection", False, (
+        row("Timeouts", "poll_interval_minutes", "Détecter toutes les (min)", hint="0.5\u2013120",
+            tip="Fréquence de vérification des chaînes hors ligne. Les alertes instantanées Kick et Twitch\n"
+                "peuvent accélérer la détection ; les vérifications périodiques restent actives.", applies=NOW),
     )),
-    ("Folders", False, (
-        row("Paths", "streams_dir", "Recordings", "dir", "used from the next start",
-            "Changing it while recording is refused. MSR's one-copy-per-folder lock\n"
-            "moves with it at the next start.", applies=RESTART, width=34),
-        row("Clipping", "clips_dir", "Clips + screenshots", "dir", "blank = Recordings\\Clips",
+    ("Dossiers", False, (
+        row("Paths", "streams_dir", "Enregistrements", "dir", "appliqué au prochain démarrage",
+            "Le changement est refusé pendant une capture. Le verrou de dossier unique de MSR\n"
+            "est déplacé au prochain démarrage.", applies=RESTART, width=34),
+        row("Clipping", "clips_dir", "Clips et captures d’écran", "dir", "vide = Enregistrements\\Clips",
             applies=NOW, width=34),
-        row("Paths", "fallback_dir", "Backup (drive gone)", "dir", "blank = temp folder, off = pause",
-            "Where recording continues while the recordings drive is unplugged;\n"
-            "files move back when it returns.", width=34),
-        row("Paths", "cookies_file", "Cookies file", "file", "blank = find automatically",
-            "Netscape cookies.txt for logged-in streams (subscriber-only, age-gated).", width=34),
+        row("Paths", "fallback_dir", "Dossier de secours (disque absent)", "dir", "vide = dossier temporaire, désactivé = pause",
+            "Dossier où les captures continuent si le disque principal est déconnecté ;\n"
+            "les fichiers y sont transférés à son retour.", width=34),
+        row("Paths", "cookies_file", "Fichier de cookies", "file", "vide = recherche automatique",
+            "Fichier cookies.txt Netscape pour les directs nécessitant une connexion, un abonnement ou une vérification d’âge.", width=34),
     )),
     ("Clips", False, (
-        row("Clipping", "clip_length_seconds", "Clip length (s)", hint="5\u20131800", applies=NOW,
-            tip="Same setting as Clip Length in the bottom bar."),
-        row("Clipping", "screenshot_format", "Screenshot format", "choice", "jpg is ~5x smaller than png",
+        row("Clipping", "clip_length_seconds", "Durée du clip (s)", hint="5\u20131800", applies=NOW,
+            tip="Identique au réglage de durée des clips dans la barre inférieure."),
+        row("Clipping", "screenshot_format", "Format des captures d’écran", "choice", "jpg prend environ 5 fois moins de place que png",
             choices=("jpg", "png", "webp"), applies=NOW, width=6),
-        row("Clipping", "screenshot_quality", "Screenshot quality", hint="", applies=NOW,
-            tip="jpg: 2\u201331, lower is better.  webp: 50\u2013100, higher is better.  png: ignored."),
+        row("Clipping", "screenshot_quality", "Qualité des captures d’écran", hint="", applies=NOW,
+            tip="jpg : 2\u201331, plus bas = meilleure qualité. webp : 50\u2013100, plus haut = meilleure qualité. png : sans effet."),
     )),
-    ("Cleanup", False, (
-        row("Cleanup", "purge_on_startup", "Empty old PendingDeletion files at start", "bool", applies=RESTART),
-        row("Cleanup", "auto_purge_days", "Keep PendingDeletion (days)", hint="0 = never delete",
+    ("Nettoyage", False, (
+        row("Cleanup", "purge_on_startup", "Purger les anciens éléments récupérables au démarrage", "bool", applies=RESTART),
+        row("Cleanup", "auto_purge_days", "Conserver les éléments récupérables (jours)", hint="0 = ne jamais supprimer",
             applies=RESTART),
-        row("Cleanup", "max_log_size_mb", "Rotate log at (MB)", hint="0 = never rotate", applies=RESTART),
-        row("Cleanup", "log_backup_count", "Old logs kept", hint="0 = keep none", applies=RESTART),
+        row("Cleanup", "max_log_size_mb", "Faire tourner le journal à (Mo)", hint="0 = ne jamais faire tourner", applies=RESTART),
+        row("Cleanup", "log_backup_count", "Anciens journaux conservés", hint="0 = ne rien conserver", applies=RESTART),
     )),
-    ("Sounds", False, (
-        row("Sounds", "go_live", "Chime when a channel goes live", "sound", applies=NOW, choices=("live",),
-            tip="Plays when a channel starts recording - not for split parts or reconnects."),
-        row("Sounds", "problems", "Alert when something needs attention", "sound", applies=NOW, choices=("problem",),
-            tip="Recording error, low disk space, recordings drive gone, cookies expired.\n"
-                "The same problem sounds again only after 5 minutes."),
-        row("Sounds", "clip_saved", "Tick when a clip or screenshot is saved", "sound", applies=NOW,
+    ("Sons", False, (
+        row("Sounds", "go_live", "Jouer un son lorsqu’un créateur démarre un direct", "sound", applies=NOW, choices=("live",),
+            tip="Joué au début d’une capture, pas lors du découpage ou d’une reconnexion."),
+        row("Sounds", "problems", "Signaler un problème nécessitant votre attention", "sound", applies=NOW, choices=("problem",),
+            tip="Erreur de capture, espace disque faible, disque déconnecté ou cookies expirés.\n"
+                "Un même problème ne déclenche un nouveau son qu’après 5 minutes."),
+        row("Sounds", "clip_saved", "Jouer un son à l’enregistrement d’un clip ou d’une capture d’écran", "sound", applies=NOW,
             choices=("clip",)),
-        row("Sounds", "quiet_while_locked", "Quiet while Windows is locked", "bool", applies=NOW),
+        row("Sounds", "quiet_while_locked", "Mode silencieux lorsque Windows est verrouillé", "bool", applies=NOW),
     )),
-    ("Fishtank login", False, (
-        row("Fishtank", "email", "Email", "text", "", width=28),
-        row("Fishtank", "password", "Password", "password", "", width=20,
-            tip="Encrypted in config.ini on Windows (DPAPI), plain elsewhere; never logged.\n"
-                "MSR_FISHTANK_PASSWORD, if set, wins and keeps it out of the file."),
+    ("Connexion Fishtank.live", False, (
+        row("Fishtank", "email", "Adresse e-mail", "text", "", width=28),
+        row("Fishtank", "password", "Mot de passe", "password", "", width=20,
+            tip="Chiffré dans config.ini sous Windows (DPAPI), stocké en clair ailleurs ; jamais inscrit dans les journaux.\n"
+                "Si MSR_FISHTANK_PASSWORD est défini, il est prioritaire et le mot de passe n’est pas écrit dans le fichier."),
     )),
-    ("Other", False, (
-        row("Library", "extra_dirs", "Extra Library folders", "dirlist", "scan only, ; separated",
-            "Videos are matched to a site and channel (sidecar, then folder names). Never cleaned up. "
-            "The Library tab can add and remove these too.", applies=NOW, width=34),
-        row("Health", "check_minutes", "Health check every (min)", hint="0 = off",
-            tip="Free space, recordings that stopped growing, sites whose checks all keep failing.\n"
-                "Reads the status table only: no extra network, check rates unchanged.", applies=NOW),
-        row("Control", "enabled", "Agent control (msr_ctl)", "bool", applies=RESTART,
-            tip="Local control server + status file used by msr_ctl and agents."),
-        row("Advanced", "ffmpeg_path", "ffmpeg", "ffmpeg", "", "Program name on PATH or a full path.",
+    ("Autres", False, (
+        row("Library", "extra_dirs", "Dossiers supplémentaires de la bibliothèque", "dirlist", "analyse seule, séparés par ;",
+            "Les vidéos sont associées à une plateforme et à un créateur (métadonnées, puis noms des dossiers). Elles ne sont jamais nettoyées. "
+            "Vous pouvez aussi les ajouter ou les retirer dans l’onglet Bibliothèque.", applies=NOW, width=34),
+        row("Health", "check_minutes", "Vérifier l’état toutes les (min)", hint="0 = désactivé",
+            tip="Espace libre, captures dont les fichiers ne grossissent plus, plateformes dont toutes les vérifications échouent.\n"
+                "Consulte uniquement le tableau d’état : aucun trafic réseau supplémentaire, fréquence inchangée.", applies=NOW),
+        row("Control", "enabled", "Contrôle automatisé (msr_ctl)", "bool", applies=RESTART,
+            tip="Serveur de contrôle local et fichier d’état utilisés par msr_ctl et les outils automatisés."),
+        row("Advanced", "ffmpeg_path", "ffmpeg", "ffmpeg", "", "Nom du programme présent dans PATH ou chemin complet.",
             applies=RESTART, width=28),
     )),
-    ("Advanced timing", True, (
-        row("Timeouts", "reconnect_grace_minutes", "Fast re-checks after a drop (min)",
-            hint="15 s checks; 0 = off"),
-        row("Timeouts", "reconnect_extended_minutes", "Then 30 s checks for (min)", hint="0 = off"),
-        row("Timeouts", "error_backoff_max_minutes", "Longest wait after errors (min)",
-            hint="0 = retry without waiting (not advised)"),
-        row("Timeouts", "poll_jitter_percent", "Check-time jitter (%)", hint="0\u2013100, 0 = exact",
-            tip="Random spread so channels are not all checked in the same second."),
+    ("Délais avancés", True, (
+        row("Timeouts", "reconnect_grace_minutes", "Vérifications rapprochées après une coupure (min)",
+            hint="vérifications toutes les 15 s ; 0 = désactivé"),
+        row("Timeouts", "reconnect_extended_minutes", "Puis vérifications toutes les 30 s pendant (min)", hint="0 = désactivé"),
+        row("Timeouts", "error_backoff_max_minutes", "Attente maximale après des erreurs (min)",
+            hint="0 = réessayer sans attendre (déconseillé)"),
+        row("Timeouts", "poll_jitter_percent", "Variation aléatoire des vérifications (%)", hint="0\u2013100, 0 = exact",
+            tip="Décale aléatoirement les vérifications pour éviter de contrôler toutes les chaînes à la même seconde."),
     )),
 )
 
@@ -162,7 +162,7 @@ def preview_name(pattern):
     from msr.util import build_filename
     pattern = (pattern or "").strip()
     if not pattern:
-        return "(empty - {username}_{timestamp} is used)"
+        return "(vide — {username}_{timestamp} sera utilisé)"
     return build_filename(pattern, "channel", "twitch", "Stream title") + ".mp4"
 
 
@@ -240,18 +240,18 @@ class OptionsPanel:
     # -- building --
 
     def _build_twitch(self, t):
-        tw = ttk.LabelFrame(self.body, text=" Twitch instant alerts ", padding=(8, 4))
+        tw = ttk.LabelFrame(self.body, text=" Alertes instantanées Twitch ", padding=(8, 4))
         tw.pack(fill=tk.X)
         r = ttk.Frame(tw)
         r.pack(fill=tk.X)
         self.push_var = tk.BooleanVar(value=bool(self.config.getboolean("Twitch", "push_enabled", False)))
-        self.push_cb = ttk.Checkbutton(r, text="Use instant alerts", variable=self.push_var, command=self._toggle_push)
+        self.push_cb = ttk.Checkbutton(r, text="Activer les alertes instantanées", variable=self.push_var, command=self._toggle_push)
         self.push_cb.pack(side=tk.LEFT)
-        self.connect_btn = ttk.Button(r, text="Connect Twitch", command=self.connect)
+        self.connect_btn = ttk.Button(r, text="Connecter Twitch", command=self.connect)
         self.connect_btn.pack(side=tk.LEFT, padx=(10, 4))
-        self.disconnect_btn = ttk.Button(r, text="Disconnect", command=self.disconnect)
+        self.disconnect_btn = ttk.Button(r, text="Déconnecter", command=self.disconnect)
         self.disconnect_btn.pack(side=tk.LEFT)
-        self.manage_btn = ttk.Button(r, text="Manage on Twitch", command=self.manage)
+        self.manage_btn = ttk.Button(r, text="Gérer sur Twitch", command=self.manage)
         self.manage_btn.pack(side=tk.LEFT, padx=(4, 0))
         self.tip(self.manage_btn, MANAGE_TIP)
         self.status = ttk.Label(r, text="")
@@ -265,19 +265,19 @@ class OptionsPanel:
                               foreground=t["link"])
         self.link.pack(side=tk.LEFT, padx=(4, 8))
         self.link.bind("<Button-1>", lambda _e: self.open_link())
-        ttk.Button(self.code_row, text="Copy code", command=self.copy_code).pack(side=tk.LEFT)
-        ttk.Button(self.code_row, text="Cancel", command=self.cancel).pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Button(self.code_row, text="Copier le code", command=self.copy_code).pack(side=tk.LEFT)
+        ttk.Button(self.code_row, text="Annuler", command=self.cancel).pack(side=tk.LEFT, padx=(4, 0))
 
     def _build_updates(self):
         """Shortcut to the Updates window (versions, one-click pip update with rollback)."""
-        box = ttk.LabelFrame(self.body, text=" Updates ", padding=(8, 4))
+        box = ttk.LabelFrame(self.body, text=" Mises à jour ", padding=(8, 4))
         box.pack(fill=tk.X, pady=(8, 0))
-        btn = ttk.Button(box, text="Updates\u2026", command=self.open_updates)
+        btn = ttk.Button(box, text="Mises à jour\u2026", command=self.open_updates)
         btn.pack(side=tk.LEFT)
-        ttk.Label(box, text="yt-dlp, streamlink, ffmpeg and packages; nothing updates on its own",
+        ttk.Label(box, text="yt-dlp, streamlink, ffmpeg et composants ; aucune mise à jour automatique",
                   style="Muted.TLabel").pack(side=tk.LEFT, padx=(10, 0))
-        self.tip(btn, "When a site stops recording, an old yt-dlp / streamlink is the usual cause.\n"
-                      "Updates are one click and the previous version is put back if it fails.")
+        self.tip(btn, "Quand une plateforme cesse de fonctionner, une ancienne version de yt-dlp ou streamlink en est souvent la cause.\n"
+                      "La mise à jour se fait en un clic ; en cas d’échec, la version précédente est restaurée.")
 
     def _build_group(self, title, collapsed, rows, t):
         holder = ttk.Frame(self.body)
@@ -302,7 +302,7 @@ class OptionsPanel:
             self.groups[title] = (box, None)
         for i, spec in enumerate(rows):
             self._build_row(box, i, spec, t)
-        if title == "Folders":
+        if title == "Dossiers":
             self.cookie_warn = ttk.Label(box, text="", foreground=t["warn"])
             self.cookie_warn.grid(row=len(rows), column=0, columnspan=3, sticky="w")
             self._cookie_warning()
@@ -321,7 +321,7 @@ class OptionsPanel:
                 hint.grid(row=i, column=2, sticky="w")
                 self.hints[(s, k)] = hint
             if kind == "sound":
-                ttk.Button(box, text="Test", width=6,
+                ttk.Button(box, text="Tester", width=6,
                            command=lambda ev=spec["choices"][0]: self.sound_test and self.sound_test(ev)
                            ).grid(row=i, column=1, sticky="w", padx=6, pady=1)
         else:
@@ -340,10 +340,10 @@ class OptionsPanel:
             if kind in ("dir", "file", "dirlist", "ffmpeg"):
                 ttk.Button(cell, text="\u2026", width=3, command=lambda: self._browse(spec, v)).pack(side=tk.LEFT, padx=(2, 0))
             if kind == "ffmpeg":
-                ttk.Button(cell, text="Check", command=lambda: self.check_ffmpeg(v.get())).pack(side=tk.LEFT, padx=(4, 0))
+                ttk.Button(cell, text="Vérifier", command=lambda: self.check_ffmpeg(v.get())).pack(side=tk.LEFT, padx=(4, 0))
             if kind == "password":
-                ttk.Button(cell, text="Clear", command=lambda: self._commit(s, k, "")).pack(side=tk.LEFT, padx=(4, 0))
-                ttk.Button(cell, text="Test login", command=self.test_fishtank).pack(side=tk.LEFT, padx=(4, 0))
+                ttk.Button(cell, text="Effacer", command=lambda: self._commit(s, k, "")).pack(side=tk.LEFT, padx=(4, 0))
+                ttk.Button(cell, text="Tester la connexion", command=self.test_fishtank).pack(side=tk.LEFT, padx=(4, 0))
             hint = ttk.Label(box, text=spec["hint"], foreground=t["muted"])
             hint.grid(row=i, column=2, sticky="w")
             self.hints[(s, k)] = hint
@@ -372,8 +372,8 @@ class OptionsPanel:
         fmt = (self.config.get("Clipping", "screenshot_format", "jpg") or "jpg").lower()
         h = self.hints.get(("Clipping", "screenshot_quality"))
         if h is not None:
-            h.configure(text={"png": "png ignores quality", "webp": "50\u2013100, higher is better"}
-                        .get(fmt, "2\u201331, lower is better"))
+            h.configure(text={"png": "png ne tient pas compte de la qualité", "webp": "50\u2013100, plus élevé = meilleure qualité"}
+                        .get(fmt, "2\u201331, plus bas = meilleure qualité"))
 
     def _password_hint(self):
         h = self.hints.get(("Fishtank", "password"))
@@ -381,12 +381,12 @@ class OptionsPanel:
             return
         from msr.config import FISHTANK_PASSWORD_ENV
         if (self.environ.get(FISHTANK_PASSWORD_ENV) or "").strip():
-            text = f"set by {FISHTANK_PASSWORD_ENV} (wins)"
+            text = f"défini par {FISHTANK_PASSWORD_ENV} (prioritaire)"
         else:
             from msr.config import secret_is_saved
-            text = {"saved": "saved - type to replace",
-                    "unreadable": "saved on another PC/user - type it again"}.get(
-                secret_is_saved(self.config, "Fishtank", "password"), "not set")
+            text = {"saved": "enregistré — saisir une nouvelle valeur pour remplacer",
+                    "unreadable": "enregistré pour un autre ordinateur ou utilisateur — saisir à nouveau"}.get(
+                secret_is_saved(self.config, "Fishtank", "password"), "non défini")
         h.configure(text=text)
 
     def _commit_field(self, spec, v):
@@ -452,11 +452,11 @@ class OptionsPanel:
             return
         from msr.control import masked
         spec = next((r for r in all_rows() if (r["section"], r["key"]) == (section, key)), None)
-        when = {NOW: "", RESTART: " (applies after restarting MSR)",
-                NEXT: " (applies from the next recording)"}.get(spec["applies"] if spec else NOW, "")
+        when = {NOW: "", RESTART: " (appliqué après le redémarrage de MSR)",
+                NEXT: " (appliqué à partir de la prochaine capture)"}.get(spec["applies"] if spec else NOW, "")
         label = spec["label"] if spec else f"{section}.{key}"
         shown = masked(key, saved)
-        self._say(f"Saved {label}" + (f" = {shown}" if shown not in ("", "<set>") else "") + when)
+        self._say(f"Enregistré : {label}" + (f" = {shown}" if shown not in ("", "<set>") else "") + when)
         self.reflect(section, key)
 
     def reflect(self, section, key):
@@ -503,12 +503,12 @@ class OptionsPanel:
     def check_ffmpeg(self, path):
         path = (path or "ffmpeg").strip() or "ffmpeg"
         h = self.hints[("Advanced", "ffmpeg_path")]
-        h.configure(text="checking\u2026", foreground=_themes.current()["muted"])
+        h.configure(text="vérification\u2026", foreground=_themes.current()["muted"])
 
         def done(res):
             t = _themes.current()
             ver = res[1] if res[0] == "ok" else None
-            h.configure(text=(f"ffmpeg {str(ver).split()[0]}" if ver else "does not run"),
+            h.configure(text=(f"ffmpeg {str(ver).split()[0]}" if ver else "ne démarre pas"),
                         foreground=t["ok"] if ver else t["error"])
         self._background(lambda: self.ffmpeg_check(path), done)
 
@@ -519,14 +519,14 @@ class OptionsPanel:
         password = typed or fishtank_password(self.config)
         h = self.hints[("Fishtank", "password")]
         if not email or not password:
-            h.configure(text="enter email and password first", foreground=_themes.current()["warn"])
+            h.configure(text="saisissez d’abord l’adresse e-mail et le mot de passe", foreground=_themes.current()["warn"])
             return
-        h.configure(text="testing\u2026", foreground=_themes.current()["muted"])
+        h.configure(text="test en cours\u2026", foreground=_themes.current()["muted"])
 
         def done(res):
             t = _themes.current()
             ok = res == ("ok", True)
-            h.configure(text="login OK" if ok else "login failed", foreground=t["ok"] if ok else t["error"])
+            h.configure(text="connexion réussie" if ok else "échec de la connexion", foreground=t["ok"] if ok else t["error"])
         self._background(lambda: self.fishtank_test(email, password), done)
 
     # -- Twitch --
@@ -545,20 +545,20 @@ class OptionsPanel:
         busy = bool(self.job and self.job.running())
         foreign = bool(self._foreign and self._foreign.running())
         if foreign:
-            text, color = "Sign-in already in progress (started by an agent)\u2026", t["info"]
+            text, color = "Connexion déjà en cours (démarrée par un outil automatisé)\u2026", t["info"]
             busy = True
         elif busy:
-            text, color = "Waiting for approval on twitch.tv\u2026", t["info"]
+            text, color = "En attente de l’autorisation sur twitch.tv\u2026", t["info"]
         elif state == "connected":
-            text, color = f"Connected as {login or '?'}", t["ok"]
+            text, color = f"Connecté en tant que {login or '?'}", t["ok"]
         elif state == "expired":
-            text, color = "Expired \u2013 connect again", t["warn"]
+            text, color = "Code expiré — reconnectez-vous", t["warn"]
         else:
-            text, color = "Not connected", t["muted"]
+            text, color = "Non connecté", t["muted"]
         self.state = state
         self.status.configure(text=text, foreground=color)
         self.connect_btn.configure(state=tk.DISABLED if busy else tk.NORMAL,
-                                   text="Reconnect" if state == "connected" else "Connect Twitch")
+                                   text="Reconnecter" if state == "connected" else "Connecter Twitch")
         self.disconnect_btn.configure(state=tk.NORMAL if state != "none" and not busy else tk.DISABLED)
         if not busy:
             self.code_row.pack_forget()
@@ -592,11 +592,11 @@ class OptionsPanel:
         if info.get("user_code") and info.get("user_code") != self._code:
             self._code = info["user_code"]
             self._uri = te.safe_verification_uri(info.get("verification_url"), self._code)
-            self.code_lbl.configure(text=f"Code {self._code} \u2013 open")
+            self.code_lbl.configure(text=f"Code {self._code} — ouvrir")
             self.link.configure(text=self._uri)
             self.code_row.pack(fill=tk.X, pady=(4, 0))
         if first:
-            self._say("A Twitch sign-in is already in progress; approve it or Cancel.")
+            self._say("Une connexion Twitch est déjà en cours ; autorisez-la ou annulez-la.")
         if job.running():
             self.refresh_status()
             self.frame.after(250, lambda: self._foreign is job and self._show_foreign(job))
@@ -608,16 +608,16 @@ class OptionsPanel:
     def disconnect(self):
         """Revoke + delete on a thread so a slow network never freezes the GUI."""
         self.disconnect_btn.configure(state=tk.DISABLED)
-        self._say("Disconnecting\u2026")
+        self._say("Déconnexion\u2026")
 
         def done(res):
             if res != ("ok", True):
                 logging.getLogger("msr.options").warning(
-                    "Twitch: could not revoke the token online; deleted it locally. "
-                    "Use Manage on Twitch to remove MSR's access.")
-                self._say("Disconnected locally (Twitch unreachable) \u2013 use Manage on Twitch to remove access.")
+                    "Twitch : impossible de révoquer le jeton en ligne ; il a été supprimé localement. "
+                    "Retirez l’accès de MSR depuis les paramètres Twitch.")
+                self._say("Déconnecté localement (Twitch inaccessible) — retirez l’accès dans les paramètres Twitch.")
             else:
-                self._say("Twitch disconnected; timed checks continue.")
+                self._say("Twitch déconnecté ; les vérifications périodiques continuent.")
             self.refresh_status()
             self.on_twitch_changed()
         self._background(lambda: tc.disconnect(self.data_dir, self.api), done)
@@ -633,7 +633,7 @@ class OptionsPanel:
         if self._code:
             self.frame.clipboard_clear()
             self.frame.clipboard_append(self._code)
-            self._say("Code copied.")
+            self._say("Code copié.")
 
     def _poll(self):
         job = self.job
@@ -654,22 +654,22 @@ class OptionsPanel:
         if kind == "code":
             self._code = ev[2]
             self._uri = te.safe_verification_uri(ev[1], self._code)
-            self.code_lbl.configure(text=f"Code {self._code} \u2013 open")
+            self.code_lbl.configure(text=f"Code {self._code} — ouvrir")
             self.link.configure(text=self._uri)
             self.code_row.pack(fill=tk.X, pady=(4, 0))
-            self._say(f"Approve in the browser within {int(ev[3]) // 60} min.")
+            self._say(f"Autorisez la connexion dans le navigateur dans les {int(ev[3]) // 60} min.")
         elif kind == "connected":
             self.job = None
             if not self.push_var.get():
                 self.push_var.set(True)
                 self._commit("Twitch", "push_enabled", "true")
-            self._say("Connected. Instant alerts start now for running sessions.")
+            self._say("Connecté. Les alertes instantanées sont activées pour les sessions en cours.")
             self.refresh_status("connected", ev[1])
             self.on_twitch_changed()
         else:
             self.job = None
-            self._say({"expired": "Code expired \u2013 click Connect Twitch again.",
-                       "cancelled": "Cancelled."}.get(kind, f"Twitch: {ev[-1]}"))
+            self._say({"expired": "Code expiré — cliquez à nouveau sur Connecter Twitch.",
+                       "cancelled": "Connexion annulée."}.get(kind, f"Twitch: {ev[-1]}"))
             self.refresh_status()
 
     def activate(self):

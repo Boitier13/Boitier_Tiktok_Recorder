@@ -129,7 +129,7 @@ class ScanTests(Tree):
         s = lib.scan_library(lib.Roots(str(Path(self.tmp.name) / "nope")))
         self.assertFalse(s.roots_found["Recordings folder"])
         self.assertEqual(s.files_seen, 0)
-        self.assertIn("not found: Recordings folder", " ".join(lib.summary_lines(s)))
+        self.assertIn("introuvable : Captures brutes", " ".join(lib.summary_lines(s)))
         s = lib.scan_library(lib.Roots(""))
         self.assertEqual(s.recordings_bytes, 0)
         self.assertEqual(lib.scan_library(lib.Roots(str(self.root))).recordings_files, 0)  # empty folder
@@ -147,7 +147,7 @@ class ScanTests(Tree):
             s = lib.scan_library(lib.Roots(str(self.root)))
         self.assertEqual(s.unreadable_dirs, 1)
         self.assertEqual(s.cat("processed")[1], 5)  # six finished files minus bob's one
-        self.assertIn("could not be read", " ".join(lib.summary_lines(s)))
+        self.assertIn("dossier(s) illisible(s)", " ".join(lib.summary_lines(s)))
 
     def test_symlinks_and_junctions_are_not_followed(self):
         self.build()
@@ -200,7 +200,7 @@ class ScanTests(Tree):
         s = lib.scan_library(lib.Roots(str(self.root)), cancel=cancel)
         self.assertTrue(s.cancelled)
         self.assertLess(s.files_seen, 400)
-        self.assertIn("partial", " ".join(lib.summary_lines(s)))
+        self.assertIn("partiels", " ".join(lib.summary_lines(s)))
 
     def test_progress_is_reported_and_ends_with_done(self):
         for i in range(50):
@@ -245,12 +245,12 @@ class SummaryTests(Tree):
     def test_headline_lines(self):
         s = self.build()
         text = "\n".join(lib.summary_lines(s))
-        self.assertIn("recordings in 8 files", text)
-        self.assertIn("By site: Kick", text)
-        self.assertIn("Biggest channels: alice (Kick)", text)
-        self.assertIn("Recordings from 2026-01-01 to 2026-04-02", text)
-        self.assertIn("waiting in PendingDeletion", text)
-        self.assertIn("clips and screenshots", text)
+        self.assertIn("vidéos dans 8 fichiers", text)
+        self.assertIn("Par plateforme : Kick", text)
+        self.assertIn("Créateurs avec le plus de vidéos : alice (Kick)", text)
+        self.assertIn("Vidéos du 2026-01-01 au 2026-04-02", text)
+        self.assertIn("en attente dans Éléments récupérables", text)
+        self.assertIn("clips et captures d’écran", text)
         self.assertNotIn(self.tmp.name, lib.summary_text(s))
 
     def test_fill_estimate_needs_real_history(self):
@@ -264,7 +264,7 @@ class SummaryTests(Tree):
         rate, days = lib.fill_estimate(s)
         self.assertAlmostEqual(rate, 10**9)
         self.assertAlmostEqual(days, 400)
-        self.assertIn("fills in about 400 days", "\n".join(lib.summary_lines(s)))
+        self.assertIn("plein dans environ 400 jours", "\n".join(lib.summary_lines(s)))
         s.disk = (10**12, 5 * 10**11, 10**15)
         self.assertIsNone(lib.fill_estimate(s))  # > 10 years is not a useful number
         s.disk = (10**12, 5 * 10**11, 4 * 10**11)
@@ -311,7 +311,7 @@ class HoursTests(Tree):
         self.assertAlmostEqual(alice.seconds, 10800)
         self.assertEqual(alice.timed, 2)
         probe.assert_not_called()
-        self.assertIn("length known for 3 of 6", "\n".join(lib.summary_lines(s)))
+        self.assertIn("durée connue pour 3 vidéos finalisées sur 6", "\n".join(lib.summary_lines(s)))
 
     def test_probe_fills_the_rest_rate_limited_and_cached(self):
         s = self.build()

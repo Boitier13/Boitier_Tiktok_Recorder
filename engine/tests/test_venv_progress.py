@@ -39,12 +39,12 @@ class ParseTests(unittest.TestCase):
     def test_pip_lines_become_status(self):
         p = venv.PipProgress(top_level=2)
         got = [p.feed(line) for line in PIP_LINES]
-        self.assertEqual(got[0], "Looking up package 1 of 2: yt-dlp")
-        self.assertEqual(got[1], "Downloading yt-dlp 2026.8.19 (175 kB)")
-        self.assertEqual(got[2], "Looking up package 2 of 2: streamlink")
-        self.assertEqual(got[3], "Using the cached download of streamlink")
-        self.assertEqual(got[4], "Looking up certifi (dependency, 3 packages so far)")
-        self.assertEqual(got[5], "Downloading certifi 2026.1.4 (163 kB)")
+        self.assertEqual(got[0], "Recherche du composant 1 sur 2 : yt-dlp")
+        self.assertEqual(got[1], "Téléchargement de yt-dlp 2026.8.19 (175 kB)")
+        self.assertEqual(got[2], "Recherche du composant 2 sur 2 : streamlink")
+        self.assertEqual(got[3], "Utilisation du téléchargement en cache de streamlink")
+        self.assertEqual(got[4], "Recherche de certifi (dépendance, 3 composants trouvés)")
+        self.assertEqual(got[5], "Téléchargement de certifi 2026.1.4 (163 kB)")
         self.assertTrue(got[6].startswith("Installing 3 packages"))
         self.assertEqual(p.total, 3)
         self.assertEqual(got[7], "Installed 3 packages")
@@ -110,21 +110,21 @@ class EnsureStreamingTests(unittest.TestCase):
         ok, msg = venv.ensure(self.root, progress=status.append, run=self.fake_venv, log=lines.append,
                               popen=lambda cmd, **kw: FakeProc(PIP_LINES))
         self.assertTrue(ok, msg)
-        self.assertIn("Looking up package 1 of 2: yt-dlp", status)
-        self.assertIn("Downloading certifi 2026.1.4 (163 kB)", status)
+        self.assertIn("Recherche du composant 1 sur 2 : yt-dlp", status)
+        self.assertIn("Téléchargement de certifi 2026.1.4 (163 kB)", status)
         self.assertEqual(status[-1], "Done. Starting Multi-Stream Recorder\u2026")
         self.assertIn(PIP_LINES[-1], lines)
         with open(venv.setup_log_path(self.root), encoding="utf-8") as fh:
             text = fh.read()
         self.assertIn(PIP_LINES[0], text)
-        self.assertIn("Setup finished.", text)
+        self.assertIn("Configuration terminée.", text)
 
     def test_failure_message_and_log_kept(self):
         bad = PIP_LINES[:2] + ["ERROR: Could not fetch URL https://pypi.org/simple/x/"]
         ok, msg = venv.ensure(self.root, run=self.fake_venv, log=lambda _l: None,
                               popen=lambda cmd, **kw: FakeProc(bad, rc=1))
         self.assertFalse(ok)
-        self.assertIn("Could not download packages", msg)
+        self.assertIn("Impossible de télécharger les composants", msg)
         with open(venv.setup_log_path(self.root), encoding="utf-8") as fh:
             self.assertIn("Could not fetch URL", fh.read())
 

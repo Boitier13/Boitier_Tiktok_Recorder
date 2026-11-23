@@ -470,6 +470,18 @@ def tiktok_stream_url_from_api(data, quality="best"):
                 stream_url = None
             if not isinstance(stream_url, str) or not stream_url.startswith("https://"):
                 continue
+            # TikTok may expose a separate FLV audio rendition with only_audio=1.
+            # This recorder saves video recordings; selecting that URL creates an
+            # audio-only TS and can leave nothing valid to publish after remux.
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(stream_url).query)
+            audio_only = any(
+                value.strip().lower() in {"1", "true", "yes"}
+                for key, values in query.items()
+                if key.lower() in {"only_audio", "audio_only"}
+                for value in values
+            )
+            if audio_only:
+                continue
             codec = str(sdk_params.get("VCodec") or sdk_params.get("v_codec") or default_codec).lower()
             codec = {"avc": "h264", "hevc": "h265"}.get(codec, codec)
             variants.append({"quality": str(quality_name).lower(), "codec": codec, "url": stream_url})
@@ -578,6 +590,7 @@ def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30, qualit
 
     last_err = None
     room_id = None
+    api_statuses = []
 
     # ── 1. api-live/user/room (works without a prior roomId) ────────────
     api_url = (
@@ -599,14 +612,13 @@ def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30, qualit
                 logger.info("TikTok API provided a direct FLV playback variant")
             else:
                 logger.info(
-                    "TikTok API confirmed LIVE but exposed no direct FLV variant; "
+                    "TikTok API confirmed LIVE but exposed no direct video FLV variant; "
                     "will use the Streamlink plugin fallback"
                 )
             return True, room_id, title, None, stream_url
         if api_statuses:
-            logger.info(f"TikTok api-live/user/room: explicit non-live status for @{handle}")
-            return False, room_id, title, None, None
-        if room_id:
+            logger.info(f"TikTok api-live/user/room: non-live status for @{handle}; cross-checking Webcast")
+        elif room_id:
             logger.info(
                 f"TikTok api-live/user/room: @{handle} status not live "
                 f"(roomId={room_id})"
@@ -618,6 +630,7 @@ def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30, qualit
         logger.info(f"TikTok webcast check: {redact_for_log(last_err)}")
 
     # ── 2. roomId from profile, then /live (24/7 rooms hide it on profile)
+    profile_fetch_failed = False
     for label, page_url in (
         ("profile", f"https://www.tiktok.com/@{handle}"),
         ("live page", f"https://www.tiktok.com/@{handle}/live"),
@@ -627,6 +640,7 @@ def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30, qualit
         try:
             html = _tiktok_http_get(page_url, opener, timeout, logger)
         except Exception as e:
+            profile_fetch_failed = True
             last_err = f"{label} fetch failed: {e}"
             logger.info(f"TikTok webcast check: {redact_for_log(last_err)}")
             continue
@@ -639,6 +653,9 @@ def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30, qualit
             logger.info(f"TikTok webcast check: {last_err} for @{handle}")
 
     if not room_id:
+        if api_statuses and not profile_fetch_failed:
+            logger.info(f"TikTok api-live/user/room explicitly reports @{handle} offline; no roomId found")
+            return False, None, None, None, None
         return False, None, None, last_err or "no roomId (profile, /live, api-live)", None
 
     # ── 3. Webcast room/info — US-TTP first, global fallback ────────────
@@ -658,19 +675,22 @@ def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30, qualit
         except (TypeError, ValueError):
             status_value = None
         if status_value is not None:
-            statuses.append(status_value)
+            statuses.append((host, status_value))
         logger.info(f"TikTok webcast check ({host}): status={status}")
         if status_value == 2:
             title_data = room_data.get("title") or ""
             logger.info(f"TikTok webcast check: LIVE via {host} (status=2)")
             return True, room_id, title_data or None, None, None
 
-    if statuses:
-        # A valid non-live status from at least one endpoint is explicit offline;
-        # malformed or unreachable endpoints alone remain inconclusive.
-        detail = ", ".join(str(status) for status in statuses)
-        logger.info(f"TikTok webcast reports non-live room status ({detail})")
+    if len(statuses) == 2:
+        # Both the regional and global Webcast endpoints explicitly report
+        # non-live. A single endpoint can be stale while a 24/7 room is live.
+        detail = ", ".join(f"{host}={status}" for host, status in statuses)
+        logger.info(f"TikTok webcast endpoints report non-live room status ({detail})")
         return False, room_id, None, None, None
+    if statuses:
+        detail = ", ".join(f"{host}={status}" for host, status in statuses)
+        return False, room_id, None, f"webcast status is inconclusive ({detail}; second endpoint unavailable)", None
     detail = last_err or "no webcast response"
     return False, room_id, None, f"webcast did not confirm live ({detail})", None
 

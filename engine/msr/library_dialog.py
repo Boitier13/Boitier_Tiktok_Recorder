@@ -18,13 +18,13 @@ from msr import charts, dialogs
 from msr import library as lib
 from msr import library_actions as act
 
-ROW_CAP = 3000   # rows shown in the list (the totals always count everything ticked)
+ROW_CAP = 3000   # rows shown in the list (the totals always count everything cochés)
 KIND_GROUPS = (  # (key, label, kinds)
-    ("recordings", "Finished recordings", ("recording",)),
-    ("raw", "Raw / partial files", ("raw", "partial")),
+    ("recordings", "Vidéos finalisées", ("recording",)),
+    ("raw", "Fichiers bruts ou incomplets", ("raw", "partial")),
     ("clips", "Clips", ("clip",)),
-    ("shots", "Screenshots", ("screenshot",)),
-    ("pending", "Already in PendingDeletion", ("media",)),
+    ("shots", "Captures d’écran", ("screenshot",)),
+    ("pending", "Dans les éléments récupérables", ("media",)),
 )
 DEFAULT_KINDS = {"recordings", "raw"}
 # Same width as the intro and the summary. The type checks used to share one
@@ -32,19 +32,19 @@ DEFAULT_KINDS = {"recordings", "raw"}
 # and Noto Sans, about 1125 px on Python 3.14 + Tk 9, past the 1100 px Linux
 # budget. Wrapping here starts a new row instead of widening the dialog.
 FILTER_LINE = 760
-MODES = (("all", "Everything ticked above"), ("older", "Older than N days"), ("newest_files", "All but the newest N files"),
-         ("newest_gb", "All but the newest N GB"), ("range", "Recorded between two dates"))
+MODES = (("all", "Tous les éléments cochés ci-dessus"), ("older", "Plus anciens que N jours"), ("newest_files", "Tous sauf les N fichiers les plus récents"),
+         ("newest_gb", "Tous sauf les N Go les plus récents"), ("range", "Enregistrés entre deux dates"))
 METHOD_TEXT = {
-    act.ACTION_PENDING: ("Move to PendingDeletion (recommended)",
-                         "Reversible. MSR deletes the files itself after the PendingDeletion delay "
-                         "(Cleanup settings), but only when MSR starts. Disk space is freed then, not now."),
-    act.ACTION_TRASH: ("Move to the Recycle Bin",
-                       "Windows only. Frees space when the bin is emptied. Offered only when Windows reports "
-                       "a Recycle Bin big enough: it deletes for good what does not fit."),
-    act.ACTION_PERMANENT: ("Delete permanently", "Gone for good, space freed now. This cannot be undone."),
-    act.ACTION_RESTORE: ("Restore to the original place",
-                         "Moves the files back to where they were (or Processed / Recorded if unknown). "
-                         "Nothing is overwritten."),
+    act.ACTION_PENDING: ("Déplacer vers les éléments récupérables (recommandé)",
+                         "Réversible. MSR supprime les fichiers après le délai de conservation "
+                         "(réglages de nettoyage), uniquement au démarrage. L’espace disque sera libéré à ce moment-là."),
+    act.ACTION_TRASH: ("Déplacer vers la Corbeille",
+                       "Windows uniquement. Libère de l’espace lorsque la Corbeille est vidée. Proposé seulement si Windows indique "
+                       "une capacité suffisante ; les fichiers qui ne rentrent pas seront supprimés définitivement."),
+    act.ACTION_PERMANENT: ("Supprimer définitivement", "Suppression définitive et libération immédiate de l’espace. Cette action est irréversible."),
+    act.ACTION_RESTORE: ("Restaurer à l’emplacement d’origine",
+                         "Replace les fichiers à leur emplacement d’origine (ou dans les dossiers finalisés / bruts si inconnu). "
+                         "Aucun fichier n’est écrasé."),
 }
 
 
@@ -136,7 +136,7 @@ class ActionDialog:
         self.method_buttons: dict[str, ttk.Radiobutton] = {}
         self.method_notes: dict[str, ttk.Label] = {}
         if not self.dirs_mode:
-            box = ttk.LabelFrame(frame, text="What to do", padding=6)
+            box = ttk.LabelFrame(frame, text="Action à effectuer", padding=6)
             box.pack(fill="x", pady=(8, 0))
             for method in self.methods:
                 label, desc = METHOD_TEXT[method]
@@ -147,13 +147,13 @@ class ActionDialog:
                 note_label.pack(anchor="w", padx=(22, 0), pady=(0, 3))
                 self.method_buttons[method], self.method_notes[method] = radio, note_label
 
-        box = ttk.LabelFrame(frame, text="Preview: nothing has been changed yet. Untick what you want to keep",
+        box = ttk.LabelFrame(frame, text="Aperçu : aucun changement effectué. Décochez les éléments à conserver",
                              padding=6)
         box.pack(fill="both", expand=True, pady=(8, 0))
         cols = ("check", "name", "channel", "size", "date", "kind")
         self.tree = ttk.Treeview(box, columns=cols, show="headings", height=7, selectmode="extended")
-        for cid, text, width, anchor in (("check", "", 28, "center"), ("name", "File", 270, "w"),
-                                         ("channel", "Channel", 130, "w"), ("size", "Size", 80, "e"),
+        for cid, text, width, anchor in (("check", "", 28, "center"), ("name", "Fichier", 270, "w"),
+                                         ("channel", "Créateur", 130, "w"), ("size", "Taille", 80, "e"),
                                          ("date", "Date", 85, "w"), ("kind", "Type", 100, "w")):
             self.tree.heading(cid, text=text)
             self.tree.column(cid, width=width, anchor=anchor, stretch=(cid == "name"))
@@ -166,8 +166,8 @@ class ActionDialog:
         self.tree.bind("<Control-a>", lambda _e: (self.check_all(), "break")[1])
         side = ttk.Frame(frame)
         side.pack(fill="x", pady=(4, 0))
-        ttk.Button(side, text="Tick all", command=self.check_all).pack(side="left")
-        ttk.Button(side, text="Untick all", command=self.check_none).pack(side="left", padx=(6, 0))
+        ttk.Button(side, text="Tout cocher", command=self.check_all).pack(side="left")
+        ttk.Button(side, text="Tout décocher", command=self.check_none).pack(side="left", padx=(6, 0))
         self.count_label = ttk.Label(side, text="")
         self.count_label.pack(side="left", padx=(12, 0))
 
@@ -184,7 +184,7 @@ class ActionDialog:
         self.confirm_var.trace_add("write", lambda *_: self._sync_button())
         row = ttk.Frame(frame)
         row.pack(fill="x", pady=(12, 0))
-        self.cancel_btn = ttk.Button(row, text="Cancel", command=self.win.destroy)
+        self.cancel_btn = ttk.Button(row, text="Annuler", command=self.win.destroy)
         self.cancel_btn.pack(side="right")
         self.go_btn = ttk.Button(row, text="", command=self.confirm)
         self.go_btn.pack(side="right", padx=(0, 6))
@@ -205,7 +205,7 @@ class ActionDialog:
 
     # ---------------------------------------------------------------- scope (filters)
     def _build_filters(self, frame) -> None:
-        box = ttk.LabelFrame(frame, text="What to include", padding=6)
+        box = ttk.LabelFrame(frame, text="Éléments à inclure", padding=6)
         box.pack(fill="x", pady=(8, 0))
         self.kinds_row = ttk.Frame(box)
         self.kinds_row.pack(fill="x")
@@ -320,7 +320,7 @@ class ActionDialog:
         name = rec.channel if rec.kind == "folder" else os.path.basename(rec.path)
         return [mark, name, "" if rec.kind == "folder" else f"{rec.platform}/{rec.channel}",
                 "" if rec.kind == "folder" else lib.fmt_size(rec.size), day,
-                act.KIND_LABELS.get(rec.kind, "Empty folder")]
+                act.KIND_LABELS.get(rec.kind, "Dossier vide")]
 
     def _toggle(self, iid: str) -> None:
         rec = self.rows.get(iid)
@@ -392,9 +392,9 @@ class ActionDialog:
                 blocked = self.mgr.recycle_problem(plan) if plan.ok else self.mgr.recycle_problem(None)
                 radio.state(["disabled"] if blocked else ["!disabled"])
                 self.method_notes[key].configure(text=METHOD_TEXT[key][1] + (f"\n\u26a0 {blocked}" if blocked else ""))
-        more = f" (list shows the first {ROW_CAP:,})" if getattr(self, "_more", 0) else ""
-        self.count_label.configure(text=f"{len(self.checked):,} of {len(self.listed()):,} ticked{more}")
-        lines = plan.summary_lines() if plan.ok else ["Nothing is ticked, or everything ticked is refused."]
+        more = f" (la liste affiche les {ROW_CAP:,})" if getattr(self, "_more", 0) else ""
+        self.count_label.configure(text=f"{len(self.checked):,} sur {len(self.listed()):,} cochés{more}")
+        lines = plan.summary_lines() if plan.ok else ["Aucun élément n’est coché ou tous les éléments cochés sont refusés."]
         self.summary.configure(text="\n".join(lines))
         warns = []
         for label, why in plan.blocked.items():
@@ -406,10 +406,10 @@ class ActionDialog:
             warns.append(f"{len(plan.skipped):,} file(s) will be left alone: "
                          + "; ".join(f"{n}\u00d7 {why}" for why, n in list(reasons.items())[:3]))
         if not self.mgr.log_ok():
-            warns.append("MSR cannot write its action log in the data folder, so it will not change files.")
+            warns.append("MSR ne peut pas écrire son journal d’actions dans le dossier de données ; aucun fichier ne sera modifié.")
         self.warning.configure(text="\n".join(warns))
         if method == act.ACTION_PERMANENT and not self.dirs_mode:
-            self.confirm_label.configure(text=f"Type  {plan.confirm_word}  to confirm:")
+            self.confirm_label.configure(text=f"Saisissez  {plan.confirm_word}  pour confirmer :")
             if not self.confirm_row.winfo_ismapped():
                 self.confirm_row.pack(anchor="w", pady=(6, 0), before=self.go_btn.master)
         else:
@@ -420,11 +420,11 @@ class ActionDialog:
         plan = self.plan
         method = self.method_var.get()
         if self.dirs_mode:
-            text = f"Remove {plan.folders if plan else 0} empty folder(s)"
+            text = f"Supprimer {plan.folders if plan else 0} dossier(s) vide(s)"
         else:
-            verb = {act.ACTION_PENDING: "Move {n} file(s) to PendingDeletion", act.ACTION_TRASH: "Recycle {n} file(s)",
-                    act.ACTION_PERMANENT: "Delete {n} file(s) permanently",
-                    act.ACTION_RESTORE: "Restore {n} file(s)"}[method]
+            verb = {act.ACTION_PENDING: "Déplacer {n} fichier(s) vers les éléments récupérables", act.ACTION_TRASH: "Déplacer {n} fichier(s) vers la Corbeille",
+                    act.ACTION_PERMANENT: "Supprimer définitivement {n} fichier(s)",
+                    act.ACTION_RESTORE: "Restaurer {n} fichier(s)"}[method]
             text = verb.format(n=f"{plan.files:,}" if plan else 0)
         self.go_btn.configure(text=text, width=max(14, len(text) + 2))
         self.go_btn.state(["!disabled"] if self.allowed() else ["disabled"])

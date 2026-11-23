@@ -5,10 +5,39 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from prototype.btl_vertical_host import _capture_tool_presence, _capture_tool_version
+from prototype.btl_vertical_host import (
+    _capture_tool_presence,
+    _capture_tool_version,
+    _seed_engine_tool_presence,
+)
 
 
 class CaptureToolPreflightTests(unittest.TestCase):
+    def test_startup_cache_is_seeded_from_presence_without_launching_tools(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            commands = {}
+            for name in ("yt-dlp", "streamlink", "ffmpeg", "ffprobe"):
+                path = Path(tmp) / f"{name}.exe"
+                path.touch()
+                commands[name] = str(path)
+            commands["ffprobe"] = str(Path(tmp) / "missing-ffprobe.exe")
+            env = {}
+            with patch("prototype.btl_vertical_host.shutil.which", return_value=None):
+                with patch("prototype.btl_vertical_host.subprocess.run",
+                           side_effect=AssertionError("must not spawn")):
+                    self.assertTrue(_seed_engine_tool_presence(commands, environ=env))
+
+        self.assertIn('"yt-dlp": "present"', env["MSR_TOOL_VERSIONS"])
+        self.assertIn('"ffprobe": null', env["MSR_TOOL_VERSIONS"])
+        self.assertIn('"deno": null', env["MSR_TOOL_VERSIONS"])
+
+    def test_valid_startup_cache_is_preserved(self):
+        env = {"MSR_TOOL_VERSIONS": '{"yt-dlp":"cached","streamlink":null,"ffmpeg":"cached"}'}
+        with patch("prototype.btl_vertical_host._capture_tool_presence", side_effect=AssertionError("must not rescan")):
+            self.assertFalse(_seed_engine_tool_presence({}, environ=env))
+        self.assertEqual(env["MSR_TOOL_VERSIONS"],
+                         '{"yt-dlp":"cached","streamlink":null,"ffmpeg":"cached"}')
+
     def test_quick_presence_gate_does_not_launch_tools(self):
         with tempfile.TemporaryDirectory() as tmp:
             commands = {}

@@ -51,7 +51,7 @@ class TestDpapi(TempData):
             json.dump({"v": 2, "dpapi": "bm90LWEtcmVhbC1ibG9i"}, f)
         with self.assertLogs(level="INFO") as cm:
             self.assertIsNone(te.load_token(self.d))
-        self.assertIn("Connect Twitch", "".join(cm.output))
+        self.assertIn("Connecter Twitch", "".join(cm.output))
         self.assertEqual(tc.status_of(self.d, "cid"), ("none", None))
 
 
@@ -145,7 +145,7 @@ class TestCookieWarningPanel(unittest.TestCase):
             cfg.v[(s, k)] = v
             return v
         p = op.OptionsPanel(root, cfg, ".", apply, api=FakeApi(), opener=lambda u: None)
-        self.assertIn("synced or shared", p.cookie_warn.cget("text"))
+        self.assertIn("partagé ou synchronisé", p.cookie_warn.cget("text"))
         p._commit("Paths", "cookies_file", r"E:\streams\cookies.txt")
         self.assertEqual(p.cookie_warn.cget("text"), "")
 

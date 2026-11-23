@@ -263,11 +263,11 @@ def update_error_path(target_dir=None):
 # ------------------------------------------------------------------ what "Update" should do
 
 # Shown in the Updates dialog Source / note column, and as the restart prompt title.
-GIT_NOTE = "git checkout: updates with git pull"
-RESTART_TITLE = "Restart to finish updating"
-ZIP_NOTE = "Installed by the app's own updater (the banner / Update in the window)."
-BUSY_MESSAGE = "An update is already in progress."
-NO_RELEASE_MESSAGE = "No newer version found."
+GIT_NOTE = "Dépôt Git : mises à jour avec git pull"
+RESTART_TITLE = "Redémarrer pour terminer la mise à jour"
+ZIP_NOTE = "Installé par le mécanisme de mise à jour intégré à l’application."
+BUSY_MESSAGE = "Une mise à jour est déjà en cours."
+NO_RELEASE_MESSAGE = "Aucune version plus récente disponible."
 GIT_PULL_COMMAND = "git pull --ff-only"
 
 _VERSION_RE = re.compile(r'(?m)^__version__\s*=\s*["\']([^"\']+)["\']')
@@ -325,9 +325,9 @@ def banner_text(running_version, target_dir, tag=None):
     the click restarts instead of downloading.
     """
     if disk_is_newer(target_dir, running_version):
-        return "  Restart to finish updating — click to restart"
+        return "  Redémarrer pour terminer la mise à jour — cliquer pour redémarrer"
     if tag:
-        return f"  v{tag} available — click to install"
+        return f"  Version {tag} disponible — cliquer pour l’installer"
     return None
 
 
@@ -441,7 +441,7 @@ def git_pull_ff_only(target_dir, run=None):
     except subprocess.TimeoutExpired:
         return False, "git pull --ff-only took too long and was stopped."
     except (OSError, subprocess.SubprocessError) as exc:
-        return False, f"Could not run git pull --ff-only: {exc}"
+        return False, f"Impossible d’exécuter git pull --ff-only : {exc}"
     text = "\n".join(part.strip() for part in ((result.stdout or ""), (result.stderr or "")) if part.strip())
     if result.returncode == 0:
         return True, text or "Updated."
@@ -459,19 +459,19 @@ def _git_why(info):
         return text if text.endswith(".") else text + "."
     parts = []
     if not info.get("clean"):
-        parts.append("The working tree has local changes.")
+        parts.append("Le dépôt contient des modifications locales.")
     if info.get("detached"):
-        parts.append("HEAD is detached, so there is no branch to fast-forward.")
+        parts.append("HEAD est détachée : aucune branche ne peut être avancée automatiquement.")
     elif not info.get("tracks_origin"):
         if info.get("upstream"):
-            parts.append(f"This branch tracks {info['upstream']}, not origin.")
+            parts.append(f"Cette branche suit {info['upstream']} et non origin.")
         else:
-            parts.append("This branch does not track origin.")
-    return " ".join(parts) or "This branch cannot be fast-forwarded from origin."
+            parts.append("Cette branche ne suit pas origin.")
+    return " ".join(parts) or "Cette branche ne peut pas être avancée automatiquement depuis origin."
 
 
 def _recording_line(recording):
-    return "\n\nActive recordings will be stopped first." if recording else ""
+    return "\n\nLes captures en cours seront d’abord arrêtées." if recording else ""
 
 
 def _empty_git():
@@ -496,7 +496,7 @@ def plan_app_update(target_dir, running_version, release=None, *, recording=Fals
     release = _as_release(release)
     on_disk = disk_version(target_dir)
     base = {
-        "action": "blocked", "title": "Cannot update", "message": NO_RELEASE_MESSAGE,
+        "action": "blocked", "title": "Impossible de mettre à jour", "message": NO_RELEASE_MESSAGE,
         "confirm": False, "tag": (release or {}).get("tag"), "url": (release or {}).get("url"),
         "zipball": None, "code": "not_found", "command": GIT_PULL_COMMAND,
     }
@@ -506,8 +506,8 @@ def plan_app_update(target_dir, running_version, release=None, *, recording=Fals
             action="restart", title=RESTART_TITLE, confirm=True, code="",
             tag=on_disk, zipball=None,
             message=(
-                f"The files on disk are already v{on_disk} (this copy is still v{running_version}).\n\n"
-                "Restart to finish updating?"
+                f"Les fichiers présents sur le disque sont déjà en version {on_disk} (cette instance utilise encore la version {running_version}).\n\n"
+                "Redémarrer pour terminer la mise à jour ?"
                 f"{_recording_line(recording)}"
             ),
         )
@@ -524,26 +524,26 @@ def plan_app_update(target_dir, running_version, release=None, *, recording=Fals
         why = _git_why(git_info)
         command = git_command(target_dir)
         if git_info.get("clean") and git_info.get("tracks_origin") and not git_info.get("error"):
-            branch = git_info.get("branch") or "This branch"
+            branch = git_info.get("branch") or "Cette branche"
             upstream = git_info.get("upstream") or "origin"
             base.update(
-                action="git_pull", title="Update with git", confirm=True, code="",
+                action="git_pull", title="Mettre à jour avec Git", confirm=True, code="",
                 command=GIT_PULL_COMMAND,
                 message=(
-                    "This copy is a git checkout, so MSR will not overwrite it with a release zip.\n\n"
-                    f"{branch} tracks {upstream}. v{tag} is the latest release. The working tree is clean.\n"
-                    f"Run {GIT_PULL_COMMAND} and restart Multi-Stream Recorder?"
+                    "Cette copie est un dépôt Git ; MSR ne la remplacera pas par une archive de version.\n\n"
+                    f"La branche {branch} suit {upstream}. La version {tag} est la plus récente. Le dépôt ne contient aucune modification locale.\n"
+                    f"Exécuter {GIT_PULL_COMMAND} et redémarrer Multi-Stream Recorder ?"
                     f"{_recording_line(recording)}"
                 ),
             )
             return base
         base.update(
-            action="git_manual", title="Git checkout", confirm=False, code="unsupported",
+            action="git_manual", title="Dépôt Git", confirm=False, code="unsupported",
             command=GIT_PULL_COMMAND,
             message=(
-                "This copy is a git checkout, so MSR will not overwrite it with a release zip.\n\n"
+                "Cette copie est un dépôt Git ; MSR ne la remplacera pas par une archive de version.\n\n"
                 f"{why}\n\n"
-                f"Update it yourself with {GIT_PULL_COMMAND}, then restart:\n"
+                f"Mettez-le à jour manuellement avec {GIT_PULL_COMMAND}, puis redémarrez :\n"
                 f"{command}"
             ),
         )
@@ -558,14 +558,14 @@ def plan_app_update(target_dir, running_version, release=None, *, recording=Fals
     except ValueError as exc:
         base.update(message=str(exc), code="invalid")
         return base
-    extra = "Active recordings will be stopped first.\n\n" if recording else ""
+    extra = "Les captures en cours seront d’abord arrêtées.\n\n" if recording else ""
     base.update(
-        action="zip", title="Install update", confirm=True, code="", zipball=zipball,
+        action="zip", title="Installer la mise à jour", confirm=True, code="", zipball=zipball,
         message=(
-            f"Download v{tag} from GitHub and restart Multi-Stream Recorder?\n\n"
+            f"Télécharger la version {tag} depuis GitHub et redémarrer Multi-Stream Recorder ?\n\n"
             f"{extra}"
-            "config.ini, channels.json, cookies.txt, and recordings stay.\n"
-            "The app will quit and reopen on the new version."
+            "config.ini, channels.json, cookies.txt et les captures seront conservés.\n"
+            "L’application va se fermer puis redémarrer dans la nouvelle version."
         ),
     )
     return base

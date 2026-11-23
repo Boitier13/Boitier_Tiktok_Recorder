@@ -22,6 +22,7 @@ sys.path.insert(0, ROOT)
 import msr.control as control  # noqa: E402
 from msr import agent_status  # noqa: E402
 from msr.config import Config  # noqa: E402
+from msr.util import PROCESSED_FOLDER, RECORDED_FOLDER, PENDING_DELETION_FOLDER  # noqa: E402
 from tests.test_control import (SECRET_EMAIL, SECRET_PASSWORD, Headless, in_dir,  # noqa: E402
                                 make_data, msr_ctl, roster)
 
@@ -64,11 +65,11 @@ class TrackerTests(unittest.TestCase):
         self.t.seen("knut", {"status": "Checking..."})
         self.t.seen("knut", {"status": "Recording", "time": "0:01"})
         self.t.seen("knut", {"status": "Recording", "time": "0:02"})  # same session: one live event
-        mp4 = touch(os.path.join(self.streams, "Processed", "kick", "knut", "knut_1.mp4"), 2048, duration=61.5)
+        mp4 = touch(os.path.join(self.streams, PROCESSED_FOLDER, "kick", "knut", "knut_1.mp4"), 2048, duration=61.5)
         self.t.seen("knut", {"status": "Completed", "detail": "2 KB"})
         self.t.seen("knut", {"status": "Completed", "detail": "2 KB"})  # repeated: not a 2nd recording
         self.t.seen("knut", {"status": "Error", "detail": "worker crashed, restart in 5s"})
-        raw = touch(os.path.join(self.streams, "Recorded", "kick", "knut", "knut_2.ts"), 99)
+        raw = touch(os.path.join(self.streams, RECORDED_FOLDER, "kick", "knut", "knut_2.ts"), 99)
         self.t.seen("knut", {"status": "Remux failed", "detail": "ffmpeg exit 1"})
         kinds = [e["event"] for e in self.t.events()]
         self.assertEqual(kinds, ["live", "recording", "finished", "error", "error", "finished"])
@@ -157,17 +158,17 @@ class OfflineAgentTests(unittest.TestCase):
             self.assertNotIn(secret, text)
 
     def test_recordings_since_channel_and_pending(self):
-        new = touch(os.path.join(self.streams, "Processed", "kick", "knut", "new.mp4"), 3000, duration=12.0)
-        touch(os.path.join(self.streams, "Processed", "kick", "knut", "old.mp4"), 3000, age_days=10)
-        touch(os.path.join(self.streams, "Processed", "twitch", "two", "t.mp4"), 3000)
+        new = touch(os.path.join(self.streams, PROCESSED_FOLDER, "kick", "knut", "new.mp4"), 3000, duration=12.0)
+        touch(os.path.join(self.streams, PROCESSED_FOLDER, "kick", "knut", "old.mp4"), 3000, age_days=10)
+        touch(os.path.join(self.streams, PROCESSED_FOLDER, "twitch", "two", "t.mp4"), 3000)
         res = self.ok("recordings", {"since": "2d", "channel": "knut"})
         self.assertEqual([r["path"] for r in res["recordings"]], [new])
         self.assertEqual(res["recordings"][0]["duration_seconds"], 12.0)
         self.assertEqual(self.ok("recordings")["count"], 3)
         self.assertEqual(self.c.handle("recordings", {"since": "soon"})["code"], "bad_request")
 
-        raw = touch(os.path.join(self.streams, "Recorded", "kick", "knut", "left.ts"), 500)
-        gone = touch(os.path.join(self.streams, "PendingDeletion", "kick", "knut", "gone.mp4"), 700)
+        raw = touch(os.path.join(self.streams, RECORDED_FOLDER, "kick", "knut", "left.ts"), 500)
+        gone = touch(os.path.join(self.streams, PENDING_DELETION_FOLDER, "kick", "knut", "gone.mp4"), 700)
         pend = self.ok("recordings_pending")
         self.assertEqual([r["path"] for r in pend["raw_waiting"]], [raw])
         self.assertFalse(pend["raw_waiting"][0]["recording_now"])
@@ -189,8 +190,8 @@ class OfflineAgentTests(unittest.TestCase):
         self.assertEqual(rows["twitch:two"]["url"], "https://twitch.tv/two")
 
     def test_library_suggest_log_and_restore_last(self):
-        old = touch(os.path.join(self.streams, "Processed", "kick", "knut", "a.mp4"), 4000, age_days=200)
-        touch(os.path.join(self.streams, "Processed", "kick", "knut", "b.mp4"), 4000)
+        old = touch(os.path.join(self.streams, PROCESSED_FOLDER, "kick", "knut", "a.mp4"), 4000, age_days=200)
+        touch(os.path.join(self.streams, PROCESSED_FOLDER, "kick", "knut", "b.mp4"), 4000)
         sug = {s["key"]: s for s in self.ok("library_suggest", {"older_days": 100, "free_gb": 1e-6})["suggestions"]}
         self.assertEqual(sug["older"]["files"], [old])
         self.assertEqual(sug["free"]["files"], [old], "oldest first, just enough")
@@ -487,11 +488,11 @@ class FinishingTests(unittest.TestCase):
         row = res["channels"][0]
         self.assertEqual(row["result"], "stopped_recording")
         self.assertEqual(self.rows()["twitch:saruei"]["finishing"], "waiting_for_cleanup")
-        raw = touch(os.path.join(self.streams, "Recorded", "twitch", "saruei", "s.ts"), 100)
+        raw = touch(os.path.join(self.streams, RECORDED_FOLDER, "twitch", "saruei", "s.ts"), 100)
         self.t.on_cleanup("remux_started", "twitch", "saruei", raw)
         self.assertEqual(self.rows()["twitch:saruei"]["finishing"], "remuxing")
         os.remove(raw)
-        mp4 = touch(os.path.join(self.streams, "Processed", "twitch", "saruei", "s.mp4"), 5000)
+        mp4 = touch(os.path.join(self.streams, PROCESSED_FOLDER, "twitch", "saruei", "s.mp4"), 5000)
         self.t.on_cleanup("finished", "twitch", "saruei", mp4, ok=True)   # before anyone waits
         # the default wait for a stopped channel starts at its stop: returns at once
         ev = self.c.handle("wait", {"events": ["finished"], "channel": "twitch:saruei", "timeout": 0})["result"]
@@ -515,7 +516,7 @@ class FinishingTests(unittest.TestCase):
 
     def test_cleanup_without_a_file_still_ends_the_wait(self):
         self.c.handle("record_stop", {"channels": ["knut"]})
-        left = touch(os.path.join(self.streams, "Recorded", "kick", "knut", "k.ts"), 100)
+        left = touch(os.path.join(self.streams, RECORDED_FOLDER, "kick", "knut", "k.ts"), 100)
         self.t.on_cleanup("channel_done", "knut")           # locked through every pass: still finishing
         self.assertEqual(self.rows()["knut"]["finishing"], "waiting_for_cleanup")
         os.remove(left)
@@ -650,7 +651,7 @@ class CleanerReportTests(unittest.TestCase):
     def test_cleanup_pass_reports_remux_started_and_finished(self):
         from msr import recorder as recorder_mod
         with tempfile.TemporaryDirectory() as tmp:
-            raw = touch(os.path.join(tmp, "Recorded", "kick", "knut", "k.ts"), 4096)
+            raw = touch(os.path.join(tmp, RECORDED_FOLDER, "kick", "knut", "k.ts"), 4096)
             values = {("Paths", "streams_dir"): tmp, ("Advanced", "ffmpeg_path"): "ffmpeg"}
             config = mock.MagicMock()
             config.get.side_effect = lambda s, k, fallback=None: values.get((s, k), fallback)
@@ -668,7 +669,7 @@ class CleanerReportTests(unittest.TestCase):
             with mock.patch.object(recorder_mod, "remux_to_mp4", fake_remux), \
                     mock.patch.object(recorder_mod.time, "sleep"):
                 cleaner._process_leftover_files()
-            mp4 = os.path.join(tmp, "Processed", "kick", "knut", "k.mp4")
+            mp4 = os.path.join(tmp, PROCESSED_FOLDER, "kick", "knut", "k.mp4")
             self.assertEqual([a[0] for a, _k in got], ["remux_started", "finished"])
             self.assertEqual(got[0][0], ("remux_started", "kick", "knut", raw))
             self.assertEqual(got[1], (("finished", "kick", "knut", mp4), {"ok": True}))

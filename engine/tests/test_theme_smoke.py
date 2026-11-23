@@ -17,6 +17,7 @@ from tkinter import ttk
 sys.path.insert(0, sys.argv[1])
 os.chdir(sys.argv[2])
 os.environ["MSR_SMOKE_TEST"] = "1"
+os.environ["MSR_SMOKE_KEEP"] = "1"
 mode = sys.argv[3]
 out = {"errors": []}
 
@@ -35,7 +36,7 @@ def fake_mainloop(self, n=0):
             for w in walk(self):
                 if w.winfo_class() == cls and str(w.cget("text")) == text:
                     return w
-        theme_button = find("Theme...")
+        theme_button = find("Thème…")
         out["theme_button"] = theme_button is not None
         out["dark_mode_checkbox"] = any(w.winfo_class() in ("TCheckbutton", "Checkbutton")
                                         and "dark" in str(w.cget("text")).lower() for w in walk(self))

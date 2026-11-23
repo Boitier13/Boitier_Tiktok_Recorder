@@ -220,7 +220,7 @@ class DialogTests(unittest.TestCase):
         w.tree.selection_set("1")  # the oldest: ["a", "b"]
         with mock.patch.object(self.dialogs, "ask_yes_no", return_value=False) as ask:
             self.assertFalse(w.restore_selected())
-            self.assertIn("kept in this list", ask.call_args.args[2])
+            self.assertIn("conservée dans cette liste", ask.call_args.args[2])
         self.assertEqual(json.loads(self.file.read_text()), ["z"])
         with mock.patch.object(self.dialogs, "ask_yes_no", return_value=True):
             self.assertTrue(w.restore_selected())

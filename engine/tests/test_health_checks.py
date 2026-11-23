@@ -76,7 +76,7 @@ class StartupTests(unittest.TestCase):
                                 "released": {"streamlink": {"version": "8.6.2", "date": "2026-09-01T10:00:00Z"}}}}
         got = health.stale_issues(versions, state, now)
         self.assertEqual([i.key for i in got], ["stale:streamlink"])   # yt-dlp: no newer one known
-        self.assertIn("days old", got[0].text)
+        self.assertIn("jours", got[0].text)
         fresh = {"yt-dlp": "2026.10.30"}
         self.assertEqual(health.stale_issues(fresh, {}, now), [])
         self.assertIsNone(health.version_date("8.6.2"))
@@ -120,12 +120,12 @@ class PeriodicTests(unittest.TestCase):
 
     def test_merge_summary_changes(self):
         a = health.Issue(health.WARN, "disk", "low")
-        b = health.Issue(health.ERROR, "tool:yt-dlp", "yt-dlp does not run")
+        b = health.Issue(health.ERROR, "tool:yt-dlp", "yt-dlp ne fonctionne pas")
         r = health.merge([a], [b])
         self.assertEqual(r.level, health.ERROR)
         self.assertEqual(r.issues[0].key, "tool:yt-dlp")
-        self.assertIn("2 problems", health.summary(r))
-        self.assertTrue(health.summary(health.merge()).startswith("\u25cf Health OK"))
+        self.assertIn("2 problèmes", health.summary(r))
+        self.assertTrue(health.summary(health.merge()).startswith("\u25cf État : OK"))
         new, cleared = health.changes(None, r)
         self.assertEqual(len(new), 2)
         new, cleared = health.changes(r, health.merge([a]))
@@ -205,12 +205,12 @@ class ControllerTests(unittest.TestCase):
     def test_ok_then_warning_then_details(self):
         self.ctl.run(startup=True)
         self.wait()
-        self.assertTrue(self.ctl.label.cget("text").startswith("\u25cf Health OK"))
+        self.assertTrue(self.ctl.label.cget("text").startswith("\u25cf État : OK"))
         self.assertEqual(str(self.ctl.label.cget("style")), "Ok.TLabel")
         self.versions["yt-dlp"] = None
         self.ctl.check_now()
         self.wait()
-        self.assertIn("yt-dlp does not run", self.ctl.label.cget("text"))
+        self.assertIn("yt-dlp ne fonctionne pas", self.ctl.label.cget("text"))
         self.assertEqual(str(self.ctl.label.cget("style")), "Error.TLabel")
         shown = []
         orig = dialogs._reveal
@@ -218,9 +218,9 @@ class ControllerTests(unittest.TestCase):
         self.addCleanup(setattr, dialogs, "_reveal", orig)
         self.ctl.show_details()
         texts = [w.cget("text") for w in self.ctl._body.winfo_children()]
-        self.assertTrue(any("yt-dlp does not run" in t for t in texts))
+        self.assertTrue(any("yt-dlp ne fonctionne pas" in t for t in texts))
         updates = [w for w in self.ctl._dialog.winfo_children()[0].winfo_children()[-1].winfo_children()
-                   if w.cget("text") == "Updates\u2026"]
+                   if w.cget("text") == "Mises à jour\u2026"]
         updates[0].invoke()
         self.assertEqual(self.updates, [1])
         self.ctl._dialog.destroy()

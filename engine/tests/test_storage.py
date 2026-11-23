@@ -26,6 +26,7 @@ import msr.worker as worker_mod  # noqa: E402
 from msr import storage  # noqa: E402
 from msr.config import Config, new_parser  # noqa: E402
 from msr.recorder import StreamRecorder  # noqa: E402
+from msr.util import PROCESSED_FOLDER, RECORDED_FOLDER  # noqa: E402
 from tests.test_startup_cleanup import FakeConfig  # noqa: E402
 
 
@@ -133,14 +134,14 @@ class ChooseRootTests(unittest.TestCase):
         Path(blocker).write_text("x")
         c = storage.choose_root(self.drive.path, os.path.join(blocker, "fb"), 0)
         self.assertFalse(c.ok)
-        self.assertIn("fallback", c.reason)
+        self.assertIn("secours", c.reason)
 
     def test_fallback_with_too_little_space_is_not_used(self):
         self.drive.unplug()
         space = {self.fallback: 0.5}
         c = storage.choose_root(self.drive.path, self.fallback, 5, free=lambda p: space.get(p, 100.0))
         self.assertFalse(c.ok)
-        self.assertIn("0.5 GB", c.reason)
+        self.assertIn("0.5 Go", c.reason)
 
     def test_fallback_inside_the_main_folder_is_ignored(self):
         self.drive.unplug()
@@ -167,33 +168,33 @@ class ReconcileTests(unittest.TestCase):
         self.log = logging.getLogger("test-reconcile")
 
     def test_files_move_with_their_relative_path(self):
-        put(self.fb, "Processed/twitch/a/a_1.mp4", "mp4data")
-        put(self.fb, "Recorded/twitch/a/a_2.ts", "tsdata")
+        put(self.fb, f"{PROCESSED_FOLDER}/twitch/a/a_1.mp4", "mp4data")
+        put(self.fb, f"{RECORDED_FOLDER}/twitch/a/a_2.ts", "tsdata")
         r = storage.reconcile_fallback(self.fb, self.main, self.log)
         self.assertEqual((r.moved, r.young, r.failed), (2, 0, 0))
-        self.assertEqual(Path(self.main, "Processed", "twitch", "a", "a_1.mp4").read_text(), "mp4data")
-        self.assertEqual(r.moved_ts, [os.path.join(self.main, "Recorded", "twitch", "a", "a_2.ts")])
+        self.assertEqual(Path(self.main, PROCESSED_FOLDER, "twitch", "a", "a_1.mp4").read_text(), "mp4data")
+        self.assertEqual(r.moved_ts, [os.path.join(self.main, RECORDED_FOLDER, "twitch", "a", "a_2.ts")])
         self.assertFalse(storage.has_files(self.fb))
 
     def test_a_file_that_may_still_be_written_is_left_alone(self):
-        src = put(self.fb, "Recorded/twitch/a/live.ts", "growing", age=5)
+        src = put(self.fb, f"{RECORDED_FOLDER}/twitch/a/live.ts", "growing", age=5)
         r = storage.reconcile_fallback(self.fb, self.main, self.log)
         self.assertEqual((r.moved, r.young), (0, 1))
         self.assertTrue(os.path.exists(src))
-        self.assertFalse(os.path.exists(os.path.join(self.main, "Recorded")))
+        self.assertFalse(os.path.exists(os.path.join(self.main, RECORDED_FOLDER)))
 
     def test_never_overwrites_a_different_file(self):
-        put(self.main, "Processed/twitch/a/x.mp4", "MAIN-version")
-        put(self.fb, "Processed/twitch/a/x.mp4", "FALLBACK-version-longer")
+        put(self.main, f"{PROCESSED_FOLDER}/twitch/a/x.mp4", "MAIN-version")
+        put(self.fb, f"{PROCESSED_FOLDER}/twitch/a/x.mp4", "FALLBACK-version-longer")
         r = storage.reconcile_fallback(self.fb, self.main, self.log)
         self.assertEqual(r.moved, 1)
-        self.assertEqual(Path(self.main, "Processed/twitch/a/x.mp4").read_text(), "MAIN-version")
-        self.assertEqual(Path(self.main, "Processed/twitch/a/x.from-fallback.mp4").read_text(),
+        self.assertEqual(Path(self.main, f"{PROCESSED_FOLDER}/twitch/a/x.mp4").read_text(), "MAIN-version")
+        self.assertEqual(Path(self.main, f"{PROCESSED_FOLDER}/twitch/a/x.from-fallback.mp4").read_text(),
                          "FALLBACK-version-longer")
 
     def test_an_earlier_verified_copy_just_drops_the_source(self):
-        src = put(self.fb, "Processed/twitch/a/x.mp4", "same")
-        dest = put(self.main, "Processed/twitch/a/x.mp4", "same")
+        src = put(self.fb, f"{PROCESSED_FOLDER}/twitch/a/x.mp4", "same")
+        dest = put(self.main, f"{PROCESSED_FOLDER}/twitch/a/x.mp4", "same")
         os.utime(dest, (os.path.getmtime(src),) * 2)
         r = storage.reconcile_fallback(self.fb, self.main, self.log)
         self.assertEqual(r.moved, 1)
@@ -201,7 +202,7 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(os.listdir(os.path.dirname(dest)), ["x.mp4"])
 
     def test_a_failed_copy_keeps_the_source_and_leaves_no_partial_file(self):
-        src = put(self.fb, "Processed/twitch/a/x.mp4", "data")
+        src = put(self.fb, f"{PROCESSED_FOLDER}/twitch/a/x.mp4", "data")
         with mock.patch.object(storage.shutil, "copy2", side_effect=OSError(errno.ENOSPC, "disk full")):
             r = storage.reconcile_fallback(self.fb, self.main, self.log)
         self.assertEqual((r.moved, r.failed), (0, 1))
@@ -210,7 +211,7 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(names, [])
 
     def test_a_short_copy_is_rejected(self):
-        src = put(self.fb, "Processed/twitch/a/x.mp4", "0123456789")
+        src = put(self.fb, f"{PROCESSED_FOLDER}/twitch/a/x.mp4", "0123456789")
 
         def short_copy(s, d):
             Path(d).write_text("0123")
@@ -221,7 +222,7 @@ class ReconcileTests(unittest.TestCase):
         self.assertFalse([n for _d, _s, files in os.walk(self.main) for n in files])
 
     def test_source_that_cannot_be_removed_is_kept_and_not_counted_as_moved(self):
-        src = put(self.fb, "Processed/twitch/a/x.mp4", "data")
+        src = put(self.fb, f"{PROCESSED_FOLDER}/twitch/a/x.mp4", "data")
         real_remove = os.remove
 
         def locked(path):
@@ -232,14 +233,14 @@ class ReconcileTests(unittest.TestCase):
             r = storage.reconcile_fallback(self.fb, self.main, self.log)
         self.assertEqual((r.moved, r.failed), (0, 1))
         self.assertTrue(os.path.exists(src))
-        self.assertTrue(os.path.exists(os.path.join(self.main, "Processed/twitch/a/x.mp4")))
+        self.assertTrue(os.path.exists(os.path.join(self.main, PROCESSED_FOLDER, "twitch/a/x.mp4")))
         # the next pass sees the verified copy and finishes the job
         r = storage.reconcile_fallback(self.fb, self.main, self.log)
         self.assertEqual(r.moved, 1)
         self.assertFalse(os.path.exists(src))
 
     def test_stop_event_ends_the_pass(self):
-        put(self.fb, "Processed/twitch/a/x.mp4")
+        put(self.fb, f"{PROCESSED_FOLDER}/twitch/a/x.mp4")
         stop = threading.Event()
         stop.set()
         r = storage.reconcile_fallback(self.fb, self.main, self.log, should_stop=stop)
@@ -248,7 +249,7 @@ class ReconcileTests(unittest.TestCase):
 
     def test_has_files_ignores_probe_and_partial_files(self):
         put(self.fb, storage.PROBE_NAME)
-        put(self.fb, "Processed/x.mp4" + storage.PART_SUFFIX)
+        put(self.fb, f"{PROCESSED_FOLDER}/x.mp4" + storage.PART_SUFFIX)
         self.assertFalse(storage.has_files(self.fb))
         self.assertFalse(storage.has_files(os.path.join(self.tmp.name, "nope")))
 
@@ -448,7 +449,7 @@ class WorkerFallbackTests(unittest.TestCase):
         os.chdir(self.tmp.name)
 
     def rec_dir(self, base):
-        return os.path.join(base, "Recorded", "twitch", "testuser")
+        return os.path.join(base, RECORDED_FOLDER, "twitch", "testuser")
 
     def test_healthy_drive_records_to_the_main_folder_only(self):
         h = Harness(self, self.drive.path, self.fb)
@@ -464,8 +465,8 @@ class WorkerFallbackTests(unittest.TestCase):
         h.on_capture = lambda n, cmd: h.stop.set()
         h.run()
         self.assertTrue(os.path.isdir(self.rec_dir(self.fb)))
-        self.assertIn(os.path.join(self.fb, "Recorded"), h.cmds[0])
-        self.assertTrue(any("fallback folder" in m and "not available" in m for m in h.records), h.records)
+        self.assertIn(os.path.join(self.fb, RECORDED_FOLDER), h.cmds[0])
+        self.assertTrue(any("dossier de secours" in m and "indisponible" in m for m in h.records), h.records)
 
     def test_drive_returning_switches_back_for_the_next_recording(self):
         self.drive.unplug()
@@ -478,11 +479,11 @@ class WorkerFallbackTests(unittest.TestCase):
                 h.stop.set()
         h.on_capture = capture
         h.run()
-        self.assertIn(os.path.join(self.fb, "Recorded"), h.cmds[0])
-        self.assertIn(os.path.join(self.drive.path, "Recorded"), h.cmds[1])
-        self.assertTrue(any("available again" in m for m in h.records), h.records)
+        self.assertIn(os.path.join(self.fb, RECORDED_FOLDER), h.cmds[0])
+        self.assertIn(os.path.join(self.drive.path, RECORDED_FOLDER), h.cmds[1])
+        self.assertTrue(any("de nouveau disponible" in m for m in h.records), h.records)
         # one line per change, not one per check
-        self.assertEqual(len([m for m in h.records if "not available" in m]), 1)
+        self.assertEqual(len([m for m in h.records if "indisponible" in m]), 1)
 
     def test_main_drive_lost_between_recordings_switches_to_the_fallback(self):
         h = Harness(self, self.drive.path, self.fb)
@@ -494,8 +495,8 @@ class WorkerFallbackTests(unittest.TestCase):
                 h.stop.set()
         h.on_capture = capture
         h.run()
-        self.assertIn(os.path.join(self.drive.path, "Recorded"), h.cmds[0])
-        self.assertIn(os.path.join(self.fb, "Recorded"), h.cmds[1])
+        self.assertIn(os.path.join(self.drive.path, RECORDED_FOLDER), h.cmds[0])
+        self.assertIn(os.path.join(self.fb, RECORDED_FOLDER), h.cmds[1])
 
     def test_without_a_fallback_the_worker_waits_and_says_why(self):
         self.drive.unplug()
@@ -506,8 +507,8 @@ class WorkerFallbackTests(unittest.TestCase):
         self.assertEqual(h.sleeps, [("wait", 60)], "looks again after a minute")
         status = [s for _key, s in h.statuses()]
         self.assertEqual(status[-1]["status"], "Error")
-        self.assertEqual(status[-1]["detail"], "drive not available")
-        self.assertEqual(len([m for m in h.records if "waiting for it to return" in m]), 1)
+        self.assertEqual(status[-1]["detail"], "disque indisponible")
+        self.assertEqual(len([m for m in h.records if "en attente de sa reconnexion" in m]), 1)
 
     def test_losing_the_drive_under_a_recording_is_not_a_crash_with_a_long_backoff(self):
         h = Harness(self, self.drive.path, "off")
@@ -546,7 +547,7 @@ class RecorderWatchTests(unittest.TestCase):
         rec.config = FakeConfig(self.drive.path)
         rec.root_path = self.drive.path
         rec.fallback_root = fallback
-        rec.fallback_recorded_base = os.path.join(fallback, "Recorded") if fallback else None
+        rec.fallback_recorded_base = os.path.join(fallback, RECORDED_FOLDER) if fallback else None
         rec.should_stop = threading.Event()
         return rec
 
@@ -558,22 +559,22 @@ class RecorderWatchTests(unittest.TestCase):
             self.drive.unplug()
             rec._storage_tick(force=True)
             rec._storage_tick(force=True)
-            self.assertIn("Recording to", rec.storage_notice())
+            self.assertIn("Capture en cours dans", rec.storage_notice())
             self.assertIn(self.fb, rec.storage_notice())
             back.assert_not_called()
             self.drive.plug()
             rec._storage_tick(force=True)
             self.assertEqual(rec.storage_notice(), "")
             back.assert_called_once()
-        self.assertEqual(len([o for o in cm.output if "not available" in o]), 1)
-        self.assertEqual(len([o for o in cm.output if "available again" in o]), 1)
+        self.assertEqual(len([o for o in cm.output if "indisponible" in o]), 1)
+        self.assertEqual(len([o for o in cm.output if "de nouveau disponible" in o]), 1)
 
     def test_without_fallback_the_notice_says_recording_is_paused(self):
         rec = self.recorder(None)
         self.drive.unplug()
         with self.assertLogs(level="WARNING"):
             rec._storage_tick(force=True)
-        self.assertIn("paused", rec.storage_notice())
+        self.assertIn("en pause", rec.storage_notice())
 
     def test_the_check_is_rate_limited(self):
         rec = self.recorder(self.fb)
@@ -585,26 +586,26 @@ class RecorderWatchTests(unittest.TestCase):
 
     def test_files_left_in_the_fallback_are_picked_up_later(self):
         rec = self.recorder(self.fb)
-        put(self.fb, "Processed/twitch/a/x.mp4")
+        put(self.fb, f"{PROCESSED_FOLDER}/twitch/a/x.mp4")
         with mock.patch.object(rec, "_start_fallback_return") as back:
             rec._storage_tick(force=True)
         back.assert_called_once()
 
     def test_move_back_runs_the_leftover_pass_for_unfinished_ts_files(self):
         rec = self.recorder(self.fb)
-        put(self.fb, "Processed/twitch/a/x.mp4", "mp4")
-        put(self.fb, "Recorded/twitch/a/y.ts", "ts")
+        put(self.fb, f"{PROCESSED_FOLDER}/twitch/a/x.mp4", "mp4")
+        put(self.fb, f"{RECORDED_FOLDER}/twitch/a/y.ts", "ts")
         with mock.patch.object(rec, "_plan_startup_cleanup", return_value="plan") as plan, \
                 mock.patch.object(rec, "_launch_startup_cleanup") as launch:
             rec._fallback_return_main()
-        self.assertTrue(os.path.isfile(os.path.join(self.drive.path, "Processed/twitch/a/x.mp4")))
-        self.assertTrue(os.path.isfile(os.path.join(self.drive.path, "Recorded/twitch/a/y.ts")))
+        self.assertTrue(os.path.isfile(os.path.join(self.drive.path, PROCESSED_FOLDER, "twitch/a/x.mp4")))
+        self.assertTrue(os.path.isfile(os.path.join(self.drive.path, RECORDED_FOLDER, "twitch/a/y.ts")))
         plan.assert_called_once()
         launch.assert_called_once_with("plan")
 
     def test_move_back_never_raises(self):
         rec = self.recorder(self.fb)
-        put(self.fb, "Processed/x.mp4")
+        put(self.fb, f"{PROCESSED_FOLDER}/x.mp4")
         with mock.patch.object(storage, "reconcile_fallback", side_effect=RuntimeError("boom")):
             with self.assertLogs(level="ERROR"):
                 rec._fallback_return_main()
@@ -617,14 +618,14 @@ class RecorderWatchTests(unittest.TestCase):
                 mock.patch.object(recorder_mod, "BackgroundCleaner"):
             with self.assertLogs(level="WARNING") as cm:
                 rec = StreamRecorder(["chanA"], FakeConfig(self.drive.path))
-        self.assertTrue(any("not available right now" in o for o in cm.output))
+        self.assertTrue(any("actuellement indisponible" in o for o in cm.output))
         self.assertEqual(rec.fallback_root, storage.fallback_root("", self.drive.path))
 
     def test_clip_finder_looks_in_the_fallback_too(self):
         rec = self.recorder(self.fb)
-        rec.recorded_base = os.path.join(self.drive.path, "Recorded")
+        rec.recorded_base = os.path.join(self.drive.path, RECORDED_FOLDER)
         self.drive.unplug()
-        live = put(self.fb, "Recorded/kick/someone/live.ts", age=1)
+        live = put(self.fb, os.path.join(RECORDED_FOLDER, "kick/someone/live.ts"), age=1)
         self.assertEqual(worker_mod.find_active_recording_file(rec, "someone"), live)
 
 

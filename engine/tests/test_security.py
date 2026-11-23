@@ -216,6 +216,12 @@ class RedactTests(unittest.TestCase):
         self.assertNotIn("eyJabc", out)
         self.assertIn("ffmpeg", out)
 
+    def test_redact_cmd_keeps_multiline_headers_on_one_log_line(self):
+        out = redact_cmd_for_log(["ffmpeg", "-headers", "User-Agent: X\r\nReferer: https://tiktok.com/\r\n", "-i"])
+        self.assertNotIn("\r", out)
+        self.assertNotIn("\n", out)
+        self.assertIn("User-Agent: X Referer: https://tiktok.com/", out)
+
     def test_filter_redacts_message_and_channel(self):
         filt = RedactLogFilter()
         rec = logging.LogRecord(

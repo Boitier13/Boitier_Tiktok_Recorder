@@ -15,9 +15,9 @@ class PureTests(unittest.TestCase):
         self.assertEqual(p("2.5", integer=False, minvalue=None, maxvalue=None), (2.5, ""))
         value, error = p("abc", integer=True, minvalue=1, maxvalue=30)
         self.assertIsNone(value)
-        self.assertIn("whole number from 1 to 30", error)
-        self.assertIn("from 1 to 30", p("31", integer=True, minvalue=1, maxvalue=30)[1])
-        self.assertIn("from 0.5 to 60", p("0.1", integer=False, minvalue=0.5, maxvalue=60)[1])
+        self.assertIn("nombre entier entre 1 et 30", error)
+        self.assertIn("entre 1 et 30", p("31", integer=True, minvalue=1, maxvalue=30)[1])
+        self.assertIn("entre 0.5 et 60", p("0.1", integer=False, minvalue=0.5, maxvalue=60)[1])
         self.assertIsNone(p("2.5", integer=True, minvalue=1, maxvalue=30)[0])  # not a whole number
         self.assertIsNone(p("nan", integer=False, minvalue=1, maxvalue=2)[0])
         self.assertIsNone(p("", integer=False, minvalue=None, maxvalue=None)[0])
@@ -242,7 +242,7 @@ class NumberTests(TkCase):
         self.hooks = [bad_then_good]
         self.assertEqual(dialogs.ask_int(self.root, "t", "Seconds", minvalue=1, maxvalue=30), 5)
         self.assertTrue(seen["open"])
-        self.assertIn("from 1 to 30", seen["error"])
+        self.assertIn("entre 1 et 30", seen["error"])
 
     def test_cancel_and_escape_return_none(self):
         self.hooks = [self.press("cancel")]

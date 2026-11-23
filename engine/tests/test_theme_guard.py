@@ -20,7 +20,7 @@ PACK_WORDS = {"both", "x", "y", "none"}  # pack(fill="both") is a layout word, n
 # file name -> text prefixes that may contain a colour; keep this tiny. The one entry is the how-to
 # sample written next to the user's themes folder (documentation, never applied as a colour).
 HEX_HOMES = ("themes.py", "theme_palettes.py")
-ALLOWED: dict[str, tuple[str, ...]] = {"theme_dialog.py": ('{\n  "name": "My theme"',)}
+ALLOWED: dict[str, tuple[str, ...]] = {"theme_dialog.py": ('{\n  "name": "Mon thème"',)}
 
 
 def literals(path: Path):

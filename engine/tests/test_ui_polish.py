@@ -29,13 +29,13 @@ class AboutTests(unittest.TestCase):
         self.assertTrue(t.startswith("Multi-Stream Recorder v3.0.0"))
         self.assertNotIn("Chaturbate", t)
         for must in ("Kick", "Twitch", "YouTube", "Rumble", "TikTok", "Fishtank.live", "yt-dlp 2026.10.26",
-                     "streamlink 8.6.3", "ffmpeg 7.1", "deno: not found", "curl_cffi 1.0", "plyer (missing)",
-                     "Updates\u2026 button", "MSR's own environment (.venv)", "msr_ctl.py",
-                     r"Settings (config.ini, channels.json, cookies.txt): D:\msr-data", r"Recordings: E:\Streams",
-                     "age-restricted or adult sites", "not responsible for how this software is used"):
+                     "streamlink 8.6.3", "ffmpeg 7.1", "deno : introuvable", "curl_cffi 1.0", "plyer (introuvable)",
+                     "bouton Mises à jour\u2026", "environnement dédié de MSR (.venv)", "msr_ctl.py",
+                     r"Paramètres (config.ini, channels.json, cookies.txt) : D:\msr-data", r"Enregistrements : E:\Streams",
+                     "sites réservés aux adultes", "n’est pas responsable de l’usage de ce logiciel"):
             self.assertIn(must, t)
-        self.assertNotIn("yt-dlp 1.0", t.split("Python packages:")[1])   # tools are not repeated as packages
-        self.assertIn("not MSR's .venv", self.text(in_venv=False))
+        self.assertNotIn("yt-dlp 1.0", t.split("Composants Python :")[1])   # tools are not repeated as packages
+        self.assertIn("hors de l’environnement dédié", self.text(in_venv=False))
         self.assertNotIn("between seasons", t)   # a fixed text must not claim the show's current state
 
     def test_no_chaturbate_anywhere_in_gui(self):

@@ -13,7 +13,7 @@ from msr import dialogs, themes
 
 EXAMPLE_FILE = "example-theme.json.txt"
 EXAMPLE_TEXT = """{
-  "name": "My theme",
+  "name": "Mon thème",
   "base": "PowerShell Blue",
   "dark": true,
   "colors": {
@@ -35,7 +35,7 @@ def theme_groups() -> list[tuple[str, list[themes.Theme]]]:
     return [("Built-in", [themes.THEMES[n] for n in themes.GROUP_BUILTIN]),
             ("Dark, from Omarchy palettes", [themes.THEMES[n] for n in themes.GROUP_DARK]),
             ("Light, from Omarchy palettes", [themes.THEMES[n] for n in themes.GROUP_LIGHT]),
-            ("Your themes", own)]
+            ("Vos thèmes", own)]
 
 
 def preview(canvas: tk.Canvas, t: themes.Theme) -> None:
@@ -58,13 +58,13 @@ def preview(canvas: tk.Canvas, t: themes.Theme) -> None:
                                        ("carol   Offline", "offline_fg"), ("dave   Error", "error_fg"))):
         canvas.create_text(14, 62 + i * 14, text=text, anchor="w", fill=t[token], font=small)
     canvas.create_rectangle(w - 130, 58, w - 14, 76, fill=t["entry_bg"], outline=t["border"])
-    canvas.create_text(w - 124, 67, text="Filter", anchor="w", fill=t["placeholder"], font=small)
+    canvas.create_text(w - 124, 67, text="Filtre", anchor="w", fill=t["placeholder"], font=small)
     canvas.create_rectangle(w - 130, 82, w - 74, 104, fill=t["btn_bg"], outline=t["border"])
-    canvas.create_text(w - 102, 93, text="Button", fill=t["btn_fg"], font=small)
+    canvas.create_text(w - 102, 93, text="Bouton", fill=t["btn_fg"], font=small)
     canvas.create_rectangle(8, 118, 100, 142, fill=t["start_bg"], outline="")
-    canvas.create_text(54, 130, text="Start", fill=t["start_fg"], font=font)
+    canvas.create_text(54, 130, text="Démarrer", fill=t["start_fg"], font=font)
     canvas.create_rectangle(108, 118, 200, 142, fill=t["stop_bg"], outline="")
-    canvas.create_text(154, 130, text="Stop", fill=t["stop_fg"], font=font)
+    canvas.create_text(154, 130, text="Arrêter", fill=t["stop_fg"], font=font)
     canvas.create_rectangle(8, 148, w - 8, 190, fill=t["log_bg"], outline=t["border"])
     for i, (text, token) in enumerate((("12:01 Recording started", "log_fg"), ("12:02 [WARNING] slow", "log_warn"),
                                        ("12:03 [ERROR] failed", "log_error"))):
@@ -92,9 +92,9 @@ class ThemeDialog:
         self.chosen = self.original
         self.done = False
         self.names: dict[str, themes.Theme] = {}
-        self.win, frame = dialogs.new_dialog(root, "Theme")
+        self.win, frame = dialogs.new_dialog(root, "Thèmes")
         ttk.Label(frame, wraplength=520, justify="left",
-                  text="Pick a theme. The whole window changes as you pick; Cancel puts the old one back.").pack(anchor="w")
+                  text="Choisissez un thème. Toute la fenêtre change au fur et à mesure ; Annuler rétablit le thème précédent.").pack(anchor="w")
         body = ttk.Frame(frame)
         body.pack(fill="both", expand=True, pady=(10, 0))
         left = ttk.Frame(body)
@@ -118,10 +118,10 @@ class ThemeDialog:
         row.pack(fill="x", pady=(12, 0))
         self.ok_btn = ttk.Button(row, text="OK", command=self.ok, width=10)
         self.ok_btn.pack(side="right")
-        self.cancel_btn = ttk.Button(row, text="Cancel", command=self.cancel, width=10)
+        self.cancel_btn = ttk.Button(row, text="Annuler", command=self.cancel, width=10)
         self.cancel_btn.pack(side="right", padx=(0, 6))
-        self.folder_btn = ttk.Button(row, text="Open themes folder", command=self.open_folder)
-        self.reload_btn = ttk.Button(row, text="Reload", command=self.reload)
+        self.folder_btn = ttk.Button(row, text="Ouvrir le dossier des thèmes", command=self.open_folder)
+        self.reload_btn = ttk.Button(row, text="Recharger", command=self.reload)
         if self.folder:
             self.folder_btn.pack(side="left")
             self.reload_btn.pack(side="left", padx=(6, 0))
@@ -144,7 +144,7 @@ class ThemeDialog:
                 if t.name == self.chosen.name:
                     self.tree.selection_set(iid)
                     self.tree.see(iid)
-        self.note.configure(text=("Ignored theme files: " + "; ".join(self.problems_cb()[:3])) if self.problems_cb() else "")
+        self.note.configure(text=("Fichiers de thème ignorés : " + "; ".join(self.problems_cb()[:3])) if self.problems_cb() else "")
         self._show(self.chosen)
 
     def _show(self, t: themes.Theme) -> None:
@@ -220,7 +220,7 @@ class ThemeDialog:
             if self.opener:
                 self.opener(self.folder)
         except OSError as exc:
-            dialogs.show_error(self.win, "Theme", f"Could not open the themes folder: {exc}")
+            dialogs.show_error(self.win, "Thèmes", f"Impossible d’ouvrir le dossier des thèmes : {exc}")
 
 
 def open_theme_dialog(root, **kwargs) -> ThemeDialog:

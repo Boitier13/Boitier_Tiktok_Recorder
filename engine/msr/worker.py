@@ -121,12 +121,15 @@ def _should_report_stream_end(stop_requested, split_requested, output_size):
 
 
 def _merge_tiktok_status_checks(ytdlp_title, ytdlp_error, api_live, api_title, api_error):
-    """Treat a failed API cross-check as inconclusive, never as confirmed offline."""
+    """Use TikTok API confirmation to resolve yt-dlp's stale offline/error result."""
     if api_live:
         return True, api_title or ytdlp_title, None
-    if api_error and not ytdlp_error:
-        ytdlp_error = f"TikTok live-status check inconclusive: {api_error}"
-    return False, ytdlp_title, ytdlp_error
+    if api_error:
+        if not ytdlp_error:
+            ytdlp_error = f"TikTok live-status check inconclusive: {api_error}"
+        return False, ytdlp_title, ytdlp_error
+    # A clean negative API result means offline, not a lingering yt-dlp timeout.
+    return False, ytdlp_title, None
 
 
 class ReconnectWindow:
@@ -215,7 +218,7 @@ def find_active_recording_file(recorder, channel_key):
     return max(ts_files, key=os.path.getmtime)
 
 
-CATCHUP_UNAVAILABLE = "Available once caught up to live"
+CATCHUP_UNAVAILABLE = "Disponible après le rattrapage du direct"
 CATCHUP_EXPLAIN = ("This YouTube recording is still catching up from the start of the broadcast, "
                    "so there is no live file to cut from yet. MSR switches to a normal live recording "
                    "when it reaches live, and Clip Now works again.")
@@ -2561,8 +2564,8 @@ def record_worker(args):
                     # A new folder only between recordings: parts of an old session stay where
                     # they are (they are already separate MP4s), and an unfinished stitch is dropped.
                     if group_parts:
-                        logger.warning("Recordings folder changed - the reconnect parts recorded so far "
-                                       "stay as separate files")
+                        logger.warning("Le dossier de captures a changé : les segments enregistrés lors des reconnexions "
+                                       "restent dans des fichiers séparés.")
                     group_parts = []
                     group_base_name = None
                     root_path = choice.path
@@ -2570,25 +2573,25 @@ def record_worker(args):
                 if new_state != storage_state:
                     if new_state == "fallback":
                         logger.warning(
-                            f"Recordings folder {primary_root} is not available ({choice.reason}). "
-                            f"New recordings go to the fallback folder {root_path} and are moved back "
-                            f"when the main folder returns.")
+                            f"Dossier de captures {primary_root} indisponible ({choice.reason}). "
+                            f"Les nouvelles captures seront enregistrées dans le dossier de secours {root_path} "
+                            "et retransférées au retour du dossier principal.")
                     else:
-                        logger.info(f"Recordings folder {primary_root} is available again - "
-                                    "recording there from now on")
+                        logger.info(f"Le dossier de captures {primary_root} est de nouveau disponible : "
+                                    "la capture y reprend dès maintenant.")
                     storage_state = new_state
             if not choice.ok:
                 if choice.low_space:
-                    detail = f"Low disk space: {choice.free_gb:.1f}GB"
+                    detail = f"Espace disque insuffisant : {choice.free_gb:.1f} Go"
                     log_msg = (
-                        f"Insufficient disk space: {choice.free_gb:.1f}GB available, "
-                        f"{min_disk_space_gb}GB required"
+                        f"Espace disque insuffisant : {choice.free_gb:.1f} Go disponibles, "
+                        f"{min_disk_space_gb} Go requis"
                     )
                     wait_seconds = 300
                 else:
-                    detail = "drive not available"
-                    log_msg = (f"Recordings folder {primary_root} is not available ({choice.reason}) - "
-                               "waiting for it to return")
+                    detail = "disque indisponible"
+                    log_msg = (f"Dossier de captures {primary_root} indisponible ({choice.reason}) : "
+                               "en attente de sa reconnexion")
                     wait_seconds = 60   # look again soon: the drive may be back in a minute
                 new_status = {
                     "status": "Error",
@@ -2605,7 +2608,7 @@ def record_worker(args):
                     storage_logged_at = time.monotonic()
                 storage_state = new_state
                 if interruptible_sleep(wait_seconds, wake_event, stop_event):
-                    logger.info("Manual check requested — re-checking the recordings folder now")
+                    logger.info("Vérification manuelle demandée : nouvelle vérification du dossier de captures.")
                 continue
 
             if skip_checking_status:
@@ -2675,19 +2678,30 @@ def record_worker(args):
                 if resolved_url:
                     recording_url = resolved_url
                     logger.info(f"Using resolved URL for recording: {redact_for_log(recording_url)}")
-                # yt-dlp often reports 24/7 / US-TTP LIVEs as offline. Confirm
-                # via api-live/user/room, /live HTML roomId, then Webcast.
-                if not is_live:
-                    logger.info("TikTok: yt-dlp reported offline — cross-checking via TikTok live APIs")
-                    wc_live, _, wc_title, wc_err, tiktok_stream_url = check_tiktok_live_webcast(
+                # yt-dlp often reports 24/7 / US-TTP LIVEs as offline. Also,
+                # it can confirm LIVE without yielding a media URL; in that case
+                # ask TikTok's API for the direct video variant before trying
+                # Streamlink against the profile page.
+                if not is_live or not resolved_url:
+                    if not is_live:
+                        logger.info("TikTok: yt-dlp reported offline — cross-checking via TikTok live APIs")
+                    else:
+                        logger.info("TikTok: yt-dlp confirmed LIVE but returned no media URL — querying TikTok APIs")
+                    wc_live, _, wc_title, wc_err, api_stream_url = check_tiktok_live_webcast(
                         username, cookies_file, logger, stream_check_timeout, quality=quality)
+                    if api_stream_url:
+                        tiktok_stream_url = api_stream_url
                     if wc_live:
-                        logger.info("TikTok: live API confirms LIVE (yt-dlp said offline)")
+                        if not is_live:
+                            logger.info("TikTok: live API confirms LIVE (yt-dlp said offline)")
+                        elif tiktok_stream_url:
+                            logger.info("TikTok: using direct video URL from live API")
                     else:
                         logger.info(f"TikTok live API fallback: {wc_err or 'not live'}")
-                    is_live, stream_title, error = _merge_tiktok_status_checks(
-                        stream_title, error, wc_live, wc_title, wc_err
-                    )
+                    if not is_live:
+                        is_live, stream_title, error = _merge_tiktok_status_checks(
+                            stream_title, error, wc_live, wc_title, wc_err
+                        )
             elif platform in ["youtube", "custom"]:
                 check_info.clear()
                 is_live, stream_title, error, need_impersonate, resolved_url, format_urls = check_stream_ytdlp(
@@ -3124,7 +3138,9 @@ def record_worker(args):
                     stop_event, last_status,
                     # from-start: yt-dlp reads the DASH manifest before any file appears
                     max(file_creation_timeout, 120) if from_start else file_creation_timeout,
-                    verbose=verbose,
+                    # streamlink_debug makes Streamlink emit debug records; tell
+                    # the stderr reader not to discard those records as noise.
+                    verbose=verbose or streamlink_debug,
                     tool_name_override=(
                         "ffmpeg" if platform == "tiktok" and tiktok_stream_url else None
                     ),

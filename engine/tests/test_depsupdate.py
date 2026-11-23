@@ -147,7 +147,7 @@ class RowTests(unittest.TestCase):
         self.assertEqual(row["latest"], "9.9.9")
         self.assertEqual(row["zipball"],
                          "https://api.github.com/repos/ManletPride/Multi-Stream-Recorder/zipball/v9.9.9")
-        self.assertEqual(row["note"], "git checkout: updates with git pull")
+        self.assertEqual(row["note"], "Dépôt Git : mises à jour avec git pull")
         self.assertNotIn("own updater", row["note"])
 
     def test_disk_newer_than_the_running_copy_offers_a_restart(self):
@@ -162,7 +162,7 @@ class RowTests(unittest.TestCase):
         self.assertEqual(row["status"], "update_available")
         self.assertTrue(row["updatable"])
         self.assertEqual(row["latest"], "9.9.9")
-        self.assertEqual(row["note"], "Restart to finish updating")
+        self.assertEqual(row["note"], "Redémarrer pour terminer la mise à jour")
 
     def test_http_404(self):
         def gh404(req, timeout=None):
@@ -399,7 +399,7 @@ class DialogTests(unittest.TestCase):
             deps_dialog_buttons = [w for w in win.winfo_children()[0].winfo_children()]
             self.assertTrue(deps_dialog_buttons)
             # Update all
-            [b for b in self._buttons(win) if b.cget("text") == "Update all"][0].invoke()
+            [b for b in self._buttons(win) if b.cget("text") == "Tout mettre à jour"][0].invoke()
             self._wait(root, st)
             up.assert_called_once()
             self.assertEqual(up.call_args[0][0], ["yt-dlp"])
@@ -439,7 +439,7 @@ class DialogTests(unittest.TestCase):
         from msr import deps_dialog, dialogs
         msr = {"name": "msr", "label": "Multi-Stream Recorder", "installed": "3.1.3", "latest": "3.1.4",
                "status": "update_available", "source": "this app", "updatable": True,
-               "note": "git checkout: updates with git pull",
+               "note": "Dépôt Git : mises à jour avec git pull",
                "url": "https://github.com/ManletPride/Multi-Stream-Recorder/releases/tag/v3.1.4",
                "zipball": "https://api.github.com/repos/ManletPride/Multi-Stream-Recorder/zipball/v3.1.4"}
         ytdlp = {"name": "yt-dlp", "label": "yt-dlp", "installed": "1", "latest": "2",
@@ -465,17 +465,17 @@ class DialogTests(unittest.TestCase):
                 root, config=cfg, state_file=os.path.join(d, "ws.json"),
                 on_msr_update=decline, check_now=False)
             tree = self._tree(win)
-            self.assertIn("git checkout: updates with git pull", tree.item("msr", "values")[-1])
+            self.assertIn("Dépôt Git : mises à jour avec git pull", tree.item("msr", "values")[-1])
             tree.selection_set("msr")
             root.update()
-            [b for b in self._buttons(win) if b.cget("text") == "Update selected"][0].invoke()
+            [b for b in self._buttons(win) if b.cget("text") == "Mettre à jour la sélection"][0].invoke()
             self.assertEqual(seen[-1][0]["latest"], "3.1.4")
             self.assertEqual(seen[-1][0]["zipball"], msr["zipball"])
             self.assertIs(seen[-1][1], win)
             self.assertTrue(win.winfo_exists())          # declined: dialog stays open
             up.assert_not_called()
             # Update all asks the same callback, and a decline still updates the packages.
-            [b for b in self._buttons(win) if b.cget("text") == "Update all"][0].invoke()
+            [b for b in self._buttons(win) if b.cget("text") == "Tout mettre à jour"][0].invoke()
             self._wait(root, win._deps_state)
             self.assertEqual(up.call_args[0][0], ["yt-dlp"])
             self.assertEqual(seen[-1][0]["latest"], "3.1.4")
@@ -501,7 +501,7 @@ class DialogTests(unittest.TestCase):
             tree = self._tree(win)
             tree.selection_set("msr")
             root.update()
-            [b for b in self._buttons(win) if b.cget("text") == "Update selected"][0].invoke()
+            [b for b in self._buttons(win) if b.cget("text") == "Mettre à jour la sélection"][0].invoke()
             root.update()
             self.assertEqual(started, [msr["zipball"]])
             self.assertFalse(win.winfo_exists())
@@ -518,7 +518,7 @@ class DialogTests(unittest.TestCase):
 
     def test_summary(self):
         s = deps_dialog_summary = __import__("msr.deps_dialog", fromlist=["summary"]).summary
-        self.assertIn("previous version restored",
+        self.assertIn("version précédente restaurée",
                       s([{"name": "a", "ok": False, "error": "e", "rolled_back": True}]))
         self.assertIn("1 -> 2", deps_dialog_summary([{"name": "a", "ok": True, "old": "1", "new": "2"}]))
 

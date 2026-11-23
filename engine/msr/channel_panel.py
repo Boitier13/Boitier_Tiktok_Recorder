@@ -20,7 +20,7 @@ PLATFORM_LABELS = {
     "rumble": "Rumble",
     "tiktok": "TikTok",
     "fishtank": "Fishtank",
-    "custom": "Custom",
+    "custom": "Personnalisé",
 }
 
 # Order shown in the Add Channel platform picker.
@@ -359,13 +359,13 @@ def open_add_channel_dialog(root, theme, on_add, initial_text="",
     t = theme
     dlg = tk.Toplevel(root)
     dlg.withdraw()  # shown by dialogs.present() once the caption is themed and it is centred
-    dlg.title("Add channel")
+    dlg.title("Ajouter un créateur")
     dlg.resizable(False, False)
     dlg.configure(bg=t["bg"], padx=14, pady=12)
 
-    tk.Label(dlg, text="Channel name or URL", bg=t["bg"], fg=t["fg"],
+    tk.Label(dlg, text="Nom du créateur ou URL", bg=t["bg"], fg=t["fg"],
              font=("Segoe UI", 9)).grid(row=0, column=0, sticky="w")
-    tk.Label(dlg, text="Platform", bg=t["bg"], fg=t["fg"],
+    tk.Label(dlg, text="Plateforme", bg=t["bg"], fg=t["fg"],
              font=("Segoe UI", 9)).grid(row=0, column=1, sticky="w", padx=(8, 0))
     name_var = tk.StringVar(value=name)
     plat_var = tk.StringVar(value=PLATFORM_LABELS[plat])
@@ -377,7 +377,7 @@ def open_add_channel_dialog(root, theme, on_add, initial_text="",
     combo = ttk.Combobox(dlg, textvariable=plat_var, state="readonly", width=10,
                          values=[PLATFORM_LABELS[p] for p in ADD_PLATFORMS])
     combo.grid(row=1, column=1, padx=(8, 0), sticky="we")
-    hint = tk.Label(dlg, text="Tip: paste a kick.com / twitch.tv URL or type twitch:name",
+    hint = tk.Label(dlg, text="Astuce : collez une adresse kick.com / twitch.tv ou saisissez twitch:nom",
                     bg=t["bg"], fg=t["placeholder"], font=("Segoe UI", 8))
     hint.grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
     err = tk.Label(dlg, text="", bg=t["bg"], fg=t["error"], font=("Segoe UI", 9),
@@ -402,22 +402,22 @@ def open_add_channel_dialog(root, theme, on_add, initial_text="",
     def _submit(_e=None):
         n = name_var.get().strip()
         if not n:
-            err.configure(text="Enter a channel name.")
+            err.configure(text="Saisissez le nom d’un créateur.")
             return "break"
         ok, msg = on_add(n, label_to_key.get(plat_var.get(), "kick"))
         if ok:
             dlg.destroy()
         else:
-            err.configure(text=msg or "Could not add channel.")
+            err.configure(text=msg or "Impossible d’ajouter ce créateur.")
         return "break"
 
     def _cancel(_e=None):
         dlg.destroy()
         return "break"
 
-    for text, cmd, bg in (("Cancel", _cancel, t["btn_bg"]), ("Add", _submit, t["accent"])):
+    for text, cmd, bg in (("Annuler", _cancel, t["btn_bg"]), ("Ajouter", _submit, t["accent"])):
         tk.Button(btns, text=text, command=cmd, width=9, font=("Segoe UI", 9),
-                  bg=bg, fg=t["accent_fg"] if text == "Add" else t["btn_fg"],
+                  bg=bg, fg=t["accent_fg"] if text == "Ajouter" else t["btn_fg"],
                   activebackground=t["btn_hover"], activeforeground=t["btn_hover_fg"],
                   relief="flat", bd=0).pack(side=tk.LEFT, padx=(6, 0), ipady=2)
 

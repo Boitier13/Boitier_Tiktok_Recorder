@@ -13,6 +13,7 @@ from unittest import mock
 
 from msr import library as lib
 from msr import library_actions as act
+from msr.util import PENDING_DELETION_FOLDER, PROCESSED_FOLDER, RECORDED_FOLDER
 
 OLD = time.time() - 40 * 86400
 
@@ -33,16 +34,16 @@ class Tree(unittest.TestCase):
         self.data = self.base / "data"
         self.data.mkdir()
         s = self.streams
-        self.a1 = put(s / "Processed/kick/alice/alice_20260101_120000.mp4", 400)
-        self.a1m = put(s / "Processed/kick/alice/alice_20260101_120000.meta.json", 10)
-        self.a2 = put(s / "Processed/kick/alice/alice_20260201_120000.mp4", 300)
-        self.a3 = put(s / "Processed/kick/alice/alice_20260301_120000.mp4", 200)
-        self.b1 = put(s / "Processed/twitch/bob/bob_20260105_000000.mp4", 1000)
-        self.raw = put(s / "Recorded/kick/alice/alice_20260110_000000.ts", 50)
+        self.a1 = put(s / f"{PROCESSED_FOLDER}/kick/alice/alice_20260101_120000.mp4", 400)
+        self.a1m = put(s / f"{PROCESSED_FOLDER}/kick/alice/alice_20260101_120000.meta.json", 10)
+        self.a2 = put(s / f"{PROCESSED_FOLDER}/kick/alice/alice_20260201_120000.mp4", 300)
+        self.a3 = put(s / f"{PROCESSED_FOLDER}/kick/alice/alice_20260301_120000.mp4", 200)
+        self.b1 = put(s / f"{PROCESSED_FOLDER}/twitch/bob/bob_20260105_000000.mp4", 1000)
+        self.raw = put(s / f"{RECORDED_FOLDER}/kick/alice/alice_20260110_000000.ts", 50)
         self.clip = put(s / "Clips/kick/alice/clip_20260102_000000.mp4", 70)
         self.shot = put(s / "Clips/kick/alice/shot_20260102_000000.jpg", 5)
-        self.pend = put(s / "PendingDeletion/twitch/bob/bob_20251201_000000.mp4", 90)
-        self.note = put(s / "Processed/kick/alice/notes.txt", 3)
+        self.pend = put(s / f"{PENDING_DELETION_FOLDER}/twitch/bob/bob_20251201_000000.mp4", 90)
+        self.note = put(s / f"{PROCESSED_FOLDER}/kick/alice/notes.txt", 3)
         self.roots = lib.Roots(str(s))
         self.manifest = act.Manifest(str(self.data / "moves.json"))
         self.log_path = self.data / "actions.log"
@@ -79,8 +80,8 @@ class ScanFilesTests(Tree):
         self.assertEqual(lib.scan_library(self.roots).files, [])
 
     def test_empty_folders_are_found_but_not_top_folders(self):
-        (self.streams / "Processed/kick/ghost").mkdir()
-        (self.streams / "Recorded/empty_top_child").mkdir()
+        (self.streams / f"{PROCESSED_FOLDER}/kick/ghost").mkdir()
+        (self.streams / f"{RECORDED_FOLDER}/empty_top_child").mkdir()
         stats = self.scan()
         names = {os.path.basename(p) for p in stats.empty_dirs}
         self.assertEqual(names, {"ghost", "empty_top_child"})
@@ -92,7 +93,7 @@ class GuardTests(Tree):
 
     def test_outside_the_library_is_refused(self):
         stray = put(self.base / "elsewhere/bob/x.mp4")
-        self.assertIn("not inside", self.guard().check(str(stray)))
+        self.assertIn("ne se trouve pas", self.guard().check(str(stray)))
 
     def test_dotdot_cannot_escape(self):
         sneaky = os.path.join(str(self.streams), "Processed", "kick", "alice", "..", "..", "..", "..", "data", "x.mp4")
@@ -100,56 +101,56 @@ class GuardTests(Tree):
         self.assertIsNotNone(self.guard().check(sneaky))
 
     def test_files_directly_in_a_top_folder_are_refused(self):
-        loose = put(self.streams / "Processed/loose.mp4")
-        self.assertIn("directly", self.guard().check(str(loose)))
+        loose = put(self.streams / f"{PROCESSED_FOLDER}/loose.mp4")
+        self.assertIn("directement", self.guard().check(str(loose)))
 
     def test_other_file_types_are_left_alone(self):
         for name in ("notes.txt", "config.ini", "channels.json", "cookies.txt", "tool.py", "app.log"):
-            f = put(self.streams / "Processed/kick/alice" / name)
-            self.assertIn("left alone", self.guard().check(str(f)), name)
+            f = put(self.streams / f"{PROCESSED_FOLDER}/kick/alice" / name)
+            self.assertIn("laissé intact", self.guard().check(str(f)), name)
 
     def test_recent_files_are_refused_but_old_partials_are_fine(self):
-        fresh = put(self.streams / "Recorded/kick/alice/live.ts", age=time.time() - 30)
+        fresh = put(self.streams / f"{RECORDED_FOLDER}/kick/alice/live.ts", age=time.time() - 30)
         self.assertIn("minutes", self.guard().check(str(fresh)))
-        old_part = put(self.streams / "Processed/kick/alice/x.mp4.part")
+        old_part = put(self.streams / f"{PROCESSED_FOLDER}/kick/alice/x.mp4.part")
         self.assertIsNone(self.guard().check(str(old_part)))
-        fresh_part = put(self.streams / "Processed/kick/alice/y.mp4.part", age=time.time() - 5)
+        fresh_part = put(self.streams / f"{PROCESSED_FOLDER}/kick/alice/y.mp4.part", age=time.time() - 5)
         self.assertIn("minutes", self.guard().check(str(fresh_part)))
 
     def test_a_channel_that_is_recording_is_blocked(self):
         busy = lambda: ({("kick", "alice")}, set())  # noqa: E731
         g = self.guard(busy=busy)
-        self.assertIn("recording right now", g.check(str(self.a1)))
-        self.assertIn("recording right now", g.check(str(self.clip)))
+        self.assertIn("en cours de capture", g.check(str(self.a1)))
+        self.assertIn("en cours de capture", g.check(str(self.clip)))
         self.assertIsNone(g.check(str(self.b1)))  # other channels are fine
 
     def test_a_file_a_recorder_is_writing_is_blocked(self):
         g = self.guard(busy=lambda: (set(), {os.path.normcase(os.path.abspath(str(self.raw)))}))
-        self.assertIn("writing", g.check(str(self.raw)))
+        self.assertIn("en train d’y écrire", g.check(str(self.raw)))
 
     def test_unreadable_recorder_state_blocks_everything(self):
         def broken():
             raise RuntimeError("no status")
-        self.assertIn("recording right now", self.guard(busy=broken).check(str(self.a1)))
+        self.assertIn("en cours de capture", self.guard(busy=broken).check(str(self.a1)))
 
     def test_a_library_inside_the_data_folder_is_still_manageable(self):
         # portable setup: config.ini and the Streams folder live side by side
         g = act.Guard(self.roots, data_dir=str(self.base))
         self.assertIsNone(g.check(str(self.a1)))
-        self.assertIn("directly", g.check(str(self.streams / "Processed" / "x.mp4")) or "directly")
+        self.assertIn("directement", g.check(str(self.streams / PROCESSED_FOLDER / "x.mp4")) or "directement")
 
     def test_the_data_folder_is_never_touched(self):
-        g = act.Guard(self.roots, data_dir=str(self.streams / "Processed/kick/alice"))
-        self.assertIn("data folder", g.check(str(self.a1)))
+        g = act.Guard(self.roots, data_dir=str(self.streams / f"{PROCESSED_FOLDER}/kick/alice"))
+        self.assertIn("dossier de données", g.check(str(self.a1)))
 
     def test_changed_since_the_preview_is_refused(self):
         g = self.guard()
-        self.assertIn("size", g.check(str(self.a1), size=1, mtime=self.a1.stat().st_mtime))
-        self.assertIn("modified", g.check(str(self.a1), size=400, mtime=self.a1.stat().st_mtime + 100))
+        self.assertIn("taille", g.check(str(self.a1), size=1, mtime=self.a1.stat().st_mtime))
+        self.assertIn("modifié", g.check(str(self.a1), size=400, mtime=self.a1.stat().st_mtime + 100))
         self.assertIsNone(g.check(str(self.a1), size=400, mtime=self.a1.stat().st_mtime))
 
     def test_missing_files_are_refused(self):
-        self.assertIsNotNone(self.guard().check(str(self.streams / "Processed/kick/alice/nope.mp4")))
+        self.assertIsNotNone(self.guard().check(str(self.streams / f"{PROCESSED_FOLDER}/kick/alice/nope.mp4")))
 
     def test_a_drive_root_or_missing_streams_folder_allows_nothing(self):
         anchor = os.path.abspath(os.sep) if os.name != "nt" else os.path.splitdrive(str(self.base))[0] + "\\"
@@ -159,12 +160,12 @@ class GuardTests(Tree):
         self.assertEqual(act.Guard(lib.Roots(str(self.base / "missing"))).tops, {})
 
     def test_symlinked_file_is_refused(self):
-        link = self.streams / "Processed/kick/alice/link.mp4"
+        link = self.streams / f"{PROCESSED_FOLDER}/kick/alice/link.mp4"
         try:
             os.symlink(str(self.b1), str(link))
         except (OSError, NotImplementedError):
             self.skipTest("symlinks not permitted here")
-        self.assertIn("link", self.guard().check(str(link)))
+        self.assertIn("lien", self.guard().check(str(link)))
 
     def _junction(self, link: Path, target: Path):
         try:
@@ -180,9 +181,9 @@ class GuardTests(Tree):
     def test_a_linked_folder_that_leads_outside_is_refused(self):
         outside = self.base / "outside"
         victim = put(outside / "precious.mp4")
-        if not self._junction(self.streams / "Processed/kick/escape", outside):
+        if not self._junction(self.streams / f"{PROCESSED_FOLDER}/kick/escape", outside):
             self.skipTest("cannot create a link here")
-        path = self.streams / "Processed/kick/escape/precious.mp4"
+        path = self.streams / f"{PROCESSED_FOLDER}/kick/escape/precious.mp4"
         self.assertTrue(path.exists())
         self.assertIsNotNone(self.guard().check(str(path)))
         plan = act.build_plan(self.guard(), [lib.FileRec(str(path), 100, victim.stat().st_mtime, 0, "processed", "kick",
@@ -203,12 +204,12 @@ class GuardTests(Tree):
         if not _two_case_names(low):
             self.skipTest("this volume cannot hold two folders that differ only by case")
         old = put(low / "processed/kick/alice/old_20260101_000000.mp4", 20)
-        put(low / "Processed/kick/alice/new_20260201_000000.mp4", 20)
+        put(low / f"{PROCESSED_FOLDER}/kick/alice/new_20260201_000000.mp4", 20)
         extra = put(self.base / "Streamers/betty/kick/x_20260301_000000.mp4", 20)
         roots = lib.Roots(str(low), extra_dirs=(str(self.base / "Streamers"),))
         guard = act.Guard(roots, data_dir=str(self.data))
         self.assertIsNone(guard.check(str(old), size=20, mtime=old.stat().st_mtime))
-        self.assertIn("not inside", guard.check(str(extra)) or "")
+        self.assertIn("ne se trouve pas", guard.check(str(extra)) or "")
         # the scan that feeds the guard does not write into either tree
         before = sorted((str(p), p.stat().st_mtime_ns, p.stat().st_size) for p in low.rglob("*"))
         lib.scan_library(roots, collect_files=True)
@@ -218,7 +219,7 @@ class GuardTests(Tree):
 
 def _two_case_names(folder: Path) -> bool:
     folder.mkdir(parents=True, exist_ok=True)
-    a, b = folder / "processed", folder / "Processed"
+    a, b = folder / PROCESSED_FOLDER.lower(), folder / PROCESSED_FOLDER
     a.mkdir()
     try:
         b.mkdir()
@@ -253,7 +254,7 @@ class PlanTests(Tree):
     def test_files_already_in_pending_are_not_moved_again(self):
         plan = act.build_plan(self.guard(), self.recs(self.pend), act.ACTION_PENDING)
         self.assertFalse(plan.ok)
-        self.assertIn("already", plan.skipped[0][1])
+        self.assertIn("déjà", plan.skipped[0][1])
 
     def test_duplicates_in_the_candidate_list_count_once(self):
         recs = self.recs(self.a2)
@@ -273,10 +274,10 @@ class PlanTests(Tree):
         self.assertEqual(both.confirm_word, "DELETE")
 
     def test_empty_folder_plan_only_takes_empty_plain_folders(self):
-        empty = self.streams / "Processed/kick/ghost"
+        empty = self.streams / f"{PROCESSED_FOLDER}/kick/ghost"
         empty.mkdir()
-        full = self.streams / "Processed/kick/alice"
-        top = self.streams / "Processed"
+        full = self.streams / f"{PROCESSED_FOLDER}/kick/alice"
+        top = self.streams / PROCESSED_FOLDER
         plan = act.plan_empty_dirs(self.guard(), [str(empty), str(full), str(top)])
         self.assertEqual([i.path for i in plan.items], [str(empty)])
         self.assertEqual(len(plan.skipped), 2)
@@ -330,13 +331,13 @@ class ExecuteTests(Tree):
 
     def test_move_to_pending_mirrors_the_folders_and_takes_the_info_file(self):
         plan, result = self.run_plan(act.ACTION_PENDING, self.recs(self.a1, self.clip))
-        pending = self.streams / "PendingDeletion"
+        pending = self.streams / PENDING_DELETION_FOLDER
         self.assertTrue((pending / "kick/alice/alice_20260101_120000.mp4").is_file())
         self.assertTrue((pending / "kick/alice/alice_20260101_120000.meta.json").is_file())
         self.assertTrue((pending / "kick/alice/clip_20260102_000000.mp4").is_file())
         self.assertFalse(self.a1.exists() or self.a1m.exists() or self.clip.exists())
         self.assertEqual((result.done, result.bytes, len(result.failed)), (3, 400 + 10 + 70, 0))
-        self.assertIn("Moved to PendingDeletion: 3", result.summary)
+        self.assertIn("Déplacés vers les éléments récupérables: 3", result.summary)
         self.assertTrue(self.a2.exists() and self.b1.exists())  # nothing else moved
 
     def test_the_grace_period_really_applies_the_recorders_own_purge_leaves_it_alone(self):
@@ -352,24 +353,24 @@ class ExecuteTests(Tree):
             vals[9] = int(OLD)
             return os.stat_result(vals + [st.st_atime, st.st_mtime, OLD])
         self.run_plan(act.ACTION_PENDING, self.recs(self.a1))  # a1 is 40 days old
-        moved = self.streams / "PendingDeletion/kick/alice/alice_20260101_120000.mp4"
+        moved = self.streams / f"{PENDING_DELETION_FOLDER}/kick/alice/alice_20260101_120000.mp4"
         self.assertLess(time.time() - moved.stat().st_mtime, 120)
         with mock.patch.object(os, "stat", old_birth):
             self.assertEqual(purge_old_pending_files(str(self.streams / "."), 7), 1)  # only the old pre-existing file
         self.assertTrue(moved.exists())
         self.assertFalse(self.pend.exists())
         # control: a file moved the plain way keeps its old mtime and is purged straight away
-        plain = put(self.streams / "PendingDeletion/kick/alice/plain.mp4", 5)
+        plain = put(self.streams / f"{PENDING_DELETION_FOLDER}/kick/alice/plain.mp4", 5)
         with mock.patch.object(os, "stat", old_birth):
             self.assertEqual(purge_old_pending_files(str(self.streams), 7), 1)
         self.assertFalse(plain.exists())
         self.assertTrue(moved.exists())
 
     def test_name_clash_in_pending_gets_a_number_and_restore_still_finds_the_original(self):
-        clash = put(self.streams / "PendingDeletion/kick/alice/alice_20260201_120000.mp4", 5)
+        clash = put(self.streams / f"{PENDING_DELETION_FOLDER}/kick/alice/alice_20260201_120000.mp4", 5)
         self.run_plan(act.ACTION_PENDING, self.recs(self.a2))
         self.assertTrue(clash.exists())
-        self.assertTrue((self.streams / "PendingDeletion/kick/alice/alice_20260201_120000 (2).mp4").exists())
+        self.assertTrue((self.streams / f"{PENDING_DELETION_FOLDER}/kick/alice/alice_20260201_120000 (2).mp4").exists())
         moved = self.manifest.load()[0]
         self.assertTrue(moved["pending"].endswith("(2).mp4"))
         self.assertEqual(os.path.normcase(moved["original"]), os.path.normcase(str(self.a2)))
@@ -386,7 +387,7 @@ class ExecuteTests(Tree):
         self.assertTrue(self.a2.exists())
         self.assertEqual(int(self.a2.stat().st_mtime), int(old_mtime))
         self.assertEqual(self.manifest.load(), [])
-        self.assertFalse((self.streams / "PendingDeletion/kick/alice/alice_20260201_120000.mp4").exists())
+        self.assertFalse((self.streams / f"{PENDING_DELETION_FOLDER}/kick/alice/alice_20260201_120000.mp4").exists())
 
     def test_restore_refuses_to_overwrite(self):
         _plan, moved = self.run_plan(act.ACTION_PENDING, self.recs(self.a2))
@@ -395,17 +396,17 @@ class ExecuteTests(Tree):
         undo = act.restore_batch_plan(g, self.manifest, moved.batch)
         result = act.execute(undo, g, act.deleter_for(act.ACTION_RESTORE, g, self.manifest), manifest=self.manifest)
         self.assertEqual(result.done, 0)
-        self.assertIn("already there", result.failed[0][1])
+        self.assertIn("existe déjà", result.failed[0][1])
         self.assertEqual(self.a2.stat().st_size, 7)
 
     def test_restore_without_a_manifest_uses_processed_and_recorded(self):
-        ts = put(self.streams / "PendingDeletion/kick/alice/old_20250101_000000.ts", 9)
-        mp4 = put(self.streams / "PendingDeletion/kick/alice/old_20250102_000000.mp4", 9)
+        ts = put(self.streams / f"{PENDING_DELETION_FOLDER}/kick/alice/old_20250101_000000.ts", 9)
+        mp4 = put(self.streams / f"{PENDING_DELETION_FOLDER}/kick/alice/old_20250102_000000.mp4", 9)
         g = self.guard()
         plan = act.build_plan(g, self.recs(ts, mp4), act.ACTION_RESTORE)
         act.execute(plan, g, act.deleter_for(act.ACTION_RESTORE, g, self.manifest), manifest=self.manifest)
-        self.assertTrue((self.streams / "Recorded/kick/alice/old_20250101_000000.ts").exists())
-        self.assertTrue((self.streams / "Processed/kick/alice/old_20250102_000000.mp4").exists())
+        self.assertTrue((self.streams / f"{RECORDED_FOLDER}/kick/alice/old_20250101_000000.ts").exists())
+        self.assertTrue((self.streams / f"{PROCESSED_FOLDER}/kick/alice/old_20250102_000000.mp4").exists())
 
     def test_restore_all_in_pending_skips_non_pending_files(self):
         plan = act.build_plan(self.guard(), self.recs(self.a1), act.ACTION_RESTORE)
@@ -435,7 +436,7 @@ class ExecuteTests(Tree):
         self.assertTrue(result.cancelled)
         remaining = [p for p in (self.a1, self.a2, self.a3) if p.exists()]
         self.assertEqual(len(remaining), 2)
-        self.assertIn("Cancelled after", result.summary)
+        self.assertIn("Annulation après", result.summary)
 
     def test_a_failing_file_is_reported_and_the_rest_continue(self):
         calls = []
@@ -473,7 +474,7 @@ class ExecuteTests(Tree):
         self.assertTrue(self.a2.exists())
 
     def test_remove_empty_folders(self):
-        deep = self.streams / "Processed/kick/ghost/inner"
+        deep = self.streams / f"{PROCESSED_FOLDER}/kick/ghost/inner"
         deep.mkdir(parents=True)
         g = self.guard()
         plan = act.plan_empty_dirs(g, [str(deep), str(deep.parent)])
@@ -484,7 +485,7 @@ class ExecuteTests(Tree):
         self.assertTrue(deep.parent.exists())
 
     def test_a_folder_that_got_a_file_is_not_removed(self):
-        ghost = self.streams / "Processed/kick/ghost"
+        ghost = self.streams / f"{PROCESSED_FOLDER}/kick/ghost"
         ghost.mkdir()
         g = self.guard()
         plan = act.plan_empty_dirs(g, [str(ghost)])
@@ -529,7 +530,7 @@ class ExecuteTests(Tree):
 class PendingCardTests(Tree):
     def test_info_and_next_purge_follow_the_recorders_rule(self):
         now = time.time()
-        fresh = put(self.streams / "PendingDeletion/kick/alice/f.mp4", 30, age=now - 2 * 86400)
+        fresh = put(self.streams / f"{PENDING_DELETION_FOLDER}/kick/alice/f.mp4", 30, age=now - 2 * 86400)
         stats = self.scan()
         # (files made a moment ago have a new creation time; give the old one the dates a real one has)
         stats.files = [r._replace(ctime=OLD) if r.path == str(self.pend) else r._replace(ctime=now - 2 * 86400)
@@ -539,20 +540,20 @@ class PendingCardTests(Tree):
         self.assertEqual(info.due_files, 1)  # the 40 day old one
         self.assertIsNotNone(info.next_due)
         text = " ".join(info.lines(now))
-        self.assertIn("when MSR starts", text)
-        self.assertIn("already old enough", text)
+        self.assertIn("au démarrage de MSR", text)
+        self.assertIn("ont déjà atteint cette durée", text)
         off = " ".join(act.pending_info(stats, 0, True, now).lines(now))
-        self.assertIn("purge is off", off)
-        self.assertEqual(act.pending_info(lib.LibraryStats(), 7).lines(), ["PendingDeletion is empty."])
+        self.assertIn("suppression automatique est désactivée", off)
+        self.assertEqual(act.pending_info(lib.LibraryStats(), 7).lines(), ["Le dossier des éléments récupérables est vide."])
         self.assertTrue(fresh.exists())
 
 
 class SuggestionTests(Tree):
     def test_suggestions(self):
-        (self.streams / "Processed/kick/ghost").mkdir()
-        dup = put(self.streams / "Processed/twitch/bob2/bob_20260105_000000.mp4", 1000)  # same name and size
-        put(self.streams / "Processed/kick/alice/lonely_20260101_000000.meta.json", 4)
-        put(self.streams / "Processed/kick/alice/zzz_20260101_000000.mp4.part", 12)
+        (self.streams / f"{PROCESSED_FOLDER}/kick/ghost").mkdir()
+        dup = put(self.streams / f"{PROCESSED_FOLDER}/twitch/bob2/bob_20260105_000000.mp4", 1000)  # same name and size
+        put(self.streams / f"{PROCESSED_FOLDER}/kick/alice/lonely_20260101_000000.meta.json", 4)
+        put(self.streams / f"{PROCESSED_FOLDER}/kick/alice/zzz_20260101_000000.mp4.part", 12)
         stats = self.scan()
         lib.mark_roster(stats, ["alice"])
         by = {s.key: s for s in act.build_suggestions(stats, older_days=30, now=time.time())}
@@ -562,7 +563,7 @@ class SuggestionTests(Tree):
         extra = {r.path for r in by["duplicates"].recs}  # one copy is kept, the other is the suggestion\n        self.assertEqual(len(extra), 1)\n        self.assertTrue(extra <= {str(dup), str(self.b1)})
         self.assertEqual([os.path.basename(r.path) for r in by["orphans"].recs], ["lonely_20260101_000000.meta.json"])
         self.assertEqual([os.path.basename(r.path) for r in by["leftover"].recs].count("zzz_20260101_000000.mp4.part"), 1)
-        self.assertIn(str(self.streams / "Processed/kick/ghost"), by["empty"].dirs)
+        self.assertIn(str(self.streams / f"{PROCESSED_FOLDER}/kick/ghost"), by["empty"].dirs)
         self.assertGreater(by["older"].count, 0)
 
     def test_free_up_picks_oldest_first_until_the_target_is_met(self):
@@ -573,7 +574,7 @@ class SuggestionTests(Tree):
         self.assertGreaterEqual(s.bytes, 650)
         self.assertLess(s.bytes, 650 + 1001)
         short = act.free_up_suggestion(stats, 10 ** 9)
-        self.assertIn("short", short.detail)
+        self.assertIn("il manque", short.detail)
 
 
 class StatusAndRecycleTests(unittest.TestCase):

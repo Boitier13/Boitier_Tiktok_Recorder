@@ -129,7 +129,7 @@ class TabTests(unittest.TestCase):
 
     def test_overview_tabs_unchanged_and_recordings_added(self):
         texts = [self.panel.tabs.tab(t, "text").strip() for t in self.panel.tabs.tabs()]
-        self.assertEqual(texts[:3], ["Overview", "Channels", "Recordings"])
+        self.assertEqual(texts[:3], ["Vue d’ensemble", "Créateurs", "Vidéos"])
 
     def test_jump_box_lists_channel_and_actions(self):
         self.assertIn("alice  (Kick)", self.tab.channel_box.cget("values"))
@@ -142,7 +142,7 @@ class TabTests(unittest.TestCase):
         self.tab.search_var.set("tokyo")
         kids = self.tab.tree.get_children()
         self.assertEqual(len(kids), 1)
-        self.assertIn("1 of 4", self.tab.count.cget("text"))
+        self.assertIn("1 sur 4", self.tab.count.cget("text"))
         self.tab.tree.selection_set(kids[0])
         self.root.update()
         self.tab.reveal()
@@ -171,7 +171,7 @@ class TabTests(unittest.TestCase):
     def test_unknown_channel_message(self):
         self.tab.channel_var.set("zzz")
         self.tab.jump()
-        self.assertIn("No channel matches", self.tab.count.cget("text"))
+        self.assertIn("Aucun créateur ne correspond", self.tab.count.cget("text"))
 
 
 
@@ -252,10 +252,10 @@ class ClipTabTests(TabTests):
         self.assertEqual(str(self.tab.tree.set(rid, "clips")), "2")
         kids = self.tab.tree.get_children(rid)
         self.assertEqual(len(kids), 2)
-        self.assertIn("2 linked clips", self.tab.count.cget("text"))
+        self.assertIn("2 clips associés", self.tab.count.cget("text"))
         self.tab.tree.selection_set(kids[0])
         self.root.update()
-        self.assertEqual(self.tab.clip_btn.cget("text"), "Open source")
+        self.assertEqual(self.tab.clip_btn.cget("text"), "Ouvrir la vidéo source")
         self.tab.play()
         self.tab.reveal()
         self.tab.open_clip_editor()
@@ -265,11 +265,11 @@ class ClipTabTests(TabTests):
         self.tab.select_source()
         self.assertEqual(self.tab.tree.selection(), (rid,))
         self.root.update()
-        self.assertEqual(self.tab.clip_btn.cget("text"), "Clip Editor")
+        self.assertEqual(self.tab.clip_btn.cget("text"), "Éditeur de clips")
         self.tab._build_menu()  # recording menu offers show/hide clips
         labels = [self.tab.menu.entrycget(i, "label") for i in range(self.tab.menu.index("end") + 1)
                   if self.tab.menu.type(i) == "command"]
-        self.assertIn("Show / hide clips (2)", labels)
+        self.assertIn("Afficher ou masquer les clips (2)", labels)
         self.tab.toggle_clips()
         self.tab.search_var.set("")  # refill keeps the row open
         again = next(i for i, r in self.tab.rows.items() if isinstance(r, lb.Recording) and r.path == src)
@@ -355,7 +355,7 @@ class FoldClipFilesTests(unittest.TestCase):
         self.assertFalse(top["alice_cutting_board_20260105_100000.mp4"].orphan)
         self.assertFalse(top["alice_20260101_120000.mp4"].orphan)
         cell = lb._COLUMN["title"][5](top["gone_20250101_000000_trim.mp4"])
-        self.assertIn("source missing", cell)
+        self.assertIn("source introuvable", cell)
 
 
 class FoldClipTabTests(ClipTabTests):
@@ -371,7 +371,7 @@ class FoldClipTabTests(ClipTabTests):
         rid = top["alice_20260101_120000.mp4"]
         self.assertEqual(str(self.tab.tree.set(rid, "clips")), "1")  # Clips column: Clips-folder links only
         self.assertEqual(len(self.tab.tree.get_children(rid)), 4)
-        self.assertIn("source missing", self.tab.tree.set(top["gone_20250101_000000_trim.mp4"], "title"))
+        self.assertIn("source introuvable", self.tab.tree.set(top["gone_20250101_000000_trim.mp4"], "title"))
         kid = self.tab.tree.get_children(rid)[-1]
         self.tab.tree.selection_set(kid)
         self.root.update()

@@ -138,7 +138,7 @@ function mapCreator(row: Record<string, unknown>): Creator {
     status: live ? "live" : error || !confirmedOffline ? "unknown" : "offline",
     enabled,
     lastLive:
-      lastLive || (error ? "État inconnu — erreur de vérification" : "Aucune donnée de LIVE"),
+      lastLive || (error ? "État inconnu — erreur de vérification" : "Aucune donnée sur les directs"),
     detail: asText(row["detail"]),
     liveSinceSec: parseDuration(row["duration"]),
   };
@@ -194,6 +194,20 @@ export async function readLibraryChannel(channel: string): Promise<LibraryRecord
 
 export async function readLibraryPending(): Promise<LibraryPending> {
   return request<LibraryPending>("/api/library/pending");
+}
+
+export async function openRecordingFolder(path?: string): Promise<void> {
+  await request<{ opened: true }>("/api/recordings/open-folder", {
+    method: "POST",
+    body: JSON.stringify(path ? { path } : {}),
+  });
+}
+
+export async function openActiveRecordingFolder(channel: string): Promise<void> {
+  await request<{ opened: true }>("/api/recordings/open-folder", {
+    method: "POST",
+    body: JSON.stringify({ channel }),
+  });
 }
 
 export async function planRecordingRemoval(path: string): Promise<LibraryPlan> {

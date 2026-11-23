@@ -99,7 +99,7 @@ class PlanRulesTests(DialogCase):
         dialog._toggle(iid)
         dialog.refresh()
         self.assertEqual(dialog.plan.files, 2)
-        self.assertIn("1 of 2", dialog.count_label.cget("text"))
+        self.assertIn("1 sur 2", dialog.count_label.cget("text"))
         dialog.check_none()
         dialog.refresh()
         self.assertIn("disabled", dialog.go_btn.state())
@@ -107,7 +107,7 @@ class PlanRulesTests(DialogCase):
     def test_the_safe_move_is_the_default_and_the_button_says_what_it_does(self):
         dialog = self.open()
         self.assertEqual(dialog.method_var.get(), act.ACTION_PENDING)
-        self.assertIn("PendingDeletion", dialog.go_btn.cget("text"))
+        self.assertIn("éléments récupérables", dialog.go_btn.cget("text"))
         self.assertTrue(dialog.allowed())
 
     def test_permanent_needs_the_exact_word(self):
@@ -143,7 +143,7 @@ class PlanRulesTests(DialogCase):
         self.assertFalse(dialog.allowed())
         self.assertFalse(dialog.confirm())
         self.assertIsNone(dialog.result)
-        self.assertIn("recording", dialog.warning.cget("text").lower())
+        self.assertIn("capture", dialog.warning.cget("text").lower())
 
     def test_a_file_that_changed_after_the_preview_is_left_alone(self):
         dialog = self.open()
@@ -172,7 +172,7 @@ class PlanRulesTests(DialogCase):
         win = self.scanned(manage_ctx=self.ctx())
         dirs = list(win.stats.empty_dirs)
         self.assertTrue(any(d.endswith("ghost") for d in dirs))
-        dialog = ldialog.ActionDialog(win.mgr, win.toplevel, "Empty folders", "x", dirs=dirs, preselect=False)
+        dialog = ldialog.ActionDialog(win.mgr, win.toplevel, "Dossiers vides", "x", dirs=dirs, preselect=False)
         self.addCleanup(dialog.win.destroy)
         dialog.refresh()
         self.assertFalse(dialog.allowed())  # nothing ticked

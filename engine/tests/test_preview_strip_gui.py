@@ -114,11 +114,11 @@ def driver(self):
         self.deiconify(); time.sleep(0.3)
         out["viewable"] = bool(self.winfo_viewable())
         nb = next(w for w in walk(self) if w.winfo_class() == "TNotebook"
-                  and any("Status" in str(w.tab(i, "text")) for i in w.tabs()))
-        status_tab = next(i for i in nb.tabs() if "Status" in str(nb.tab(i, "text")))
+                  and any("État" in str(w.tab(i, "text")) for i in w.tabs()))
+        status_tab = next(i for i in nb.tabs() if "État" in str(nb.tab(i, "text")))
         other_tab = next(i for i in nb.tabs() if i != status_tab)
         nb.select(status_tab)
-        start = next(w for w in walk(self) if w.winfo_class() == "Button" and "Start Recording" in str(w.cget("text")))
+        start = next(w for w in walk(self) if w.winfo_class() == "Button" and "Démarrer les captures" in str(w.cget("text")))
         start.invoke()
         # 1. the timer: a tile appears and keeps being refreshed
         wait_for(tile_label)

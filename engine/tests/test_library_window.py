@@ -89,7 +89,7 @@ class PureTests(unittest.TestCase):
         self.assertIn("chan0 (Twitch)", bars[0][3])
         donut = lw.donut_rows(s)
         self.assertEqual(len(donut), lw.TOP_PLATFORMS + 1)  # six sites + one Other slice
-        self.assertEqual(donut[-1][0], "Other")
+        self.assertEqual(donut[-1][0], "Autres")
         self.assertEqual(donut[-1][1], 3000 + 2000)  # the two smallest sites
         self.assertEqual(donut[0][0], "Kick")
         self.assertEqual(lw.donut_rows(lib.LibraryStats()), [])
@@ -97,7 +97,7 @@ class PureTests(unittest.TestCase):
     def test_month_rows_fill_the_gap(self):
         rows = lw.month_rows(self.stats())
         self.assertEqual([r[0] for r in rows], ["26-01", "26-02", "26-03"])
-        self.assertIn("nothing recorded", rows[1][2])
+        self.assertIn("aucune capture", rows[1][2])
 
     def test_sorting_and_filtering(self):
         chans = list(self.stats().channels.values())
@@ -130,12 +130,12 @@ class WindowTests(Case):
     def test_scan_fills_text_charts_and_table(self):
         win = self.scanned()
         text = win.headline.cget("text")
-        self.assertIn("of recordings in 4 files", text)
+        self.assertIn("dans 4 fichiers", text)
         self.assertIn("alice", text)
         self.assertEqual(len(win.tree.get_children()), 3)
         first = win.tree.item(win.tree.get_children()[0], "values")
         self.assertEqual(first[0], "alice")
-        self.assertEqual(first[-1], "yes")
+        self.assertEqual(first[-1], "oui")
         self.assertEqual(len(win.bars.data), 3)
         self.assertEqual(win.donut.center_text, lib.fmt_size(9400))
         self.assertIn("alice (Kick)", win.bars.tooltip_at(5, 6 + 12))
@@ -159,7 +159,7 @@ class WindowTests(Case):
             self.assertNotIn("disabled", win.cancel_btn.state())
             self.assertIn("disabled", win.hours_btn.state())
             win.cancel()
-            self.assertIn("Cancelling", win.status.cget("text"))
+            self.assertIn("Annulation", win.status.cget("text"))
             self.pump(lambda: not win.busy and win.stats is not None)
         self.assertTrue(win.stats.cancelled)
         self.assertIn("cancelled", win.status.cget("text").lower())
@@ -217,7 +217,7 @@ class WindowTests(Case):
             self.pump(lambda: not win.busy and win.stats.seconds_total is not None)
             self.pump(lambda: ask.called)
         self.assertAlmostEqual(win.stats.seconds_total, 10800)  # two of four have length notes
-        self.assertIn("2 recordings have no length", ask.call_args[0][2].replace(",", ""))
+        self.assertIn("2 vidéo(s)", ask.call_args[0][2])
         alice_row = [win.tree.item(i, "values") for i in win.tree.get_children()][0]
         self.assertEqual(alice_row[7], "3.0 h")
         self.assertEqual(alice_row[0], "alice")
@@ -259,7 +259,7 @@ class WindowTests(Case):
         self.root.update()
         self.assertIsNone(win.job)
         self.assertIsNone(win.stats)
-        self.assertEqual(win.status.cget("text"), "Not scanned yet.")
+        self.assertEqual(win.status.cget("text"), "Pas encore analysé.")
         self.assertIn("disabled", win.copy_btn.state())
         win.activate()
         self.pump(lambda: win.stats is not None and not win.busy)
@@ -273,11 +273,11 @@ class WindowTests(Case):
             win = self.make()
             self.pump(lambda: err.called)
         self.assertIn("boom", err.call_args[0][2])
-        self.assertEqual(win.status.cget("text"), "Scan failed")
+        self.assertEqual(win.status.cget("text"), "Échec de l’analyse")
 
     def test_missing_folder_still_opens(self):
         win = self.scanned(get_roots=lambda: lib.Roots(str(self.base / "nope")))
-        self.assertIn("not found: Recordings folder", win.headline.cget("text"))
+        self.assertIn("introuvable", win.headline.cget("text"))
         self.assertEqual(win.tree.get_children(), ())
 
     def test_rescan_picks_up_new_files_and_the_window_writes_nothing_in_the_library(self):

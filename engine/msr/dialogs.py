@@ -326,7 +326,7 @@ def ask_yes_no(parent: tk.Misc, title: str, message: str, default_no: bool = Fal
         result["yes"] = True
         win.destroy()
 
-    buttons = _buttons(frame, win, [("yes", "Yes", yes), ("no", "No", win.destroy)])
+    buttons = _buttons(frame, win, [("yes", "Oui", yes), ("no", "Non", win.destroy)])
     _bind_keys(win, win.destroy if default_no else yes, win.destroy)
     win._msr_result = result  # type: ignore[attr-defined]
     _show_modal(win, parent, buttons["no" if default_no else "yes"])
@@ -346,12 +346,12 @@ def parse_number(text: str, *, integer: bool, minvalue: float | None, maxvalue: 
     low = "" if minvalue is None else f"{minvalue:g}"
     high = "" if maxvalue is None else f"{maxvalue:g}"
     if value is None:
-        kind = "a whole number" if integer else "a number"
+        kind = "nombre entier" if integer else "nombre"
         if minvalue is not None and maxvalue is not None:
-            return None, f"Enter {kind} from {low} to {high}."
-        return None, f"Enter {kind}."
+            return None, f"Saisissez un {kind} entre {low} et {high}."
+        return None, f"Saisissez un {kind}."
     if (minvalue is not None and value < minvalue) or (maxvalue is not None and value > maxvalue):
-        return None, f"The value must be from {low} to {high}."
+        return None, f"La valeur doit être comprise entre {low} et {high}."
     return value, ""
 
 
@@ -376,7 +376,7 @@ def _ask_number(parent, title, prompt, *, integer, minvalue, maxvalue, initial):
         result["value"] = value
         win.destroy()
 
-    _buttons(frame, win, [("ok", "OK", ok), ("cancel", "Cancel", win.destroy)])
+    _buttons(frame, win, [("ok", "OK", ok), ("cancel", "Annuler", win.destroy)])
     _bind_keys(win, ok, win.destroy)
     win._msr_entry, win._msr_var, win._msr_result = entry, var, result  # type: ignore[attr-defined]
     entry.select_range(0, "end")

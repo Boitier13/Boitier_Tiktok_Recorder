@@ -27,7 +27,7 @@ class TestPlatformDisplay(unittest.TestCase):
 
     def test_custom_url(self):
         self.assertEqual(cp.channel_display("custom:https://www.chaturbate.com/alice/"),
-                         ("chaturbate.com/alice", "Custom"))
+                         ("chaturbate.com/alice", "Personnalisé"))
 
     def test_split_keeps_unknown_prefix_as_name(self):
         self.assertEqual(cp.split_channel_key("foo:bar"), ("kick", "foo:bar"))

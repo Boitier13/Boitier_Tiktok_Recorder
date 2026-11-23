@@ -260,7 +260,7 @@ def fold_clip_files(recs: list[Recording]) -> list[Recording]:
         if isinstance(link, dict):
             ref = ClipRef(r.path, r.name, r.size, r.when, stem, source_name, link["in"], link["out"], link["guessed"])
         else:
-            ref = ClipRef(r.path, r.name, r.size, r.when, stem, "", 0.0, 0.0, False, label=f"{link} file")
+            ref = ClipRef(r.path, r.name, r.size, r.when, stem, "", 0.0, 0.0, False, label=f"{link} fichier")
         parent.related.append(ref)
     for r in sources:
         r.related.sort(key=lambda c: c.name.lower())
@@ -270,11 +270,11 @@ def fold_clip_files(recs: list[Recording]) -> list[Recording]:
 # (id, heading, width, anchor, sort key, cell text)
 COLUMNS = (
     ("date", "Date", 120, "w", lambda r: r.when, lambda r: fmt_when(r.when)),
-    ("length", "Length", 70, "e", lambda r: -1 if r.seconds is None else r.seconds, lambda r: fmt_length(r.seconds)),
-    ("title", "Stream title", 330, "w", lambda r: r.title.lower(), lambda r: r.title or ("\u26a0 clip, source missing" if r.orphan else "-")),
+    ("length", "Durée", 70, "e", lambda r: -1 if r.seconds is None else r.seconds, lambda r: fmt_length(r.seconds)),
+    ("title", "Titre du direct", 330, "w", lambda r: r.title.lower(), lambda r: r.title or ("\u26a0 clip, source introuvable" if r.orphan else "-")),
     ("clips", "Clips", 45, "e", lambda r: len(r.clips), lambda r: len(r.clips) or ""),
-    ("file", "File", 250, "w", lambda r: r.name.lower(), lambda r: r.name + ("  (raw)" if r.raw else "")),
-    ("size", "Size", 80, "e", lambda r: r.size, lambda r: lib.fmt_size(r.size)),
+    ("file", "Fichier", 250, "w", lambda r: r.name.lower(), lambda r: r.name + ("  (brut)" if r.raw else "")),
+    ("size", "Taille", 80, "e", lambda r: r.size, lambda r: lib.fmt_size(r.size)),
 )
 
 
@@ -282,7 +282,7 @@ def clip_cells(c: ClipRef) -> list:
     """A clip's child row, in COLUMNS order."""
     if c.label:
         return [fmt_when(c.mtime), "", c.label, "", c.name, lib.fmt_size(c.size)]
-    span = f"clip {fmt_length(c.t_in)} – {fmt_length(c.t_out)}" + ("  (times from name)" if c.guessed else "")
+    span = f"clip de {fmt_length(c.t_in)} à {fmt_length(c.t_out)}" + ("  (durées estimées à partir du nom)" if c.guessed else "")
     return [fmt_when(c.mtime), fmt_length(max(0.0, c.t_out - c.t_in)), span, "", c.name, lib.fmt_size(c.size)]
 _COLUMN = {c[0]: c for c in COLUMNS}
 

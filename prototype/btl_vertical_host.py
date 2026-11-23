@@ -39,12 +39,66 @@ if getattr(sys, "frozen", False):
     BUNDLED_TOOLS = Path(sys.executable).resolve().parent / "tools"
     if BUNDLED_TOOLS.is_dir():
         os.environ["PATH"] = str(BUNDLED_TOOLS) + os.pathsep + os.environ.get("PATH", "")
+
+
+def _capture_tool_commands():
+    if getattr(sys, "frozen", False):
+        tools_dir = Path(sys.executable).resolve().parent / "tools"
+        return {
+            "yt-dlp": str(tools_dir / "yt-dlp.exe"),
+            "streamlink": str(tools_dir / "streamlink.exe"),
+            "ffmpeg": str(tools_dir / "ffmpeg.exe"),
+            "ffprobe": str(tools_dir / "ffprobe.exe"),
+        }
+    return {name: name for name in ("yt-dlp", "streamlink", "ffmpeg", "ffprobe")}
+
+
+def _capture_tool_presence(commands):
+    """Check tool files/PATH without starting any executables."""
+    status = {}
+    for name, command in commands.items():
+        path = Path(command)
+        present = path.is_file() if path.is_absolute() or path.parent != Path(".") else bool(shutil.which(command))
+        status[name] = "present" if present else None
+    return status
+
+
+def _seed_engine_tool_presence(commands=None, environ=None):
+    """Seed MSR's import-time cache before importing it, avoiding four slow --version launches."""
+    environ = os.environ if environ is None else environ
+    key = "MSR_TOOL_VERSIONS"
+    try:
+        cached = json.loads(environ.get(key, ""))
+    except (TypeError, ValueError):
+        cached = None
+    if isinstance(cached, dict) and all(name in cached for name in ("yt-dlp", "streamlink", "ffmpeg")):
+        return False
+    commands = dict(_capture_tool_commands() if commands is None else commands)
+    commands.setdefault("deno", "deno")
+    environ[key] = json.dumps(_capture_tool_presence(commands))
+    return True
+
+
+# msr.deps probes yt-dlp, Streamlink, FFmpeg and Deno synchronously during import.
+# BTL already validates required files by presence later in main(); seed equivalent
+# hints first so import doesn't block GUI startup while onefile tools initialize.
+if sys.platform == "win32":
+    _seed_engine_tool_presence()
+
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ENGINE))
 
 from msr.config import Config  # noqa: E402
 from msr.control import HeadlessApp, Service, call, subscribe  # noqa: E402
-from msr.recorder import StreamRecorder  # noqa: E402
+from msr.recorder import StreamRecorder, purge_old_pending_files  # noqa: E402
+from msr.util import (
+    PENDING_DELETION_FOLDER,
+    PROCESSED_FOLDER,
+    RECORDED_FOLDER,
+    channel_key_to_dirs,
+    channel_record_dirs,
+    migrate_legacy_layout_folders,
+)  # noqa: E402
 from windows_notifications import (  # noqa: E402
     WindowsNotificationsUnavailable,
     notification_content,
@@ -215,16 +269,6 @@ def _sync_engine_tool_status(status):
                 setattr(module, name, value)
 
 
-def _capture_tool_presence(commands):
-    """Fast startup gate: check bundled/discoverable files without launching onefile tools."""
-    status = {}
-    for name, command in commands.items():
-        path = Path(command)
-        present = path.is_file() if path.is_absolute() or path.parent != Path(".") else bool(shutil.which(command))
-        status[name] = "present" if present else None
-    return status
-
-
 def capture_tools_status(*, quick=False):
     """Check capture tools; use file presence at normal startup, deep probes on request.
 
@@ -234,16 +278,7 @@ def capture_tools_status(*, quick=False):
     still performs the full runnable/version probes for diagnostics.
     """
     diagnostics = {}
-    if getattr(sys, "frozen", False):
-        tools_dir = Path(sys.executable).resolve().parent / "tools"
-        commands = {
-            "yt-dlp": str(tools_dir / "yt-dlp.exe"),
-            "streamlink": str(tools_dir / "streamlink.exe"),
-            "ffmpeg": str(tools_dir / "ffmpeg.exe"),
-            "ffprobe": str(tools_dir / "ffprobe.exe"),
-        }
-    else:
-        commands = {name: name for name in ("yt-dlp", "streamlink", "ffmpeg", "ffprobe")}
+    commands = _capture_tool_commands()
 
     if quick:
         status = _capture_tool_presence(commands)
@@ -493,6 +528,14 @@ def migrate_recordings_directory(source, destination):
     return True
 
 
+def migrate_recording_folder_names(root, data_dir=None):
+    """Move every legacy English layout root into its French destination safely."""
+    manifest = Path(data_dir) / "library_moves.json" if data_dir else None
+    return migrate_legacy_layout_folders(
+        str(root), str(manifest) if manifest is not None else None
+    )
+
+
 class Prototype:
     def __init__(self, data_dir: Path, *, enable_windows_notifications=True, recordings_dir=None):
         self.data_dir = data_dir.resolve()
@@ -516,6 +559,7 @@ class Prototype:
             if legacy_streams.exists() and legacy_streams.resolve() != streams:
                 migrate_recordings_directory(legacy_streams, streams)
         streams.mkdir(parents=True, exist_ok=True)
+        migrate_recording_folder_names(streams, self.data_dir)
         self.config.config.set("Paths", "streams_dir", str(streams))
         roster_file = self.data_dir / "channels.json"
         self.config.config.set("Paths", "channels_file", str(roster_file))
@@ -548,6 +592,19 @@ class Prototype:
         self.unsupported_channels = []
 
     def start(self):
+        # Match the engine's normal launcher: honor its configured retention policy for
+        # PendingDeletion. BTL starts the headless adapter directly, so it must run this
+        # housekeeping itself or the raw TS copies would accumulate indefinitely.
+        try:
+            if self.config.getboolean("Cleanup", "purge_on_startup", fallback=True):
+                keep_days = self.config.getint("Cleanup", "auto_purge_days", fallback=7)
+                if keep_days > 0:
+                    purge_old_pending_files(
+                        self.config.get("Paths", "streams_dir"), keep_days, logging.getLogger()
+                    )
+        except Exception:
+            logging.warning("BTL n’a pas pu purger les anciens fichiers mis de côté.", exc_info=True)
+
         # Start the actual engine's supported headless adapter and local control service.
         # paused=True is deliberate: enabled roster mutations cannot create network workers.
         app = HeadlessApp(
@@ -703,13 +760,21 @@ class Prototype:
             pass
 
 
+def _open_local_folder(path):
+    from msr.util import open_local_path
+
+    open_local_path(str(path))
+
+
 class LocalUI(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = False
 
-    def __init__(self, prototype: Prototype, host="127.0.0.1", port=0, frontend_dir=None):
+    def __init__(self, prototype: Prototype, host="127.0.0.1", port=0, frontend_dir=None,
+                 folder_opener=None):
         self.prototype = prototype
         self.frontend_dir = Path(frontend_dir).resolve() if frontend_dir else None
+        self.folder_opener = folder_opener or _open_local_folder
         super().__init__((host, port), UIHandler)
 
 
@@ -861,6 +926,67 @@ class UIHandler(BaseHTTPRequestHandler):
                      if isinstance(row, dict) and isinstance(row.get("path"), str)
                      and os.path.normcase(os.path.abspath(row["path"]))
                      == os.path.normcase(os.path.abspath(requested))), None)
+
+    def _open_recording_folder(self, requested="", channel=""):
+        """Open the recordings root, a verified archive item's folder, or an active channel folder."""
+        if requested and channel:
+            return self._send_json({"error": "Choisissez une vidéo ou un créateur, pas les deux."}, 400)
+        if channel:
+            channel = require_tiktok_channel(channel)
+            platform, username_dir = channel_key_to_dirs(channel)
+            root = self.prototype.config.config.get("Paths", "streams_dir")
+            folder = channel_record_dirs(root, platform, username_dir)[0]
+            allowed = {os.path.normcase(os.path.realpath(folder))}
+            try:
+                from msr.storage import fallback_root
+
+                fallback = fallback_root(
+                    self.prototype.config.config.get("Paths", "fallback_dir", fallback=""), root
+                )
+                if fallback:
+                    alternate = channel_record_dirs(fallback, platform, username_dir)[0]
+                    allowed.add(os.path.normcase(os.path.realpath(alternate)))
+                recorder = getattr(self.prototype.app, "recorder", None)
+                status = getattr(recorder, "status_dict", {}).get(channel, {})
+                raw_file = status.get("raw_file", "") if isinstance(status, dict) else ""
+                if raw_file:
+                    actual = os.path.normcase(os.path.realpath(os.path.dirname(raw_file)))
+                    if actual not in allowed:
+                        return self._send_json({"error": "Le chemin de capture est hors du dossier autorisé."}, 404)
+                    folder = os.path.dirname(raw_file)
+            except Exception as exc:
+                logging.debug("Impossible de résoudre le dossier actif de %s : %s", channel, exc)
+            if not os.path.isdir(folder):
+                return self._send_json({"error": "Le dossier de capture n’existe pas encore."}, 404)
+        elif requested:
+            entry = self._find_archived_recording(requested)
+            if entry is None:
+                return self._send_json({"error": "Cette vidéo n’est pas dans l’archive."}, 404)
+            root = os.path.realpath(self.prototype.config.config.get("Paths", "streams_dir"))
+            media = os.path.realpath(entry["path"])
+            try:
+                inside_root = os.path.commonpath((root, media)) == root
+            except ValueError:
+                inside_root = False
+            if not inside_root or not os.path.isfile(media):
+                return self._send_json(
+                    {"error": "Fichier vidéo indisponible ou hors du dossier autorisé."}, 404
+                )
+            folder = os.path.dirname(media)
+        else:
+            configured = str(self.prototype.config.config.get(
+                "Paths", "streams_dir", fallback=""
+            ) or "").strip()
+            if not configured:
+                return self._send_json({"error": "Aucun dossier d’enregistrement n’est configuré."}, 404)
+            folder = os.path.abspath(os.path.expanduser(configured))
+            if not os.path.isdir(folder):
+                return self._send_json({"error": "Le dossier des enregistrements n’existe pas encore."}, 404)
+        try:
+            self.server.folder_opener(folder)
+        except OSError as exc:
+            return self._send_json({"error": f"Impossible d’ouvrir le dossier : {exc}"}, 500)
+        return self._send_json({"opened": True})
 
     def _serve_recording(self):
         requested = parse_qs(urlparse(self.path).query).get("id", [""])[0]
@@ -1108,6 +1234,13 @@ class UIHandler(BaseHTTPRequestHandler):
                 channel = require_tiktok_channel(unquote(path[len(creator_prefix):-len(check_suffix)]))
                 result = self.prototype.command("check", {"channels": [channel]})
                 return self._send_json({"result": result, "state": self.prototype.command("status")})
+            if path == "/api/recordings/open-folder":
+                body = self._body()
+                media_path = body.get("path", "")
+                channel = body.get("channel", "")
+                if not isinstance(media_path, str) or not isinstance(channel, str):
+                    return self._send_json({"error": "Vidéo ou créateur invalide."}, 400)
+                return self._open_recording_folder(media_path, channel)
             if path == "/api/library/plan-removal":
                 body = self._body()
                 media_path = str(body.get("path", ""))
@@ -1301,6 +1434,7 @@ class SmokeResult:
 def run_smoke(data_dir: Path | None = None):
     import http.client
     import urllib.error
+    from unittest import mock
     import urllib.parse
     import urllib.request
 
@@ -1313,8 +1447,12 @@ def run_smoke(data_dir: Path | None = None):
         encoding="utf-8",
     )
     (static_dist / "assets" / "app.js").write_text("window.btlStaticBuild = true;", encoding="utf-8")
-    prototype = Prototype(path).start()
-    httpd = LocalUI(prototype, port=0, frontend_dir=static_dist)
+    prototype = Prototype(path)
+    with mock.patch(f"{__name__}.purge_old_pending_files", wraps=purge_old_pending_files) as purge_spy:
+        prototype.start()
+    opened_folders = []
+    httpd = LocalUI(prototype, port=0, frontend_dir=static_dist,
+                    folder_opener=opened_folders.append)
     web_thread = threading.Thread(target=httpd.serve_forever, daemon=True, name="btl-prototype-http")
     web_thread.start()
     base = f"http://127.0.0.1:{httpd.server_port}"
@@ -1341,6 +1479,53 @@ def run_smoke(data_dir: Path | None = None):
             return response.code, json.loads(response.read().decode("utf-8"))
 
     try:
+        with tempfile.TemporaryDirectory(prefix="btl-layout-rename-smoke-") as rename_root:
+            legacy_markers = []
+            for old_name, new_name in (("Recorded", RECORDED_FOLDER),
+                                       ("Processed", PROCESSED_FOLDER),
+                                       ("PendingDeletion", PENDING_DELETION_FOLDER)):
+                marker = Path(rename_root) / old_name / "migration-probe.txt"
+                marker.parent.mkdir(parents=True)
+                marker.write_text("preserve", encoding="utf-8")
+                legacy_markers.append((marker, Path(rename_root) / new_name / marker.name))
+            undo_data = Path(rename_root) / "app-data"
+            undo_data.mkdir()
+            old_processed = Path(rename_root) / "Processed" / "tiktok" / "undo.mp4"
+            old_pending = Path(rename_root) / "PendingDeletion" / "tiktok" / "undo.mp4"
+            undo_manifest = undo_data / "library_moves.json"
+            undo_manifest.write_text(json.dumps({"moves": [{
+                "original": str(old_processed), "pending": str(old_pending),
+            }]}), encoding="utf-8")
+            migrate_recording_folder_names(rename_root, undo_data)
+            updated_move = json.loads(undo_manifest.read_text(encoding="utf-8"))["moves"][0]
+            result.check("renommage français préserve les fichiers et les chemins de restauration",
+                         all(new.is_file() and new.read_text(encoding="utf-8") == "preserve"
+                             and not old.parent.exists() for old, new in legacy_markers)
+                         and updated_move["original"].startswith(str(Path(rename_root) / PROCESSED_FOLDER))
+                         and updated_move["pending"].startswith(
+                             str(Path(rename_root) / PENDING_DELETION_FOLDER)))
+            collision_root = Path(rename_root) / "collision"
+            legacy_file = collision_root / "Recorded" / "legacy.txt"
+            canonical_file = collision_root / RECORDED_FOLDER / "existing.txt"
+            legacy_file.parent.mkdir(parents=True)
+            canonical_file.parent.mkdir(parents=True)
+            legacy_file.write_text("legacy", encoding="utf-8")
+            canonical_file.write_text("canonical", encoding="utf-8")
+            conflicting_legacy = legacy_file.parent / "existing.txt"
+            conflicting_legacy.write_text("other bytes", encoding="utf-8")
+            migrate_recording_folder_names(collision_root)
+            migrated_legacy = collision_root / RECORDED_FOLDER / "legacy.txt"
+            renamed_conflict = collision_root / RECORDED_FOLDER / "existing (copie 1).txt"
+            result.check("fusion sans écrasement et renommage français des conflits",
+                         not legacy_file.parent.exists()
+                         and migrated_legacy.read_text(encoding="utf-8") == "legacy"
+                         and canonical_file.read_text(encoding="utf-8") == "canonical"
+                         and renamed_conflict.read_text(encoding="utf-8") == "other bytes")
+        purge_args = purge_spy.call_args.args if purge_spy.call_args else ()
+        result.check("BTL applique la purge PendingDeletion configurée au démarrage",
+                     purge_spy.call_count == 1 and len(purge_args) >= 2
+                     and purge_args[0] == prototype.config.config.get("Paths", "streams_dir")
+                     and purge_args[1] == 7)
         probe_call = {}
         probe_diagnostics = {}
 
@@ -1397,7 +1582,7 @@ def run_smoke(data_dir: Path | None = None):
         migrated_prototype = Prototype(migration_data, recordings_dir=migration_new)
         result.check("premier démarrage migre le dossier configuré et persiste le nouveau chemin",
                      not migration_old.exists()
-                     and (migration_new / "Processed" / "tiktok" / "demo" / "kept.mp4").read_bytes()
+                     and (migration_new / PROCESSED_FOLDER / "tiktok" / "demo" / "kept.mp4").read_bytes()
                      == b"kept media"
                      and Path(migrated_prototype.config.get("Paths", "streams_dir")).resolve()
                      == migration_new.resolve())
@@ -1504,7 +1689,7 @@ def run_smoke(data_dir: Path | None = None):
         native_sent = send_windows_notification(
             "Test", "Essai", platform="win32", notification_api=fake_notification_api
         )
-        result.check("adaptateur Windows appelle Plyer avec le titre et le message attendus",
+        result.check("adaptateur Windows appelle le backend persistant avec le titre et le message attendus",
                      native_sent and fake_notification_api.calls == [{
                          "title": "Test", "message": "Essai", "app_name": "Boitier Tiktok Live", "timeout": 8
                      }])
@@ -1855,7 +2040,7 @@ def run_smoke(data_dir: Path | None = None):
         result.check("liste des enregistrements obtenue depuis l’index moteur", archive.get("recordings") == [])
 
         media_fixture = (Path(prototype.config.config.get("Paths", "streams_dir"))
-                         / "Processed" / "tiktok" / "btl_media_probe" / "probe.mp4")
+                         / PROCESSED_FOLDER / "tiktok" / "btl_media_probe" / "probe.mp4")
         media_fixture.parent.mkdir(parents=True, exist_ok=True)
         media_payload = bytes(range(64))
         media_fixture.write_bytes(media_payload)
@@ -1890,6 +2075,27 @@ def run_smoke(data_dir: Path | None = None):
             result.check("navigation du créateur dans l’index bibliothèque réel",
                          any(row.get("path") == str(media_fixture)
                              for row in browse.get("recordings", [])))
+            opened = api("POST", "/api/recordings/open-folder", {"path": str(media_fixture)})
+            result.check("ouverture du dossier parent d’une vidéo archivée et vérifiée",
+                         opened.get("opened") is True and opened_folders == [str(media_fixture.parent)])
+            forged_folder_code, _ = api_error(
+                "POST", "/api/recordings/open-folder", {"path": "/etc/passwd"}
+            )
+            result.check("ouverture du dossier refuse un chemin absent de l’archive",
+                         forged_folder_code == 404 and len(opened_folders) == 1)
+            active_folder = (Path(prototype.config.config.get("Paths", "streams_dir"))
+                             / RECORDED_FOLDER / "tiktok" / "btl_active_probe")
+            active_folder.mkdir(parents=True, exist_ok=True)
+            active_open = api("POST", "/api/recordings/open-folder",
+                              {"channel": "tiktok:btl_active_probe"})
+            result.check("ouverture du dossier de capture actif depuis la surveillance",
+                         active_open.get("opened") is True
+                         and opened_folders[-1] == str(active_folder))
+            shutil.rmtree(active_folder.parent.parent, ignore_errors=True)
+            root_open = api("POST", "/api/recordings/open-folder", {})
+            expected_root = os.path.abspath(prototype.config.config.get("Paths", "streams_dir"))
+            result.check("bouton principal ouvre le dossier configuré des enregistrements",
+                         root_open.get("opened") is True and opened_folders[-1] == expected_root)
             plan = api("POST", "/api/library/plan-removal", {"path": str(media_fixture)})
             plan_data = plan.get("plan", {})
             result.check("aperçu moteur de déplacement réversible vers PendingDeletion",
@@ -1905,7 +2111,7 @@ def run_smoke(data_dir: Path | None = None):
                          restored.get("result", {}).get("done") == 1 and media_fixture.exists())
         finally:
             shutil.rmtree(media_fixture.parent, ignore_errors=True)
-            pending_fixture = media_fixture.parents[3] / "PendingDeletion" / "tiktok" / "btl_media_probe"
+            pending_fixture = media_fixture.parents[3] / PENDING_DELETION_FOLDER / "tiktok" / "btl_media_probe"
             shutil.rmtree(pending_fixture, ignore_errors=True)
 
         added = api("POST", "/api/creators", {"username": "btl_audit_probe"})
@@ -2162,6 +2368,9 @@ def main():
                 window=desktop,
             )
             tray.start()
+            # Reuse the one long-lived pystray icon for balloons. Plyer creates a
+            # separate Shell_NotifyIcon entry per event, which accumulates hidden icons.
+            prototype._notification_sender = tray.notify
             if desktop is not None:
                 desktop.attach_tray(tray)
         except TrayUnavailable as exc:

@@ -84,10 +84,10 @@ class ReleaseChoiceTests(unittest.TestCase):
         self.assertEqual(plan["zipball"], ZIP_314)
         self.assertTrue(zipball_url_is_allowed(plan["zipball"]))
         self.assertTrue(plan["confirm"])
-        self.assertEqual(plan["title"], "Install update")
-        self.assertIn("Download v3.1.4 from GitHub and restart Multi-Stream Recorder?", plan["message"])
-        self.assertIn("Active recordings will be stopped first.", plan["message"])
-        self.assertIn("config.ini, channels.json, cookies.txt, and recordings stay.", plan["message"])
+        self.assertEqual(plan["title"], "Installer la mise à jour")
+        self.assertIn("Télécharger la version 3.1.4 depuis GitHub et redémarrer Multi-Stream Recorder ?", plan["message"])
+        self.assertIn("Les captures en cours seront d’abord arrêtées.", plan["message"])
+        self.assertIn("config.ini, channels.json, cookies.txt et les captures seront conservés.", plan["message"])
         self.assertNotEqual(plan["action"], "git_pull")
 
     def test_dialog_release_wins_over_a_stale_banner_tag(self):
@@ -103,7 +103,7 @@ class ReleaseChoiceTests(unittest.TestCase):
         self.assertEqual(chosen["tag"], "3.1.4")
         plan = plan_app_update(self.plain, "3.1.3", chosen, recording=False)
         self.assertEqual(plan["action"], "zip")
-        self.assertNotIn("Active recordings will be stopped first.", plan["message"])
+        self.assertNotIn("Les captures en cours seront d’abord arrêtées.", plan["message"])
 
     def test_disallowed_zipball_falls_back_to_the_tag_url(self):
         plan = plan_app_update(self.plain, "3.1.3", {"tag": "3.1.4", "url": HTML_314, "zipball": "https://evil.example/x.zip"})
@@ -116,7 +116,7 @@ class ReleaseChoiceTests(unittest.TestCase):
         self.assertEqual(plan["action"], "blocked")
         self.assertEqual(plan["message"], NO_RELEASE_MESSAGE)
         self.assertFalse(plan["confirm"])
-        self.assertIn("No newer version", plan["message"])
+        self.assertIn("Aucune version plus récente", plan["message"])
 
     def test_recheck_finds_the_release_when_nothing_was_stored(self):
         found, why = fetch_latest_release("3.1.3", opener=_release_opener())
@@ -185,10 +185,10 @@ class GitCheckoutTests(unittest.TestCase):
         self.assertNotEqual(plan["action"], "zip")
         self.assertIsNone(plan["zipball"])
         self.assertTrue(plan["confirm"])
-        self.assertIn("will not overwrite it with a release zip", plan["message"])
+        self.assertIn("ne la remplacera pas par une archive de version", plan["message"])
         self.assertIn(GIT_PULL_COMMAND, plan["message"])
-        self.assertIn("main tracks origin/main", plan["message"])
-        self.assertIn("Active recordings will be stopped first.", plan["message"])
+        self.assertIn("La branche main suit origin/main", plan["message"])
+        self.assertIn("Les captures en cours seront d’abord arrêtées.", plan["message"])
         self.assertEqual(plan["command"], GIT_PULL_COMMAND)
 
     def test_dirty_or_untracked_branch_explains_and_shows_the_command(self):
@@ -196,22 +196,22 @@ class GitCheckoutTests(unittest.TestCase):
         for info, needle in (
             ({"checkout": True, "clean": False, "tracks_origin": True, "detached": False,
               "branch": "main", "upstream": "origin/main", "error": ""},
-             "local changes"),
+             "modifications locales"),
             ({"checkout": True, "clean": True, "tracks_origin": False, "detached": False,
               "branch": "feature", "upstream": None, "error": ""},
-             "does not track origin"),
+             "ne suit pas origin"),
             ({"checkout": True, "clean": True, "tracks_origin": False, "detached": False,
               "branch": "feature", "upstream": "fork/main", "error": ""},
-             "tracks fork/main, not origin"),
+             "suit fork/main et non origin"),
             ({"checkout": True, "clean": True, "tracks_origin": False, "detached": True,
               "branch": None, "upstream": None, "error": ""},
-             "HEAD is detached"),
+             "HEAD est détachée"),
         ):
             plan = plan_app_update(self.checkout, "3.1.3", DIALOG_ROW, git_info=info)
             self.assertEqual(plan["action"], "git_manual", info)
             self.assertFalse(plan["confirm"])
             self.assertIsNone(plan["zipball"])
-            self.assertIn("git checkout", plan["message"].lower())
+            self.assertIn("dépôt git", plan["message"].lower())
             self.assertIn(needle, plan["message"])
             self.assertIn(GIT_PULL_COMMAND, plan["message"])
             self.assertIn(git_command(self.checkout), plan["message"])
@@ -286,7 +286,7 @@ class DiskNewerTests(unittest.TestCase):
         self.assertFalse(disk_is_newer(self.folder, "3.2.0"))
         self.assertEqual(source_note(self.folder, "3.1.3"), RESTART_TITLE)
         self.assertEqual(banner_text("3.1.3", self.folder, "3.1.4"),
-                         "  Restart to finish updating — click to restart")
+                         "  Redémarrer pour terminer la mise à jour — cliquer pour redémarrer")
         info = {
             "checkout": True, "clean": True, "tracks_origin": True, "detached": False,
             "branch": "main", "upstream": "origin/main", "error": "",
@@ -294,10 +294,10 @@ class DiskNewerTests(unittest.TestCase):
         plan = plan_app_update(self.folder, "3.1.3", DIALOG_ROW, recording=True, git_info=info)
         self.assertEqual(plan["action"], "restart")
         self.assertEqual(plan["title"], RESTART_TITLE)
-        self.assertIn("Restart to finish updating?", plan["message"])
-        self.assertIn("already v3.1.4", plan["message"])
-        self.assertIn("this copy is still v3.1.3", plan["message"])
-        self.assertIn("Active recordings will be stopped first.", plan["message"])
+        self.assertIn("Redémarrer pour terminer la mise à jour ?", plan["message"])
+        self.assertIn("déjà en version 3.1.4", plan["message"])
+        self.assertIn("cette instance utilise encore la version 3.1.3", plan["message"])
+        self.assertIn("Les captures en cours seront d’abord arrêtées.", plan["message"])
         self.assertTrue(plan["confirm"])
         self.assertIsNone(plan["zipball"])
 
@@ -305,7 +305,7 @@ class DiskNewerTests(unittest.TestCase):
         self._write("3.1.3")
         self.assertEqual(source_note(self.folder, "3.1.3"), "")
         self.assertEqual(banner_text("3.1.3", self.folder, "3.1.4"),
-                         "  v3.1.4 available — click to install")
+                         "  Version 3.1.4 disponible — cliquer pour l’installer")
         plan = plan_app_update(self.folder, "3.1.3", DIALOG_ROW)
         self.assertEqual(plan["action"], "zip")
 

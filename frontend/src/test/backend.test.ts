@@ -4,6 +4,8 @@ import {
   checkCreatorNow,
   clearArchiveCache,
   moveRecordingToPending,
+  openActiveRecordingFolder,
+  openRecordingFolder,
   planRecordingRemoval,
   readLibraryPending,
   readLibrarySummary,
@@ -225,6 +227,40 @@ describe("adaptateur d’état moteur BTL", () => {
       channel_count: 2,
     });
     await expect(readLibraryPending()).resolves.toMatchObject({ files: 1, bytes: 1024 });
+  });
+
+  it("demande à l’hôte local d’ouvrir le dossier parent d’un enregistrement", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ opened: true }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      openRecordingFolder("C:\\Videos\\tiktok\\demo\\live.mp4"),
+    ).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/recordings/open-folder",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ path: "C:\\Videos\\tiktok\\demo\\live.mp4" }),
+      }),
+    );
+  });
+
+  it("demande l’ouverture du dossier de capture actif pour un créateur", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ opened: true }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(openActiveRecordingFolder("tiktok:demo")).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/recordings/open-folder",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ channel: "tiktok:demo" }),
+      }),
+    );
   });
 
   it("prévisualise, déplace et restaure via les commandes réversibles du moteur", async () => {

@@ -194,7 +194,7 @@ function SettingsPage() {
           ? "appliqué à l’interface et aux notifications Windows du moteur actif"
           : applies === "now"
             ? "en vigueur maintenant"
-            : "au prochain démarrage du worker";
+            : "au prochain démarrage du moteur";
       toast.success("Paramètre enregistré dans le moteur", { description: effect });
     } catch (error) {
       toast.error("Enregistrement du paramètre impossible", {
@@ -327,7 +327,7 @@ function SettingsPage() {
         </Row>
         <NumberSetting
           label="Reprise rapide après coupure"
-          hint="Durée pendant laquelle le worker vérifie fréquemment si le LIVE revient. 0 désactive cette phase."
+          hint="Durée pendant laquelle le moteur vérifie fréquemment si le direct reprend. 0 désactive cette phase."
           value={settings.reconnectGraceMinutes}
           unit="min"
           disabled={valueDisabled}
@@ -399,7 +399,7 @@ function SettingsPage() {
         </Row>
         <Row
           label="Nouveau fichier si la résolution change"
-          hint="Paramètre du worker pour les futurs enregistrements."
+          hint="Paramètre du moteur pour les prochaines captures."
         >
           <Switch
             checked={settings.splitOnResolutionChange}
@@ -457,7 +457,7 @@ function SettingsPage() {
         </div>
         <NumberSetting
           label="Espace libre minimal avant capture"
-          hint="Le worker attend si l’espace libre du dossier est inférieur à ce seuil. 0 désactive ce garde-fou."
+          hint="Le moteur attend si l’espace libre du dossier est inférieur à ce seuil. 0 désactive cette limite."
           value={settings.minDiskSpaceGB}
           unit="Go"
           disabled={valueDisabled}
@@ -473,15 +473,15 @@ function SettingsPage() {
       <Section icon={MonitorCog} title="Fenêtre Windows et arrière-plan">
         <div className="space-y-2 p-4 text-sm text-muted-foreground">
           <p>
-            Sous Windows, le host ouvre cette interface React dans une fenêtre native Microsoft Edge
-            WebView2 et ajoute l’icône BTL à la zone de notification. Réduire ou fermer la fenêtre
-            la masque dans le tray sans arrêter le moteur ; le menu tray la restaure et permet aussi
-            de démarrer/arrêter la surveillance ou de quitter.
+            Sous Windows, l’hôte ouvre cette interface React dans une fenêtre Microsoft Edge WebView2
+            et ajoute l’icône BTL à la zone de notification. Réduire ou fermer la fenêtre la masque
+            sans arrêter le moteur ; le menu de l’icône permet de la restaurer, de démarrer ou d’arrêter
+            la surveillance, ou de quitter l’application.
           </p>
           <p>
-            <code>--background</code> démarre directement dans le tray sans fenêtre console ;
-            <code>--no-desktop</code> garde l’interface dans le navigateur. Requis pour la fenêtre :
-            runtime Microsoft Edge WebView2, Node.js et dépendances frontend installées.
+            <code>--background</code> démarre directement dans la zone de notification sans fenêtre
+            console ; <code>--no-desktop</code> conserve l’interface dans le navigateur. La fenêtre
+            nécessite Microsoft Edge WebView2, Node.js et les dépendances de l’interface installées.
           </p>
         </div>
         <Row

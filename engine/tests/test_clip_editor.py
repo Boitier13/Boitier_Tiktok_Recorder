@@ -15,6 +15,7 @@ sys.path.insert(0, ROOT)
 import msr.control as control  # noqa: E402
 from msr import clip_audio, clip_core as core  # noqa: E402
 from msr.config import Config  # noqa: E402
+from msr.util import PROCESSED_FOLDER, RECORDED_FOLDER  # noqa: E402
 from tests import new_tk_root  # noqa: E402
 from tests.test_control import in_dir, make_data, msr_ctl  # noqa: E402
 
@@ -109,7 +110,7 @@ class TsLengthTests(unittest.TestCase):
 class CutTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.src = os.path.join(self.tmp.name, "streams", "Recorded", "kick", "knut", "knut_20261029.ts")
+        self.src = os.path.join(self.tmp.name, "streams", RECORDED_FOLDER, "kick", "knut", "knut_20261029.ts")
         os.makedirs(os.path.dirname(self.src))
         write_ts(self.src, [0, 90000])
         self.calls = []
@@ -180,7 +181,7 @@ class CutTests(unittest.TestCase):
         name = core.clip_name("a b?.ts", 62, 3725)
         self.assertTrue(name.startswith("a_b_clip_1-02_to_1-02-05_"))
         self.assertIsNone(core.finished_successor(self.src))
-        mp4 = self.src.replace("Recorded", "Processed")[:-3] + ".mp4"
+        mp4 = self.src.replace(RECORDED_FOLDER, PROCESSED_FOLDER)[:-3] + ".mp4"
         os.makedirs(os.path.dirname(mp4))
         open(mp4, "wb").close()
         self.assertEqual(core.finished_successor(self.src), mp4)
@@ -249,7 +250,7 @@ class FakeAudio:
 class EditorWindowTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.src = os.path.join(self.tmp.name, "Recorded", "kick", "knut", "k.ts")
+        self.src = os.path.join(self.tmp.name, RECORDED_FOLDER, "kick", "knut", "k.ts")
         os.makedirs(os.path.dirname(self.src))
         write_ts(self.src, [0, 90000])
         self.root = new_tk_root(self)
@@ -301,14 +302,14 @@ class EditorWindowTests(unittest.TestCase):
         res = core.CutResult(os.path.join(self.tmp.name, "c.mp4"), 10, 25, 8.0, 25, 17.0, False)
         with mock.patch.object(core, "make_clip", return_value=res) as cut:
             self.ed.save()
-            self.pump(lambda: "Saved" in self.ed.status.cget("text"))
+            self.pump(lambda: "Enregistré" in self.ed.status.cget("text"))
         args, kw = cut.call_args
         self.assertEqual(args[2:4], (10, 25))
         self.assertEqual(args[4], os.path.join(self.tmp.name, "Clips", "kick", "knut"))
         self.assertIn("keyframe 0:08.0", self.ed.status.cget("text"))
 
     def test_save_button_and_every_label_fit_at_default_and_minimum_size(self):
-        self.assertEqual(self.ed.save_btn.cget("text"), "Save clip")
+        self.assertEqual(self.ed.save_btn.cget("text"), "Enregistrer le clip")
         for geometry in ("797x688", "%dx%d" % self.mod.MIN_SIZE):
             self.ed.win.geometry(geometry + "+-3000+0")   # offscreen, never seen
             self.ed.win.deiconify()
@@ -419,8 +420,8 @@ class EditorWindowTests(unittest.TestCase):
         self.ed._last_length_check = 0
         self.pump(lambda: self.ed._gone)
         self.assertEqual(str(self.ed.save_btn.cget("state")), "disabled")
-        self.assertIn("not reachable", self.ed.status.cget("text"))
-        mp4 = os.path.join(self.tmp.name, "Processed", "kick", "knut", "k.mp4")
+        self.assertIn("n’est plus accessible", self.ed.status.cget("text"))
+        mp4 = os.path.join(self.tmp.name, PROCESSED_FOLDER, "kick", "knut", "k.mp4")
         os.makedirs(os.path.dirname(mp4))
         open(mp4, "wb").close()
         self.ed.src = self.src
@@ -676,7 +677,7 @@ class AgentParityTests(unittest.TestCase):
         self._cd = in_dir(self.data)
         self._cd.__enter__()
         self.c = control.Controller(control.OfflineApp(Config(os.path.join(self.data, "config.ini"))))
-        self.mp4 = os.path.join(self.streams, "Processed", "kick", "knut", "knut_1.mp4")
+        self.mp4 = os.path.join(self.streams, PROCESSED_FOLDER, "kick", "knut", "knut_1.mp4")
         os.makedirs(os.path.dirname(self.mp4))
         with open(self.mp4, "wb") as fh:
             fh.write(b"\0" * 2048)

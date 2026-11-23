@@ -202,7 +202,7 @@ class OpenLogTests(unittest.TestCase):
 class WiringTests(unittest.TestCase):
     def test_gui_uses_the_formatter_and_the_filter(self):
         gui = (Path(__file__).resolve().parent.parent / "msr" / "gui.py").read_text(encoding="utf-8")
-        for needle in ("logview.GuiFormatter", "log_follow.set_filter", "Open log file", "<Control-f>"):
+        for needle in ("logview.GuiFormatter", "log_follow.set_filter", "Ouvrir le journal", "<Control-f>"):
             self.assertIn(needle, gui)
 
 

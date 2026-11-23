@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/app-store";
+import { openActiveRecordingFolder } from "@/lib/backend";
 import { formatDuration, formatSize } from "@/lib/format";
 import type { ActivityType } from "@/lib/models";
 import { cn } from "@/lib/utils";
@@ -118,7 +119,7 @@ function SurveillancePage() {
       )}
       <PageHeader
         title="Surveillance"
-        subtitle="La pause suspend la détection des nouveaux LIVE; les captures déjà en cours continuent jusqu’à la fin du LIVE."
+        subtitle="La pause suspend la détection des nouveaux directs ; les captures déjà en cours continuent jusqu’à leur fin."
         actions={
           <Button
             variant={monitoringActive ? "secondary" : "default"}
@@ -128,8 +129,8 @@ function SurveillancePage() {
                 await setMonitoringActive(!monitoringActive);
                 toast(
                   monitoringActive
-                    ? "Détection des nouveaux LIVE mise en pause; les captures en cours continuent"
-                    : "Reprise de la détection des LIVE demandée",
+                    ? "Détection des nouveaux directs mise en pause ; les captures en cours continuent"
+                    : "Reprise de la détection des directs demandée",
                 );
               } catch (error) {
                 toast.error("Commande moteur refusée", {
@@ -205,7 +206,7 @@ function SurveillancePage() {
                 <div className="relative flex aspect-[16/7] items-end bg-gradient-video p-4">
                   <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-md bg-gradient-live px-2 py-1 text-xs font-bold uppercase tracking-wider text-live-foreground">
                     <span className="size-1.5 rounded-full bg-live-foreground animate-live-pulse" />{" "}
-                    REC
+                    ENR
                   </span>
                   <span className="absolute right-4 top-4 font-mono text-2xl font-medium text-foreground">
                     {formatDuration(r.elapsedSec)}
@@ -229,8 +230,19 @@ function SurveillancePage() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      disabled
-                      title="L’ouverture du dossier sera raccordée à l’hôte Windows"
+                      title="Ouvrir le dossier de capture de ce créateur"
+                      onClick={async () => {
+                        try {
+                          await openActiveRecordingFolder(r.creator.id);
+                        } catch (error) {
+                          toast.error("Ouverture du dossier impossible", {
+                            description:
+                              error instanceof Error
+                                ? error.message
+                                : "Le dossier de capture est indisponible.",
+                          });
+                        }
+                      }}
                     >
                       <FolderOpen /> Dossier
                     </Button>

@@ -56,25 +56,25 @@ class RecordingsTab:
         self.frame = f = ttk.Frame(parent, padding=8)
         top = ttk.Frame(f)
         top.pack(fill="x")
-        ttk.Label(top, text="Channel:").pack(side="left")
+        ttk.Label(top, text="Créateur :").pack(side="left")
         self.channel_var = tk.StringVar()
         self.channel_box = ttk.Combobox(top, textvariable=self.channel_var, width=22, values=[])  # in characters: DejaVu (Linux) is wider than Segoe UI
         self.channel_box.pack(side="left", padx=(4, 10))
         self.channel_box.bind("<<ComboboxSelected>>", lambda _e: self.jump())
         self.channel_box.bind("<Return>", lambda _e: (self.jump(), "break")[1])
         self.channel_box.bind("<KeyRelease>", self._typed)
-        ttk.Label(top, text="Search:").pack(side="left")
+        ttk.Label(top, text="Rechercher :").pack(side="left")
         self.search_var = tk.StringVar()
         self.search = ttk.Entry(top, textvariable=self.search_var, width=18)
         self.search.pack(side="left", padx=(4, 10))
         self.search_var.trace_add("write", lambda *_: self.fill())
         self.search.bind("<Escape>", lambda _e: self.search_var.set(""))
-        self.clip_btn = ttk.Button(top, text="Clip Editor", command=self.open_clip_editor)
-        self.play_btn = ttk.Button(top, text="Play", command=self.play)
-        self.reveal_btn = ttk.Button(top, text="Open folder", command=self.reveal)
+        self.clip_btn = ttk.Button(top, text="Éditeur de clips", command=self.open_clip_editor)
+        self.play_btn = ttk.Button(top, text="Lire", command=self.play)
+        self.reveal_btn = ttk.Button(top, text="Ouvrir le dossier", command=self.reveal)
         for b in (self.clip_btn, self.play_btn, self.reveal_btn):
             b.pack(side="right", padx=(6, 0))
-        self.count = ttk.Label(f, text="Pick a channel (type a few letters, Enter).", style="Muted.TLabel")
+        self.count = ttk.Label(f, text="Choisissez un créateur (saisissez quelques lettres puis Entrée).", style="Muted.TLabel")
         self.count.pack(anchor="w", pady=(4, 2))
 
         box = ttk.Frame(f)
@@ -123,7 +123,7 @@ class RecordingsTab:
         text = self.channel_var.get()
         label = text if text in self.channels else next(iter(match_channels(sorted(self.channels, key=str.lower), text)), None)
         if label is None:
-            self.count.configure(text=f"No channel matches '{text.strip()}'.")
+            self.count.configure(text=f"Aucun créateur ne correspond à « {text.strip()} ».")
             return
         self.show_channel(self.channels[label])
 
@@ -133,7 +133,7 @@ class RecordingsTab:
         self.channel_box.configure(values=sorted(self.channels, key=str.lower))
         self.recs = []
         self.fill()
-        self.count.configure(text=f"Listing {ch.name}...")
+        self.count.configure(text=f"Chargement des vidéos de {ch.name}…")
         if self._cancel is not None:
             self._cancel.set()
         self._gen += 1
@@ -167,7 +167,7 @@ class RecordingsTab:
                 self.recs, self.loose = recs, loose
                 self.fill()
                 if err is not None:
-                    self.count.configure(text=f"Could not list the folder: {err}")
+                    self.count.configure(text=f"Impossible de lire le dossier : {err}")
                 return
         except queue.Empty:
             pass
@@ -215,12 +215,12 @@ class RecordingsTab:
             self.tree.heading(cid, text=heading + arrow)
         if self.current is not None:
             total = sum(r.seconds or 0 for r in shown)
-            extra = f", {fmt_length(total)} known length" if total else ""
-            of = f" of {len(self.recs):,}" if len(shown) != len(self.recs) else ""
+            extra = f", durée connue : {fmt_length(total)}" if total else ""
+            of = f" sur {len(self.recs):,}" if len(shown) != len(self.recs) else ""
             nclips = sum(len(r.clips) for r in shown)
-            extra += f", {nclips:,} linked clips" if nclips else ""
-            extra += f" ({self.loose:,} clips match no recording here)" if self.loose else ""
-            self.count.configure(text=f"{self.current.name}: {len(shown):,}{of} recordings{extra}")
+            extra += f", {nclips:,} clips associés" if nclips else ""
+            extra += f" ({self.loose:,} clips sans vidéo associée ici)" if self.loose else ""
+            self.count.configure(text=f"{self.current.name} : {len(shown):,}{of} vidéos{extra}")
         self._sync()
 
     def selected_item(self):
@@ -253,7 +253,7 @@ class RecordingsTab:
     def _sync(self) -> None:
         item = self.selected_item()
         clip = isinstance(item, ClipRef)
-        self.clip_btn.configure(text="Open source" if clip else "Clip Editor")
+        self.clip_btn.configure(text="Ouvrir la vidéo source" if clip else "Éditeur de clips")
         for b, fn in ((self.reveal_btn, self.revealer), (self.play_btn, self.opener), (self.clip_btn, self.clip_editor)):
             b.state(["!disabled"] if item is not None and fn is not None else ["disabled"])
 
@@ -265,10 +265,10 @@ class RecordingsTab:
         try:
             fn(rec.path)
         except Exception as exc:
-            dialogs.show_error(self.frame.winfo_toplevel(), title, f"Could not open it: {exc}")
+            dialogs.show_error(self.frame.winfo_toplevel(), title, f"Impossible de l’ouvrir : {exc}")
 
     def reveal(self) -> None:
-        self._run(self.revealer, "Open folder")
+        self._run(self.revealer, "Ouvrir le dossier")
 
     def play(self) -> None:
         self._run(self.opener, "Play")
@@ -279,9 +279,9 @@ class RecordingsTab:
             return
         rec = self.selected()
         if rec is not None and not rec.path.lower().endswith(CLIP_EXT):
-            dialogs.show_info(self.frame.winfo_toplevel(), "Clip Editor", "The Clip Editor opens video files only.")
+            dialogs.show_info(self.frame.winfo_toplevel(), "Éditeur de clips", "L’éditeur de clips ne peut ouvrir que des fichiers vidéo.")
             return
-        self._run(self.clip_editor, "Clip Editor")
+        self._run(self.clip_editor, "Éditeur de clips")
 
     def open_source(self) -> None:
         """A clip's recording in the Clip Editor at the clip's in point (with in/out marked)."""
@@ -298,7 +298,7 @@ class RecordingsTab:
             else:
                 self.clip_editor(rec.path)
         except Exception as exc:
-            dialogs.show_error(self.frame.winfo_toplevel(), "Open source", f"Could not open it: {exc}")
+            dialogs.show_error(self.frame.winfo_toplevel(), "Ouvrir la vidéo source", f"Impossible de l’ouvrir : {exc}")
 
     def select_source(self) -> None:
         picked = self.tree.selection()
@@ -326,21 +326,21 @@ class RecordingsTab:
     def _build_menu(self) -> None:
         m = self.menu
         m.delete(0, "end")
-        m.add_command(label="Play", command=self.play)
-        m.add_command(label="Open folder (select file)", command=self.reveal)
+        m.add_command(label="Lire", command=self.play)
+        m.add_command(label="Ouvrir le dossier (sélectionner un fichier)", command=self.reveal)
         if self.selected_clip() is not None:
             if self.clip_editor is not None:
-                m.add_command(label="Open source in Clip Editor (at in point)", command=self.open_source)
-            m.add_command(label="Select source recording", command=self.select_source)
+                m.add_command(label="Ouvrir la source dans l’éditeur de clips (au point d’entrée)", command=self.open_source)
+            m.add_command(label="Sélectionner la capture source", command=self.select_source)
         else:
             if self.clip_editor is not None:
-                m.add_command(label="Open in Clip Editor", command=self.open_clip_editor)
+                m.add_command(label="Ouvrir dans l’éditeur de clips", command=self.open_clip_editor)
             rec = self.selected()
             if rec is not None and (rec.clips or rec.related):
-                m.add_command(label=f"Show / hide clips ({len(rec.clips) + len(rec.related)})", command=self.toggle_clips)
+                m.add_command(label=f"Afficher ou masquer les clips ({len(rec.clips) + len(rec.related)})", command=self.toggle_clips)
             m.add_separator()
-            m.add_command(label="Copy title", command=lambda: self._copy("title"))
-        m.add_command(label="Copy path", command=lambda: self._copy("path"))
+            m.add_command(label="Copier le titre", command=lambda: self._copy("title"))
+        m.add_command(label="Copier le chemin", command=lambda: self._copy("path"))
 
     def _menu(self, event) -> None:
         iid = self.tree.identify_row(event.y)

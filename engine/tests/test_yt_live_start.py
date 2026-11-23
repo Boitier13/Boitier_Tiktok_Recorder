@@ -517,8 +517,8 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(r["kind"], "bool")
         self.assertTrue(r["hint"])
         hint = rows[("YouTube", "live_from_start_max_minutes")]["hint"]
-        self.assertIn("check interval + 2", hint)
-        self.assertIn("VOD", hint)
+        self.assertIn("fréquence de détection + 2", hint)
+        self.assertIn("récupérer plus d’historique", hint)
 
     def migrated(self, text):
         with tempfile.TemporaryDirectory() as d:
@@ -566,7 +566,7 @@ class OptionsPanelTests(unittest.TestCase):
                             ask_dir=lambda i: "", ask_file=lambda i: "")
         v = p.vars[("YouTube", "live_from_start")]
         self.assertTrue(v.get(), "on by default")
-        self.assertIn("before MSR noticed", p.hints[("YouTube", "live_from_start")].cget("text"))
+        self.assertIn("avant la détection", p.hints[("YouTube", "live_from_start")].cget("text"))
         v.set(False)
         p._commit("YouTube", "live_from_start", "false")
         self.assertIn(("YouTube", "live_from_start", "false"), saved)

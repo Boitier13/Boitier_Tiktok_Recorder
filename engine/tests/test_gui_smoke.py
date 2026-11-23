@@ -119,7 +119,7 @@ def fake_mainloop(self, n=0):
         streams, clips = find(self, "Enregistrements"), find(self, "Clips")
         out["found"] = streams is not None and clips is not None
         out["same_row"] = streams.master is clips.master
-        order = ["Clip Now", "DVR", "Clips", "Screenshot", "Enregistrements"]
+        order = ["Créer un clip", "DVR", "Clips", "Capture d’écran", "Enregistrements"]
         btns = [find(self, t) for t in order]
         out["all_found"] = all(b is not None for b in btns)
         out["xs"] = [b.winfo_x() for b in btns]
@@ -342,7 +342,7 @@ class LibraryManageSmokeTests(unittest.TestCase):
         self.assertLessEqual(out["dialog_req"][0], 1000 if os.name == "nt" else 1100)
         self.assertEqual(sorted(out["deleted"]), ["alice_20260101_120000.mp4", "alice_20260215_120000.mp4"])
         self.assertEqual(len(out["files_left"]), 2)                           # the fake moved nothing
-        self.assertIn("2 file(s)", out["status"])
+        self.assertIn("2 fichier(s)", out["status"])
 
     def test_dark(self):
         self.run_script(True)

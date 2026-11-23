@@ -139,7 +139,7 @@ class DeleteChannelTests(ManageCase):
         win.mgr.delete_channels([self.channel(win, "alice")])
         self.assertIsNone(self.dialog.result)
         self.assertTrue(self.exists("Processed/kick/alice/alice_20260101_120000.mp4"))
-        self.assertIn("recording", " ".join(self.dialog.plan.blocked.values()).lower() + self.dialog.warning.cget("text").lower())
+        self.assertIn("capture", " ".join(self.dialog.plan.blocked.values()).lower() + self.dialog.warning.cget("text").lower())
 
     def test_no_action_while_busy_or_unscanned(self):
         win = self.make(manage_ctx=self.ctx(), activate=False)

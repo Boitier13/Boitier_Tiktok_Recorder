@@ -99,7 +99,7 @@ class PlanRulesTests(DialogCase):
         dialog._toggle(iid)
         dialog.refresh()
         self.assertEqual(dialog.plan.files, 2)
-        self.assertIn("1 of 2", dialog.count_label.cget("text"))
+        self.assertIn("1 sur 2", dialog.count_label.cget("text"))
         dialog.check_none()
         dialog.refresh()
         self.assertIn("disabled", dialog.go_btn.state())
@@ -143,7 +143,7 @@ class PlanRulesTests(DialogCase):
         self.assertFalse(dialog.allowed())
         self.assertFalse(dialog.confirm())
         self.assertIsNone(dialog.result)
-        self.assertIn("recording", dialog.warning.cget("text").lower())
+        self.assertIn("capture", dialog.warning.cget("text").lower())
 
     def test_a_file_that_changed_after_the_preview_is_left_alone(self):
         dialog = self.open()

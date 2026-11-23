@@ -129,7 +129,7 @@ class TabTests(unittest.TestCase):
 
     def test_overview_tabs_unchanged_and_recordings_added(self):
         texts = [self.panel.tabs.tab(t, "text").strip() for t in self.panel.tabs.tabs()]
-        self.assertEqual(texts[:3], ["Overview", "Channels", "Recordings"])
+        self.assertEqual(texts[:3], ["Vue d’ensemble", "Créateurs", "Vidéos"])
 
     def test_jump_box_lists_channel_and_actions(self):
         self.assertIn("alice  (Kick)", self.tab.channel_box.cget("values"))
@@ -142,7 +142,7 @@ class TabTests(unittest.TestCase):
         self.tab.search_var.set("tokyo")
         kids = self.tab.tree.get_children()
         self.assertEqual(len(kids), 1)
-        self.assertIn("1 of 4", self.tab.count.cget("text"))
+        self.assertIn("1 sur 4", self.tab.count.cget("text"))
         self.tab.tree.selection_set(kids[0])
         self.root.update()
         self.tab.reveal()
@@ -171,7 +171,7 @@ class TabTests(unittest.TestCase):
     def test_unknown_channel_message(self):
         self.tab.channel_var.set("zzz")
         self.tab.jump()
-        self.assertIn("No channel matches", self.tab.count.cget("text"))
+        self.assertIn("Aucun créateur ne correspond", self.tab.count.cget("text"))
 
 
 
@@ -269,7 +269,7 @@ class ClipTabTests(TabTests):
         self.tab._build_menu()  # recording menu offers show/hide clips
         labels = [self.tab.menu.entrycget(i, "label") for i in range(self.tab.menu.index("end") + 1)
                   if self.tab.menu.type(i) == "command"]
-        self.assertIn("Show / hide clips (2)", labels)
+        self.assertIn("Afficher ou masquer les clips (2)", labels)
         self.tab.toggle_clips()
         self.tab.search_var.set("")  # refill keeps the row open
         again = next(i for i, r in self.tab.rows.items() if isinstance(r, lb.Recording) and r.path == src)

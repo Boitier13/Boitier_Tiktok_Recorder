@@ -145,7 +145,7 @@ class TestCookieWarningPanel(unittest.TestCase):
             cfg.v[(s, k)] = v
             return v
         p = op.OptionsPanel(root, cfg, ".", apply, api=FakeApi(), opener=lambda u: None)
-        self.assertIn("synced or shared", p.cookie_warn.cget("text"))
+        self.assertIn("partagé ou synchronisé", p.cookie_warn.cget("text"))
         p._commit("Paths", "cookies_file", r"E:\streams\cookies.txt")
         self.assertEqual(p.cookie_warn.cget("text"), "")
 

@@ -399,7 +399,7 @@ class DialogTests(unittest.TestCase):
             deps_dialog_buttons = [w for w in win.winfo_children()[0].winfo_children()]
             self.assertTrue(deps_dialog_buttons)
             # Update all
-            [b for b in self._buttons(win) if b.cget("text") == "Update all"][0].invoke()
+            [b for b in self._buttons(win) if b.cget("text") == "Tout mettre à jour"][0].invoke()
             self._wait(root, st)
             up.assert_called_once()
             self.assertEqual(up.call_args[0][0], ["yt-dlp"])
@@ -468,14 +468,14 @@ class DialogTests(unittest.TestCase):
             self.assertIn("Dépôt Git : mises à jour avec git pull", tree.item("msr", "values")[-1])
             tree.selection_set("msr")
             root.update()
-            [b for b in self._buttons(win) if b.cget("text") == "Update selected"][0].invoke()
+            [b for b in self._buttons(win) if b.cget("text") == "Mettre à jour la sélection"][0].invoke()
             self.assertEqual(seen[-1][0]["latest"], "3.1.4")
             self.assertEqual(seen[-1][0]["zipball"], msr["zipball"])
             self.assertIs(seen[-1][1], win)
             self.assertTrue(win.winfo_exists())          # declined: dialog stays open
             up.assert_not_called()
             # Update all asks the same callback, and a decline still updates the packages.
-            [b for b in self._buttons(win) if b.cget("text") == "Update all"][0].invoke()
+            [b for b in self._buttons(win) if b.cget("text") == "Tout mettre à jour"][0].invoke()
             self._wait(root, win._deps_state)
             self.assertEqual(up.call_args[0][0], ["yt-dlp"])
             self.assertEqual(seen[-1][0]["latest"], "3.1.4")
@@ -501,7 +501,7 @@ class DialogTests(unittest.TestCase):
             tree = self._tree(win)
             tree.selection_set("msr")
             root.update()
-            [b for b in self._buttons(win) if b.cget("text") == "Update selected"][0].invoke()
+            [b for b in self._buttons(win) if b.cget("text") == "Mettre à jour la sélection"][0].invoke()
             root.update()
             self.assertEqual(started, [msr["zipball"]])
             self.assertFalse(win.winfo_exists())

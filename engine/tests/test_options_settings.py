@@ -147,7 +147,7 @@ class Case(unittest.TestCase):
 
     def test_advanced_group_starts_collapsed(self):
         p = self.make()
-        box, toggle = p.groups["Advanced timing"]
+        box, toggle = p.groups["Délais avancés"]
         self.assertEqual(box.winfo_manager(), "")
         toggle()
         self.assertEqual(box.winfo_manager(), "pack")

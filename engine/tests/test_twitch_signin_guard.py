@@ -102,7 +102,7 @@ class PanelGuardTests(Base):
         p.connect()
         self.assertEqual(made, [], "no second flow started")
         self.root.update()
-        self.assertIn("already in progress", p.status.cget("text"))
+        self.assertIn("déjà en cours", p.status.cget("text"))
         self.assertEqual(p._code, "ABCD-EFGH")
         self.assertEqual(str(p.connect_btn.cget("state")), "disabled")
         r = ctl.handle("twitch_connect")

@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 
 ENGINE = Path(__file__).resolve().parents[1]
+ROOT = ENGINE.parent
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ENGINE))
 
 

@@ -181,7 +181,7 @@ class CutTests(unittest.TestCase):
         name = core.clip_name("a b?.ts", 62, 3725)
         self.assertTrue(name.startswith("a_b_clip_1-02_to_1-02-05_"))
         self.assertIsNone(core.finished_successor(self.src))
-        mp4 = self.src.replace("Recorded", "Processed")[:-3] + ".mp4"
+        mp4 = os.path.join(self.tmp.name, PROCESSED_FOLDER, "kick", "knut", "k.mp4")
         os.makedirs(os.path.dirname(mp4))
         open(mp4, "wb").close()
         self.assertEqual(core.finished_successor(self.src), mp4)

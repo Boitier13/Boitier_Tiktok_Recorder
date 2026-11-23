@@ -105,6 +105,24 @@ class TiktokDirectStreamTests(unittest.TestCase):
             "https://cdn.invalid/origin.flv?sig=origin",
         )
 
+    def test_audio_only_renditions_are_never_selected_for_video_recording(self):
+        data = self.api_data()
+        variants = json.loads(
+            data["data"]["liveRoom"]["streamData"]["pull_data"]["stream_data"]
+        )
+        variants["data"]["ORIGIN"] = {
+            "main": "https://cdn.invalid/audio.flv?only_audio=1"
+        }
+        data["data"]["liveRoom"]["streamData"]["pull_data"]["stream_data"] = json.dumps(variants)
+        self.assertEqual(
+            tiktok_stream_url_from_api(data, "best"),
+            "https://cdn.invalid/hd.flv?sig=hd",
+        )
+
+        variants["data"] = {"AO": {"main": "https://cdn.invalid/audio.flv?only_audio=1"}}
+        data["data"]["liveRoom"]["streamData"]["pull_data"]["stream_data"] = json.dumps(variants)
+        self.assertIsNone(tiktok_stream_url_from_api(data, "best"))
+
     def test_invalid_or_missing_signed_url_is_ignored(self):
         data = self.api_data()
         data["data"]["liveRoom"]["streamData"]["pull_data"]["stream_data"] = "{"

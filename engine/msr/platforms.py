@@ -470,6 +470,18 @@ def tiktok_stream_url_from_api(data, quality="best"):
                 stream_url = None
             if not isinstance(stream_url, str) or not stream_url.startswith("https://"):
                 continue
+            # TikTok may expose a separate FLV audio rendition with only_audio=1.
+            # This recorder saves video recordings; selecting that URL creates an
+            # audio-only TS and can leave nothing valid to publish after remux.
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(stream_url).query)
+            audio_only = any(
+                value.strip().lower() in {"1", "true", "yes"}
+                for key, values in query.items()
+                if key.lower() in {"only_audio", "audio_only"}
+                for value in values
+            )
+            if audio_only:
+                continue
             codec = str(sdk_params.get("VCodec") or sdk_params.get("v_codec") or default_codec).lower()
             codec = {"avc": "h264", "hevc": "h265"}.get(codec, codec)
             variants.append({"quality": str(quality_name).lower(), "codec": codec, "url": stream_url})
@@ -600,7 +612,7 @@ def check_tiktok_live_webcast(username, cookies_file, logger, timeout=30, qualit
                 logger.info("TikTok API provided a direct FLV playback variant")
             else:
                 logger.info(
-                    "TikTok API confirmed LIVE but exposed no direct FLV variant; "
+                    "TikTok API confirmed LIVE but exposed no direct video FLV variant; "
                     "will use the Streamlink plugin fallback"
                 )
             return True, room_id, title, None, stream_url

@@ -2248,8 +2248,8 @@ def redact_for_log(text):
 
 
 def redact_cmd_for_log(cmd):
-    """Join a subprocess argv for logging, with secrets stripped."""
-    return ' '.join(redact_for_log(a) for a in cmd)
+    """Join a subprocess argv for logging, with secrets stripped and one-line output."""
+    return ' '.join(re.sub(r"[\r\n\t]+", " ", redact_for_log(a)).strip() for a in cmd)
 
 
 class RedactLogFilter(logging.Filter):

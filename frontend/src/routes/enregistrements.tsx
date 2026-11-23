@@ -45,6 +45,8 @@ import {
 import { useAppStore } from "@/lib/app-store";
 import {
   moveRecordingToPending,
+  openActiveRecordingFolder,
+  openRecordingFolder,
   planRecordingRemoval,
   readLibraryChannel,
   readLibraryPending,
@@ -66,13 +68,13 @@ export const Route = createFileRoute("/enregistrements")({
       {
         name: "description",
         content:
-          "Retrouvez, lisez et classez les lives TikTok enregistrés par créateur et par date.",
+          "Retrouvez, lisez et classez les directs TikTok enregistrés par créateur et par date.",
       },
       { property: "og:title", content: "Enregistrements — Radar LIVE" },
       {
         property: "og:description",
         content:
-          "Retrouvez, lisez et classez les lives TikTok enregistrés par créateur et par date.",
+          "Retrouvez, lisez et classez les directs TikTok enregistrés par créateur et par date.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -204,8 +206,18 @@ function RecordingsPage() {
         actions={
           <Button
             variant="secondary"
-            disabled
-            title="L’ouverture du dossier sera raccordée à l’hôte Windows"
+            onClick={async () => {
+              try {
+                await openRecordingFolder();
+              } catch (error) {
+                toast.error("Ouverture du dossier impossible", {
+                  description:
+                    error instanceof Error
+                      ? error.message
+                      : "Le dossier des enregistrements est indisponible.",
+                });
+              }
+            }}
           >
             <FolderOpen /> Ouvrir le dossier
           </Button>
@@ -232,6 +244,26 @@ function RecordingsPage() {
                   </p>
                 </div>
                 <StatusPill kind="recording" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title={`Ouvrir le dossier de capture de @${active.creator.username}`}
+                  aria-label={`Ouvrir le dossier de capture de @${active.creator.username}`}
+                  onClick={async () => {
+                    try {
+                      await openActiveRecordingFolder(active.creator.id);
+                    } catch (error) {
+                      toast.error("Ouverture du dossier impossible", {
+                        description:
+                          error instanceof Error
+                            ? error.message
+                            : "Le dossier de capture est indisponible.",
+                      });
+                    }
+                  }}
+                >
+                  <FolderOpen />
+                </Button>
                 <Button
                   variant="destructive"
                   size="sm"
@@ -456,9 +488,20 @@ function RecordingsPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      disabled
-                      title="L’ouverture du dossier Windows sera raccordée à l’hôte desktop"
-                      aria-label="Ouvrir le dossier — indisponible"
+                      title="Ouvrir le dossier de cette vidéo"
+                      aria-label={`Ouvrir le dossier de ${fileName(r)}`}
+                      onClick={async () => {
+                        try {
+                          await openRecordingFolder(r.path ?? r.id);
+                        } catch (error) {
+                          toast.error("Ouverture du dossier impossible", {
+                            description:
+                              error instanceof Error
+                                ? error.message
+                                : "Le dossier de cette vidéo est indisponible.",
+                          });
+                        }
+                      }}
                     >
                       <FolderOpen />
                     </Button>

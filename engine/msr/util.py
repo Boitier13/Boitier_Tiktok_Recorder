@@ -28,7 +28,14 @@ from msr.deps import (
 #          Constants & Helpers
 # ────────────────────────────────────────────────
 
-PENDING_DELETION_FOLDER = "PendingDeletion"
+RECORDED_FOLDER = "Captures brutes"
+PROCESSED_FOLDER = "Vidéos finalisées (MP4)"
+PENDING_DELETION_FOLDER = "Éléments récupérables"
+LEGACY_LAYOUT_FOLDERS = {
+    RECORDED_FOLDER: ("Recorded",),
+    PROCESSED_FOLDER: ("Processed",),
+    PENDING_DELETION_FOLDER: ("PendingDeletion",),
+}
 
 # Channel keys are either a bare Kick name or ``platform:rest``.
 # Kick is never stored with a prefix — a colon in a Kick name used to be
@@ -156,20 +163,219 @@ def prefer_dir(paths: list[str], requested: str) -> str:
     return max(paths, key=key)
 
 
-def reuse_dir(parent: str, name: str, *, reuse: bool | None = None) -> str:
-    """``parent/name``, or on Linux an existing child whose name matches ignoring case.
+def layout_folder_names(name: str) -> tuple[str, ...]:
+    """Return the one canonical name used at runtime for a layout directory."""
+    wanted = str(name or "").lower()
+    for canonical in LEGACY_LAYOUT_FOLDERS:
+        if wanted == canonical.lower() or wanted in {
+            old.lower() for old in LEGACY_LAYOUT_FOLDERS[canonical]
+        }:
+            return (canonical,)
+    return (name,)
 
-    Does not create anything. When no child matches, the spelled path is returned so the
-    caller can create it with today's name. Windows always returns the spelled path: the
-    volume already treats ``Processed`` and ``processed`` as one folder."""
+
+def matching_layout_dirs(parent: str, name: str) -> list[str]:
+    """Find case variants of a canonical layout directory (never legacy English roots)."""
+    return matching_dirs(parent, layout_folder_names(name)[0])
+
+
+def _existing_layout_dirs(parent: str, name: str) -> list[str]:
+    """Find an existing canonical path using the volume's native case rules."""
+    path = os.path.join(parent, layout_folder_names(name)[0])
+    return [path] if os.path.isdir(path) else []
+
+
+def _unique_migration_target(path: str) -> str:
+    """Reserve a non-conflicting French duplicate name without replacing user data."""
+    parent, filename = os.path.split(path)
+    stem, extension = os.path.splitext(filename)
+    number = 1
+    while True:
+        candidate = os.path.join(parent, f"{stem} (copie {number}){extension}")
+        if not os.path.lexists(candidate):
+            return candidate
+        number += 1
+
+
+def migrate_legacy_layout_folders(root: str, manifest_path: str | None = None) -> dict[str, str]:
+    """Migrate legacy English roots into French roots, merging without overwriting files.
+
+    Conflicting files with different contents receive a French ``(copie N)`` suffix;
+    byte-identical duplicates are deduplicated. If an undo manifest cannot be updated,
+    moved files and whole roots are rolled back so its paths remain valid.
+    """
+    root = os.path.abspath(os.path.expanduser(str(root or "")))
+    renamed: dict[str, str] = {}
+    moved: list[tuple[str, str]] = []
+    duplicates: list[str] = []
+    path_map: dict[str, str] = {}
+    whole_roots: list[tuple[str, str]] = []
+    if not root or not os.path.isdir(root):
+        return renamed
+
+    try:
+        for canonical, legacy_names in LEGACY_LAYOUT_FOLDERS.items():
+            for legacy_name in legacy_names:
+                old = os.path.join(root, legacy_name)
+                destination = os.path.join(root, canonical)
+                if not os.path.lexists(old):
+                    continue
+                if os.path.islink(old):
+                    if os.path.lexists(destination):
+                        raise OSError(f"Lien symbolique et destination française en conflit: {old}")
+                    os.replace(old, destination)
+                    whole_roots.append((old, destination))
+                    renamed[legacy_name] = canonical
+                    continue
+                if not os.path.isdir(old):
+                    raise OSError(f"Le chemin historique n’est pas un dossier: {old}")
+                if not os.path.lexists(destination):
+                    os.replace(old, destination)
+                    whole_roots.append((old, destination))
+                    renamed[legacy_name] = canonical
+                    continue
+                if not os.path.isdir(destination) or os.path.islink(destination):
+                    raise OSError(f"La destination française n’est pas un dossier normal: {destination}")
+
+                for current, dirs, files in os.walk(old, topdown=True, followlinks=False):
+                    symlink_dirs = [directory for directory in dirs
+                                    if os.path.islink(os.path.join(current, directory))]
+                    dirs[:] = sorted(directory for directory in dirs if directory not in symlink_dirs)
+                    relative_dir = os.path.relpath(current, old)
+                    target_dir = destination if relative_dir == "." else os.path.join(destination, relative_dir)
+                    os.makedirs(target_dir, exist_ok=True)
+                    files = sorted(files + symlink_dirs)
+                    for filename in files:
+                        source = os.path.join(current, filename)
+                        if os.path.islink(source) or not os.path.isfile(source):
+                            # Preserve non-regular entries without following them.
+                            desired = os.path.join(target_dir, filename)
+                            target = desired if not os.path.lexists(desired) else _unique_migration_target(desired)
+                            os.replace(source, target)
+                        else:
+                            desired = os.path.join(target_dir, filename)
+                            if os.path.lexists(desired):
+                                if os.path.isfile(desired) and not os.path.islink(desired) \
+                                        and os.path.getsize(source) == os.path.getsize(desired) \
+                                        and _files_equal(source, desired):
+                                    target = desired
+                                    duplicates.append(source)
+                                else:
+                                    target = _unique_migration_target(desired)
+                                    os.replace(source, target)
+                                    moved.append((source, target))
+                            else:
+                                target = desired
+                                os.replace(source, target)
+                                moved.append((source, target))
+                        path_map[os.path.normcase(os.path.abspath(source))] = os.path.abspath(target)
+                renamed[legacy_name] = canonical
+
+        if manifest_path and os.path.isfile(manifest_path) and renamed:
+            with open(manifest_path, "r", encoding="utf-8") as source:
+                payload = json.load(source)
+            moves = payload.get("moves", []) if isinstance(payload, dict) else []
+            for move in moves:
+                if not isinstance(move, dict):
+                    continue
+                for key in ("pending", "original"):
+                    raw = move.get(key)
+                    if not isinstance(raw, str) or not raw:
+                        continue
+                    absolute_raw = os.path.abspath(raw)
+                    absolute = os.path.normcase(absolute_raw)
+                    if absolute in path_map:
+                        move[key] = path_map[absolute]
+                        continue
+                    for old_name, canonical in renamed.items():
+                        old_root_raw = os.path.abspath(os.path.join(root, old_name))
+                        old_root = os.path.normcase(old_root_raw)
+                        try:
+                            common = os.path.commonpath((old_root, absolute))
+                        except ValueError:
+                            continue
+                        if common == old_root:
+                            relative = os.path.relpath(absolute_raw, old_root_raw)
+                            move[key] = os.path.join(root, canonical, relative)
+                            break
+            manifest = os.path.abspath(manifest_path)
+            temporary = manifest + ".layout-migration.tmp"
+            with open(temporary, "w", encoding="utf-8") as output:
+                json.dump(payload, output, ensure_ascii=False)
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary, manifest)
+
+        for source in duplicates:
+            try:
+                os.unlink(source)
+            except OSError:
+                logging.warning("Doublon identique conservé faute de pouvoir le supprimer: %s", source)
+        for old_name in renamed:
+            old = os.path.join(root, old_name)
+            if os.path.isdir(old) and not os.path.islink(old):
+                for current, dirs, files in os.walk(old, topdown=False):
+                    for directory in dirs:
+                        try:
+                            os.rmdir(os.path.join(current, directory))
+                        except OSError:
+                            pass
+                    try:
+                        if not os.listdir(current):
+                            os.rmdir(current)
+                    except OSError:
+                        logging.warning("Dossier historique vide impossible à retirer: %s", current)
+        return renamed
+    except Exception:
+        logging.exception("Migration des dossiers historiques annulée; restauration des chemins d’origine.")
+        for source in duplicates:
+            # Duplicate removal is deferred until after the manifest commit.
+            pass
+        for source, destination in reversed(moved):
+            try:
+                os.makedirs(os.path.dirname(source), exist_ok=True)
+                if os.path.lexists(destination) and not os.path.lexists(source):
+                    os.replace(destination, source)
+            except OSError:
+                logging.critical("Retour arrière incomplet pour %s vers %s", destination, source,
+                                 exc_info=True)
+        for source, destination in reversed(whole_roots):
+            try:
+                if os.path.lexists(destination) and not os.path.lexists(source):
+                    os.replace(destination, source)
+            except OSError:
+                logging.critical("Retour arrière incomplet pour %s vers %s", destination, source,
+                                 exc_info=True)
+        return {}
+
+
+def _files_equal(first: str, second: str) -> bool:
+    """Compare regular files by content, not timestamps or filenames."""
+    try:
+        with open(first, "rb") as a, open(second, "rb") as b:
+            while True:
+                left, right = a.read(1024 * 1024), b.read(1024 * 1024)
+                if left != right:
+                    return False
+                if not left:
+                    return True
+    except OSError:
+        return False
+
+
+def reuse_dir(parent: str, name: str, *, reuse: bool | None = None) -> str:
+    """Return the canonical layout path, reusing only its spelling/case variants."""
     if reuse is None:
         reuse = linux_reuses_dir_case()
-    if not reuse or not parent or not name:
+    if not parent or not name:
         return os.path.join(parent, name)
-    found = matching_dirs(parent, name)
+    canonical = layout_folder_names(name)[0]
+    if not reuse:
+        return os.path.join(parent, canonical)
+    found = matching_dirs(parent, canonical)
     if not found:
-        return os.path.join(parent, name)
-    return prefer_dir(found, name)
+        return os.path.join(parent, canonical)
+    return prefer_dir(found, canonical)
 
 
 def reuse_path(parent: str, *parts: str, reuse: bool | None = None) -> str:
@@ -181,9 +387,9 @@ def reuse_path(parent: str, *parts: str, reuse: bool | None = None) -> str:
 
 
 def layout_bases(root: str, *, reuse: bool | None = None) -> tuple[str, str, str]:
-    """(Recorded, Processed, PendingDeletion) under ``root``, existing case reused on Linux."""
-    return (reuse_dir(root, "Recorded", reuse=reuse),
-            reuse_dir(root, "Processed", reuse=reuse),
+    """(raw captures, final MP4, recoverable items) under ``root``."""
+    return (reuse_dir(root, RECORDED_FOLDER, reuse=reuse),
+            reuse_dir(root, PROCESSED_FOLDER, reuse=reuse),
             reuse_dir(root, PENDING_DELETION_FOLDER, reuse=reuse))
 
 
@@ -212,7 +418,7 @@ def recorded_scan_bases(root: str, primary: str, *, reuse: bool | None = None) -
     seen = set()
     candidates = [primary] if primary else []
     if root and reuse:
-        candidates.extend(matching_dirs(root, "Recorded"))
+        candidates.extend(matching_layout_dirs(root, RECORDED_FOLDER))
     for path in candidates:
         if not path:
             continue
@@ -240,13 +446,20 @@ def read_layout_paths(root: str, *parts: str, reuse: bool | None = None) -> list
     if reuse is None:
         reuse = linux_reuses_dir_case()
     if not reuse:
-        return [spelled]
+        current = root
+        for piece in flat:
+            matches = _existing_layout_dirs(current, piece)
+            current = prefer_dir(matches, layout_folder_names(piece)[0]) if matches else os.path.join(
+                current, layout_folder_names(piece)[0]
+            )
+        return [current]
+
     current = [root]
     for piece in flat:
         nxt = []
         seen = set()
         for parent in current:
-            for path in matching_dirs(parent, piece):
+            for path in matching_layout_dirs(parent, piece):
                 key = os.path.normcase(os.path.abspath(path))
                 if key not in seen:
                     seen.add(key)
@@ -1437,7 +1650,10 @@ def _cmdline_text(cmdline):
 
 # What MSR keeps directly under a recordings folder. Anything else under the same prefix belongs to
 # somebody else (another MSR instance's folder nested inside this one, for example).
-_INSTANCE_ENTRIES = ("recorded", "processed", PENDING_DELETION_FOLDER.lower(), "clips")
+_INSTANCE_ENTRIES = (
+    RECORDED_FOLDER.lower(), PROCESSED_FOLDER.lower(), PENDING_DELETION_FOLDER.lower(), "clips",
+    "recorded", "processed", "pendingdeletion",
+)
 _INSTANCE_FILES = ("stream_recorder.log", ".msr_instance.lock")
 
 

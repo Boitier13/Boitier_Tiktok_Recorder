@@ -4,21 +4,21 @@ from __future__ import annotations
 
 import os
 
-SITES = ("Records live streams from Kick, Twitch, YouTube, Rumble, TikTok "
-         "and any site yt-dlp supports (or a direct .m3u8 link). Fishtank.live support is built in; "
-         "its cameras change each season.")
-DISCLAIMER = ("Use responsibly: you are responsible for following each site's terms of service and "
-              "your local laws, including when accessing age-restricted or adult sites. The author is "
-              "not responsible for how this software is used. cookies.txt is your login; never share it.")
+SITES = ("Enregistre les directs de Kick, Twitch, YouTube, Rumble, TikTok "
+         "et des sites compatibles avec yt-dlp (ou un lien .m3u8 direct). Fishtank.live est intégré ; "
+         "ses caméras changent à chaque saison.")
+DISCLAIMER = ("Utilisez ce logiciel de manière responsable. Vous devez respecter les conditions d’utilisation "
+              "de chaque site et les lois locales, notamment pour les sites réservés aux adultes. L’auteur "
+              "n’est pas responsable de l’usage de ce logiciel. Le fichier cookies.txt donne accès à votre compte : ne le partagez jamais.")
 
 
 def tool_lines(deps_module) -> list[str]:
     d = deps_module
     return [
-        f"yt-dlp {d.YTDLP_VERSION}" if d.HAS_YTDLP else "yt-dlp: not found",
-        f"streamlink {d.STREAMLINK_VERSION}" if d.HAS_STREAMLINK else "streamlink: not found",
-        f"ffmpeg {d.FFMPEG_VERSION}" if d.HAS_FFMPEG else "ffmpeg: not found",
-        f"deno {d.DENO_VERSION}" if d.HAS_DENO else "deno: not found (recommended for YouTube)",
+        f"yt-dlp {d.YTDLP_VERSION}" if d.HAS_YTDLP else "yt-dlp : introuvable",
+        f"streamlink {d.STREAMLINK_VERSION}" if d.HAS_STREAMLINK else "streamlink : introuvable",
+        f"ffmpeg {d.FFMPEG_VERSION}" if d.HAS_FFMPEG else "ffmpeg : introuvable",
+        f"deno {d.DENO_VERSION}" if d.HAS_DENO else "deno : introuvable (recommandé pour YouTube)",
     ]
 
 
@@ -30,14 +30,14 @@ def package_line(version_of=None) -> str:
         if kind == "tool":
             continue                       # yt-dlp / streamlink are listed with the tools
         v = version_of(dist)
-        parts.append(f"{label} {v}" if v else f"{label} (missing)")
+        parts.append(f"{label} {v}" if v else f"{label} (introuvable)")
     return ", ".join(parts)
 
 
 def environment_line(in_venv: bool, python_version: str) -> str:
     if in_venv:
-        return f"Python {python_version} in MSR's own environment (.venv)."
-    return f"Python {python_version}, not MSR's .venv (package updates are off)."
+        return f"Python {python_version} dans l’environnement dédié de MSR (.venv)."
+    return f"Python {python_version}, hors de l’environnement dédié de MSR (.venv) (mise à jour des composants désactivée)."
 
 
 def about_text(version: str, *, tools: list[str], packages: str, environment: str,
@@ -47,18 +47,18 @@ def about_text(version: str, *, tools: list[str], packages: str, environment: st
         "",
         SITES,
         "",
-        "Tools: " + " \u00b7 ".join(tools),
-        "Python packages: " + packages,
+        "Outils : " + " \u00b7 ".join(tools),
+        "Composants Python : " + packages,
         environment,
-        "Check and update them with the Updates\u2026 button.",
+        "Vérifiez les versions et mettez les composants à jour avec le bouton Mises à jour\u2026.",
         "",
-        f"Recordings: {streams}",
-        f"Clips & screenshots: {clips}",
-        f"Settings (config.ini, channels.json, cookies.txt): {data_dir}",
-        "To move the recordings or clips, change streams_dir / clips_dir in config.ini, "
-        "then fully quit (Ctrl+Q) and relaunch.",
+        f"Enregistrements : {streams}",
+        f"Clips et captures d’écran : {clips}",
+        f"Paramètres (config.ini, channels.json, cookies.txt) : {data_dir}",
+        "Pour déplacer les captures ou les clips, modifiez streams_dir / clips_dir dans config.ini, "
+        "puis quittez complètement l’application (Ctrl+Q) et relancez-la.",
         "",
-        "Scripts and AI agents can control MSR with msr_ctl.py (see docs/AGENT_GUIDE.md).",
+        "Les scripts et outils automatisés peuvent piloter MSR avec msr_ctl.py (voir docs/AGENT_GUIDE.md).",
         "",
         DISCLAIMER,
     ])

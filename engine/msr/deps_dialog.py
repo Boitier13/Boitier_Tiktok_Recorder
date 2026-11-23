@@ -15,11 +15,11 @@ from tkinter import ttk
 from msr import dialogs, depsupdate
 
 STATUS_TEXT = {
-    "up_to_date": "Up to date", "update_available": "Update available", "not_installed": "Not installed",
-    "unknown": "Could not check", "unchecked": "Not checked yet", "external": "Managed outside MSR",
+    "up_to_date": "À jour", "update_available": "Mise à jour disponible", "not_installed": "Non installé",
+    "unknown": "Vérification impossible", "unchecked": "Pas encore vérifié", "external": "Géré hors de MSR",
 }
-COLUMNS = (("label", "Item", 170), ("installed", "Installed", 170), ("latest", "Latest", 110),
-           ("status", "Status", 140), ("source", "Source / note", 330))
+COLUMNS = (("label", "Composant", 170), ("installed", "Installé", 170), ("latest", "Dernière version", 110),
+           ("status", "État", 140), ("source", "Source / note", 330))
 
 
 def open_deps_dialog(parent, *, config, state_file, ffmpeg_path="ffmpeg", on_msr_update=None,
@@ -35,13 +35,13 @@ def open_deps_dialog(parent, *, config, state_file, ffmpeg_path="ffmpeg", on_msr
     if existing is not None and existing.winfo_exists():
         existing.deiconify(); existing.lift(); existing.focus_force()
         return existing
-    win, frame = dialogs.new_dialog(parent, "Updates")
+    win, frame = dialogs.new_dialog(parent, "Mises à jour")
     parent._msr_deps_dialog = win
     q: queue.Queue = queue.Queue()
     state = {"rows": depsupdate.rows(False, ffmpeg_path=ffmpeg_path), "busy": False, "job": None}
 
-    ttk.Label(frame, text="Tools and packages Multi-Stream Recorder uses. Updates install in the background; "
-                          "recordings already running keep their version, new recordings use the new one.",
+    ttk.Label(frame, text="Outils et composants utilisés par Multi-Stream Recorder. Les mises à jour se font en arrière-plan ; "
+                          "les captures en cours gardent leur version, les prochaines utiliseront la nouvelle.",
               wraplength=900, justify="left").pack(anchor="w", pady=(0, 8))
     tree = ttk.Treeview(frame, columns=[c[0] for c in COLUMNS], show="headings", height=11, selectmode="extended")
     for key, title, width in COLUMNS:
@@ -58,15 +58,15 @@ def open_deps_dialog(parent, *, config, state_file, ffmpeg_path="ffmpeg", on_msr
             config.config.add_section("Updates")
         config.config.set("Updates", "daily_check", "true" if daily.get() else "false")
         config.save()
-    ttk.Checkbutton(frame, text="Check for updates once a day in the background", variable=daily,
+    ttk.Checkbutton(frame, text="Rechercher les mises à jour une fois par jour en arrière-plan", variable=daily,
                     command=_daily_changed).pack(anchor="w")
 
     bar = ttk.Frame(frame)
     bar.pack(fill="x", pady=(10, 0))
-    btn_check = ttk.Button(bar, text="Check now", command=lambda: _check())
-    btn_sel = ttk.Button(bar, text="Update selected", command=lambda: _update(_selected()))
-    btn_all = ttk.Button(bar, text="Update all", command=lambda: _update(_all_updatable()))
-    btn_close = ttk.Button(bar, text="Close", command=lambda: _close())
+    btn_check = ttk.Button(bar, text="Vérifier maintenant", command=lambda: _check())
+    btn_sel = ttk.Button(bar, text="Mettre à jour la sélection", command=lambda: _update(_selected()))
+    btn_all = ttk.Button(bar, text="Tout mettre à jour", command=lambda: _update(_all_updatable()))
+    btn_close = ttk.Button(bar, text="Fermer", command=lambda: _close())
     for b in (btn_check, btn_sel, btn_all):
         b.pack(side="left", padx=(0, 6))
     btn_close.pack(side="right")
@@ -111,7 +111,7 @@ def open_deps_dialog(parent, *, config, state_file, ffmpeg_path="ffmpeg", on_msr
     def _check():
         if state["busy"]:
             return
-        msg.configure(text="Checking\u2026")
+        msg.configure(text="Vérification\u2026")
         def fn():
             rs = depsupdate.rows(True, ffmpeg_path=ffmpeg_path)
             try:
@@ -136,7 +136,7 @@ def open_deps_dialog(parent, *, config, state_file, ffmpeg_path="ffmpeg", on_msr
                     started = bool(on_msr_update(row, parent=win))
                 except Exception as exc:
                     logging.exception("App update did not start")
-                    dialogs.show_error(win, "Cannot update", f"The update could not start.\n\n{exc}")
+                    dialogs.show_error(win, "Mise à jour impossible", f"Impossible de démarrer la mise à jour.\n\n{exc}")
                     return
                 if started and win.winfo_exists():
                     _close()
@@ -146,10 +146,10 @@ def open_deps_dialog(parent, *, config, state_file, ffmpeg_path="ffmpeg", on_msr
         skipped = [by[n]["label"] for n in names if n in by and not by[n].get("updatable")]
         names = [n for n in names if n in by and by[n].get("updatable")]
         if not names:
-            msg.configure(text="Nothing to update" + (f" ({', '.join(skipped)} cannot be updated here)." if skipped
-                                                     else ". Press Check now first."))
+            msg.configure(text="Aucune mise à jour à effectuer" + (f" ({', '.join(skipped)} ne peuvent pas être mis à jour ici)." if skipped
+                                                     else ". Lancez d’abord une vérification."))
             return
-        msg.configure(text=f"Updating {', '.join(names)}\u2026 (recordings keep running)")
+        msg.configure(text=f"Updating {', '.join(names)}\u2026 (les captures continuent)")
         def fn():
             res = depsupdate.update_packages(names, log=lambda line: q.put(("log", line)))
             return res, depsupdate.rows(True, ffmpeg_path=ffmpeg_path)
@@ -171,7 +171,7 @@ def open_deps_dialog(parent, *, config, state_file, ffmpeg_path="ffmpeg", on_msr
                     state["rows"] = rs
                     msg.configure(text=summary(res))
                 else:
-                    msg.configure(text=f"Failed: {payload}")
+                    msg.configure(text=f"Échec : {payload}")
                 _fill()
         except queue.Empty:
             pass
@@ -200,11 +200,11 @@ def open_deps_dialog(parent, *, config, state_file, ffmpeg_path="ffmpeg", on_msr
 
 def summary(results) -> str:
     ok = [f"{r['name']} {r.get('old') or '-'} -> {r.get('new')}" for r in results if r.get("ok")]
-    bad = [f"{r['name']}: {r.get('error')}" + (" (previous version restored)" if r.get("rolled_back") else "")
+    bad = [f"{r['name']}: {r.get('error')}" + (" (version précédente restaurée)" if r.get("rolled_back") else "")
            for r in results if not r.get("ok")]
     parts = []
     if ok:
-        parts.append("Updated: " + "; ".join(ok) + ". New recordings use the new version.")
+        parts.append("Mis à jour : " + "; ".join(ok) + ". Les prochaines captures utiliseront la nouvelle version.")
     if bad:
-        parts.append("Not updated: " + " ".join(bad))
-    return "  ".join(parts) or "Nothing done."
+        parts.append("Non mis à jour : " + " ".join(bad))
+    return "  ".join(parts) or "Aucune action effectuée."

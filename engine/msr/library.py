@@ -34,18 +34,29 @@ from typing import Callable, Iterable, NamedTuple
 
 from msr import storage
 from msr.nowindow import no_window_kwargs
-from msr.util import KNOWN_PLATFORMS, PENDING_DELETION_FOLDER, channel_key_to_dirs, matching_dirs, prefer_dir
+from msr.util import (
+    KNOWN_PLATFORMS,
+    PENDING_DELETION_FOLDER,
+    PROCESSED_FOLDER,
+    RECORDED_FOLDER,
+    channel_key_to_dirs,
+    matching_dirs,
+    prefer_dir,
+)
 
 VIDEO_EXT = frozenset({".mp4", ".mkv", ".ts", ".webm", ".mov", ".m4v", ".flv", ".avi", ".m4a", ".mp3"})
 IMAGE_EXT = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
 PARTIAL_SUFFIXES = (".part", ".ytdl", ".tmp", ".temp", ".download", ".crdownload")
-CATEGORY_FOLDERS = {"processed": "processed", "recorded": "recorded",
-                    PENDING_DELETION_FOLDER.lower(): "pending"}
+CATEGORY_FOLDERS = {
+    "processed": "processed", PROCESSED_FOLDER.lower(): "processed",
+    "recorded": "recorded", RECORDED_FOLDER.lower(): "recorded",
+    PENDING_DELETION_FOLDER.lower(): "pending", "pendingdeletion": "pending",
+}
 MAX_DEPTH = 8
 UNSORTED = "(unsorted)"
 PLATFORM_NAMES = {"kick": "Kick", "twitch": "Twitch", "youtube": "YouTube", "tiktok": "TikTok",
-                  "rumble": "Rumble", "fishtank": "Fishtank", "custom": "Custom URLs",
-                  "other": "Other folders", UNSORTED: "Unsorted"}
+                  "rumble": "Rumble", "fishtank": "Fishtank", "custom": "Adresses personnalisées",
+                  "other": "Autres dossiers", UNSORTED: "Non classé"}
 FILL_MAX_DAYS = 3650  # beyond ten years "fills in N days" is not a useful number
 
 _DATE_RE = re.compile(r"(?<!\d)(20\d\d)(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(?!\d)")
@@ -397,7 +408,7 @@ def _top_level_map(streams_dir: str) -> dict:
     return found
 
 
-_CANONICAL_TOP = {"processed": "Processed", "recorded": "Recorded",
+_CANONICAL_TOP = {"processed": PROCESSED_FOLDER, "recorded": RECORDED_FOLDER,
                   "pending": PENDING_DELETION_FOLDER, "clips": "Clips"}
 
 
@@ -656,7 +667,7 @@ def scan_library(roots: Roots, progress: Callable[[int, int, str], None] | None 
         if not streams or not os.path.isdir(streams):
             stats.roots_found["Recordings folder"] = False
         for category, label in (("processed", "Processed"), ("recorded", "Recorded"),
-                                ("pending", PENDING_DELETION_FOLDER)):
+                                ("pending", "PendingDeletion")):
             folders = top.get(category) or []
             if folders:
                 for folder in folders:
@@ -893,63 +904,65 @@ def summary_lines(stats: LibraryStats, top: int = 3) -> list[str]:
     rec_b, rec_f = stats.recordings_bytes, stats.recordings_files
     done_b, done_f = stats.cat("processed")
     raw_b, raw_f = stats.cat("raw")
-    head = f"{fmt_size(rec_b)} of recordings in {rec_f:,} file{'s' if rec_f != 1 else ''}"
+    head = f"{fmt_size(rec_b)} de vidéos dans {rec_f:,} fichier{'s' if rec_f != 1 else ''}"
     if raw_f:
-        head += f" ({fmt_size(done_b)} finished, {fmt_size(raw_b)} raw or in progress)"
+        head += f" ({fmt_size(done_b)} finalisés, {fmt_size(raw_b)} bruts ou en cours)"
     if stats.disk:
-        head += f" on a drive with {fmt_size(stats.disk[2])} free of {fmt_size(stats.disk[0])}"
+        head += f" sur un disque ayant {fmt_size(stats.disk[2])} libres sur {fmt_size(stats.disk[0])}"
     lines.append(head + ".")
     platforms = stats.ranked_platforms()
     if platforms and rec_b > 0:
         parts = [f"{platform_label(p)} {fmt_size(b)} ({b * 100 / rec_b:.0f}%)" for p, b, _f in platforms[:6]]
         if len(platforms) > 6:
-            parts.append(f"{len(platforms) - 6} more")
-        lines.append("By site: " + ", ".join(parts) + ".")
+            parts.append(f"{len(platforms) - 6} autres")
+        lines.append("Par plateforme : " + ", ".join(parts) + ".")
     ranked = [c for c in stats.ranked_channels() if c.recordings_bytes > 0]
     if ranked:
-        lines.append("Biggest channels: " + ", ".join(
+        lines.append("Créateurs avec le plus de vidéos : " + ", ".join(
             f"{c.name} ({platform_label(c.platform)}) {fmt_size(c.recordings_bytes)}" for c in ranked[:top]) + ".")
     if stats.oldest and stats.newest:
-        lines.append(f"Recordings from {_day(stats.oldest)} to {_day(stats.newest)}.")
+        lines.append(f"Vidéos du {_day(stats.oldest)} au {_day(stats.newest)}.")
     if stats.seconds_total is not None:
-        note = f" (length known for {stats.timed_files:,} of {len(stats.videos):,} finished files)" \
+        note = f" (durée connue pour {stats.timed_files:,} vidéos finalisées sur {len(stats.videos):,})" \
             if stats.timed_files != len(stats.videos) else ""
-        lines.append(f"Recorded time: {fmt_hours(stats.seconds_total)}{note}.")
+        lines.append(f"Durée totale des captures : {fmt_hours(stats.seconds_total)}{note}.")
     months = sorted(stats.months.items(), key=lambda kv: -kv[1][0])
     if months:
         m, (b, f) = months[0]
-        lines.append(f"Busiest month: {m} ({fmt_size(b)}, {f:,} recordings).")
+        lines.append(f"Mois le plus actif : {m} ({fmt_size(b)}, {f:,} vidéos).")
     extras = []
     pend_b, pend_f = stats.cat("pending")
     if pend_f:
-        extras.append(f"{fmt_size(pend_b)} waiting in {PENDING_DELETION_FOLDER} ({pend_f:,} files)")
+        extras.append(f"{fmt_size(pend_b)} en attente dans {PENDING_DELETION_FOLDER} ({pend_f:,} fichiers)")
     clip_b, clip_f = stats.cat("clips")
     shot_b, shot_f = stats.cat("screenshots")
     if clip_f or shot_f:
-        extras.append(f"clips and screenshots {fmt_size(clip_b + shot_b)} ({clip_f:,} clips, {shot_f:,} screenshots)")
+        extras.append(f"clips et captures d’écran : {fmt_size(clip_b + shot_b)} ({clip_f:,} clips, {shot_f:,} captures d’écran)")
     other_b, other_f = stats.cat("other")
     if other_f:
-        extras.append(f"other folders {fmt_size(other_b)} ({other_f:,} files)")
+        extras.append(f"autres dossiers : {fmt_size(other_b)} ({other_f:,} fichiers)")
     if extras:
-        lines.append("Also: " + "; ".join(extras) + ".")
+        lines.append("Également : " + "; ".join(extras) + ".")
     est = fill_estimate(stats)
     if est:
         rate, days = est
-        lines.append(f"Roughly {fmt_size(stats.bytes_30d)} was added in the last 30 days ({fmt_size(rate)} a day); "
-                     f"at that pace the drive fills in about {days:,.0f} days.")
+        lines.append(f"Environ {fmt_size(stats.bytes_30d)} ont été ajoutés au cours des 30 derniers jours ({fmt_size(rate)} par jour) ; "
+                     f"à ce rythme, le disque sera plein dans environ {days:,.0f} jours.")
     notes = []
     missing = [name for name, ok in stats.roots_found.items()
                if not ok and (name in ("Recordings folder", "Processed") or name.startswith("Other folder"))]
     if missing:
-        notes.append("not found: " + ", ".join(missing))
+        root_names = {"Recordings folder": RECORDED_FOLDER, "Processed": PROCESSED_FOLDER}
+        display_missing = [root_names.get(name, name.replace("Other folder", "Autre dossier")) for name in missing]
+        notes.append("introuvable : " + ", ".join(display_missing))
     if stats.unreadable_dirs:
-        notes.append(f"{stats.unreadable_dirs} folder(s) could not be read")
+        notes.append(f"{stats.unreadable_dirs} dossier(s) illisible(s)")
     if stats.symlinks_skipped:
-        notes.append(f"{stats.symlinks_skipped} link(s) skipped")
+        notes.append(f"{stats.symlinks_skipped} lien(s) ignoré(s)")
     if stats.cancelled:
-        notes.append("scan was cancelled: numbers are partial")
+        notes.append("analyse annulée : les résultats sont partiels")
     if notes:
-        lines.append("Notes: " + "; ".join(notes) + ".")
+        lines.append("Remarques : " + "; ".join(notes) + ".")
     return lines
 
 

@@ -328,7 +328,7 @@ class LibraryManageSmokeTests(unittest.TestCase):
         self.assertNotIn("Traceback", done.stderr)
         out = json.loads(done.stdout)
         self.assertTrue(out["scanned"], out)
-        self.assertEqual(out["tabs"], ["Overview", "Channels", "Recordings", "PendingDeletion", "Clean up"])
+        self.assertEqual(out["tabs"], ["Vue d’ensemble", "Créateurs", "Vidéos", "Éléments récupérables", "Nettoyage"])
         self.assertEqual(out["files_jump"][0], "Clean up")
         self.assertIn("alice", out["files_jump"][1])
         self.assertEqual(out["files_jump"][2], 2)

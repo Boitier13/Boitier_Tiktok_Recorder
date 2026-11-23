@@ -83,7 +83,7 @@ class DeleteChannelTests(ManageCase):
         self.assertFalse(self.exists("Processed/kick/alice/alice_20260101_120000.mp4"))
         self.assertTrue(self.exists("PendingDeletion/kick/alice/alice_20260101_120000.mp4"))
         self.assertTrue(self.exists("Processed/twitch/bob/bob_20260301_000000.mp4"))  # other channels untouched
-        self.assertIn("Moved to PendingDeletion: 4 file(s)", win.status.cget("text"))  # two videos and their two metadata files
+        self.assertIn("Déplacés vers les éléments récupérables: 4 fichier(s)", win.status.cget("text"))  # two videos and their two metadata files
         self.assertTrue(win.undo_btn.winfo_ismapped() or win.undo_btn.winfo_manager())
         log = (self.data / "library_actions.log").read_text(encoding="utf-8")
         self.assertIn("alice_20260101_120000.mp4", log)
@@ -227,7 +227,7 @@ class TabsAndClicks(ManageCase):
     def test_file_list_lives_in_clean_up_without_browsing_buttons(self):
         win = self.managed()
         texts = [win.tabs.tab(t, "text").strip() for t in win.tabs.tabs()]
-        self.assertEqual(texts, ["Overview", "Channels", "Recordings", "PendingDeletion", "Clean up"])
+        self.assertEqual(texts, ["Vue d’ensemble", "Créateurs", "Vidéos", "Éléments récupérables", "Nettoyage"])
         files = win.mgr.files
         self.assertIs(files.frame.master, win.mgr.cleanup.frame)
         self.assertFalse(hasattr(files, "play_btn") or hasattr(files, "reveal_btn"))
@@ -282,7 +282,7 @@ class TabsAndClicks(ManageCase):
         win.tree.selection_set(win.tree.get_children()[0])
         self.assertTrue(win.tree.bind("<Delete>"))  # (a hidden window has no keyboard focus, so call what it runs)
         win.delete_selected()
-        self.assertEqual(asked, ["Delete channel content"])
+        self.assertEqual(asked, ["Supprimer le contenu des créateurs"])
         self.assertTrue(win.mgr.files.tree.bind("<Delete>"))
 
     def test_clicking_a_donut_slice_filters_the_channels(self):

@@ -116,12 +116,12 @@ def load_token(data_dir):
         return None
     if "dpapi" in doc:
         if not dpapi_available():
-            _note_once("Twitch: saved sign-in is encrypted for Windows - click Connect Twitch")
+            _note_once("Twitch : la connexion enregistrée est chiffrée pour Windows ; cliquez sur Connecter Twitch")
             return None
         try:
             tok = json.loads(_dpapi(base64.b64decode(doc["dpapi"]), False).decode("utf-8"))
         except Exception:
-            _note_once("Twitch: saved sign-in can't be read by this Windows user/PC - click Connect Twitch")
+            _note_once("Twitch : cet utilisateur ou ordinateur Windows ne peut pas lire la connexion enregistrée ; cliquez sur Connecter Twitch")
             return None
     else:
         tok = doc

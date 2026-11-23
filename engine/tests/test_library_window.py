@@ -89,7 +89,7 @@ class PureTests(unittest.TestCase):
         self.assertIn("chan0 (Twitch)", bars[0][3])
         donut = lw.donut_rows(s)
         self.assertEqual(len(donut), lw.TOP_PLATFORMS + 1)  # six sites + one Other slice
-        self.assertEqual(donut[-1][0], "Other")
+        self.assertEqual(donut[-1][0], "Autres")
         self.assertEqual(donut[-1][1], 3000 + 2000)  # the two smallest sites
         self.assertEqual(donut[0][0], "Kick")
         self.assertEqual(lw.donut_rows(lib.LibraryStats()), [])

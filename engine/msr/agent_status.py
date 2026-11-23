@@ -48,7 +48,9 @@ def channel_dirs(config, key, category):
     On Linux every case variant is included so a Windows-era ``processed`` tree is visible.
     Windows still gets the single spelled path."""
     from msr import storage
-    from msr.util import channel_key_to_dirs, read_layout_paths
+    from msr.util import (
+        PROCESSED_FOLDER, RECORDED_FOLDER, channel_key_to_dirs, read_layout_paths,
+    )
     platform, user = channel_key_to_dirs(key)
     streams = config.get("Paths", "streams_dir", fallback="") or ""
     roots = [streams]
@@ -215,12 +217,13 @@ class Tracker:
         """Record a finished recording. Without ``path``: the newest .mp4 in the channel's
         Processed folder (or .ts in Recorded when the remux failed)."""
         from msr.library import sidecar_seconds
+        from msr.util import PROCESSED_FOLDER, RECORDED_FOLDER
         size = None
         if path is None:
             since = self.clock() - 6 * 3600
             hit = None
             try:
-                for folder in channel_dirs(self.config, key, "Processed" if ok else "Recorded"):
+                for folder in channel_dirs(self.config, key, PROCESSED_FOLDER if ok else RECORDED_FOLDER):
                     found = _newest(folder, (".mp4",) if ok else (".ts",), since)
                     if found and (hit is None or found[0] > hit[0]):
                         hit = found
@@ -342,7 +345,8 @@ class Tracker:
         if key not in self.finishing:
             return
         try:  # a raw file is still there (locked through every pass): a later pass finishes it
-            for folder in channel_dirs(self.config, key, "Recorded"):
+            from msr.util import RECORDED_FOLDER
+            for folder in channel_dirs(self.config, key, RECORDED_FOLDER):
                 if _newest(folder, (".ts",)):
                     return
         except Exception:
@@ -496,11 +500,11 @@ def cleanup_queue(config, busy_keys=()):
     for k in busy_keys:
         platform, user = channel_key_to_dirs(k)
         busy.add(os.path.normcase(os.path.join(platform, *user.split("/"))))
-    from msr.util import read_layout_paths
+    from msr.util import RECORDED_FOLDER, read_layout_paths
     out = []
     seen = set()
     for root in roots:
-        for base in read_layout_paths(root, "Recorded"):
+        for base in read_layout_paths(root, RECORDED_FOLDER):
             if not os.path.isdir(base):
                 continue
             base_key = os.path.normcase(os.path.abspath(base))

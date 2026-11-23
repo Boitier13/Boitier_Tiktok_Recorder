@@ -244,7 +244,7 @@ Or leave the password out and set the `MSR_FISHTANK_PASSWORD` environment variab
 
 | Section / key | Default | Meaning |
 | --- | --- | --- |
-| `Paths/streams_dir` | Videos\BoitierTiktokRecorder | Where `Recorded`, `Processed`, `Clips` and the log go |
+| `Paths/streams_dir` | Videos\BoitierTiktokRecorder | Where `Captures brutes`, `Vidéos finalisées (MP4)`, `Éléments récupérables`, `Clips` and the log go |
 | `Paths/fallback_dir` | (blank) | Where recording continues if `streams_dir` becomes unreachable. Blank = a folder in the system temp folder; `off` = pause instead. Moved back when the drive returns |
 | `Paths/cookies_file` | auto | Explicit cookies.txt path |
 | `Recording/quality` | best | Stream quality |
@@ -270,7 +270,7 @@ Or leave the password out and set the `MSR_FISHTANK_PASSWORD` environment variab
 | `GUI/theme` | PowerShell Blue | Colour theme (set from the **Theme...** button) |
 | `GUI/minimize_to_tray`, `notifications` | true | UI |
 
-Output layout: `streams_dir\Recorded\<platform>\<channel>\` (raw `.ts` while recording), `Processed\...` (final `.mp4`), `Clips\...`, `PendingDeletion\` (originals, purged after `auto_purge_days`).
+Output layout: `streams_dir\Captures brutes\<platform>\<channel>\` (raw `.ts` during capture), `Vidéos finalisées (MP4)\...` (finished `.mp4`), `Clips\...`, `Éléments récupérables\` (originals and items set aside, purged after `auto_purge_days`). At startup, BTL and the desktop engine migrate legacy `Recorded`, `Processed` and `PendingDeletion` roots into these French folders. Existing trees are merged; identical files are deduplicated and differently named conflicts receive a French ` (copie N)` suffix, never overwriting either file.
 
 ## Command line
 

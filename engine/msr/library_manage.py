@@ -25,10 +25,10 @@ from msr import library_dialog as ldialog
 FILES_CAP = 5000
 CHECK_ON, CHECK_OFF = "\u2611", "\u2610"
 # (label, kinds, where): where is "pending" (only PendingDeletion), "live" (not PendingDeletion) or None
-SHOW_CHOICES = (("Recordings", ("recording",), "live"), ("Raw and partial files", ("raw", "partial"), "live"),
-                ("Clips and screenshots", ("clip", "screenshot"), "live"),
-                ("In PendingDeletion", ("media", "partial", "sidecar"), "pending"),
-                ("Everything", ("recording", "raw", "partial", "clip", "screenshot", "media"), None))
+SHOW_CHOICES = (("Vidéos finalisées", ("recording",), "live"), ("Fichiers bruts et partiels", ("raw", "partial"), "live"),
+                ("Clips et captures d’écran", ("clip", "screenshot"), "live"),
+                ("Éléments récupérables", ("media", "partial", "sidecar"), "pending"),
+                ("Tout", ("recording", "raw", "partial", "clip", "screenshot", "media"), None))
 
 
 @dataclass
@@ -69,8 +69,8 @@ class Manager:
         self.cleanup = CleanupTab(self, panel.tabs)
         self.files = FilesTab(self, self.cleanup.frame)  # the bulk list lives under the suggestions
         self.files.frame.pack(fill="both", expand=True)
-        panel.tabs.add(self.pending.frame, text="  PendingDeletion  ")
-        panel.tabs.add(self.cleanup.frame, text="  Clean up  ")
+        panel.tabs.add(self.pending.frame, text="  Éléments récupérables  ")
+        panel.tabs.add(self.cleanup.frame, text="  Nettoyage  ")
 
     # ------------------------------------------------------------ services
     def guard(self) -> act.Guard:
@@ -92,17 +92,17 @@ class Manager:
     def can_act(self) -> str | None:
         panel = self.panel
         if panel.busy:
-            return "A scan or another action is still running. Wait for it, or press Cancel."
+            return "Une analyse ou une autre action est en cours. Attendez ou cliquez sur Annuler."
         if panel.stats is None:
-            return "The library has not been scanned yet."
+            return "La bibliothèque n’a pas encore été analysée."
         if panel.stats.cancelled:
-            return "The last scan was cancelled and is incomplete. Rescan first."
+            return "La dernière analyse a été annulée et est incomplète. Relancez d’abord l’analyse."
         if not self.log_ok():
-            return "MSR cannot write its action log in the data folder, so it will not change any files."
+            return "MSR ne peut pas écrire son journal d’actions dans le dossier de données ; aucun fichier ne sera modifié."
         return None
 
     def _refuse(self, reason: str) -> None:
-        dialogs.show_info(self.panel.toplevel, "Library", reason)
+        dialogs.show_info(self.panel.toplevel, "Bibliothèque", reason)
 
     # ------------------------------------------------------------ entry points
     def recs_of_channels(self, channels) -> list:
@@ -117,24 +117,24 @@ class Manager:
             return
         names = ", ".join(f"{c.name} ({lib.platform_label(c.platform)})" for c in channels[:4])
         if len(channels) > 4:
-            names += f" and {len(channels) - 4} more"
+            names += f" et {len(channels) - 4} autres"
         recs = self.recs_of_channels(channels)
         if not recs:
-            return self._refuse("There is nothing in the library for the selected channel(s).")
-        intro = (f"Delete content of: {names}.\nChoose what to include and how to remove it. You always see "
-                 "exactly which files first, and a channel that is recording right now is skipped.")
-        plan = self.ask(self.panel.toplevel, "Delete channel content", intro, recs, filters=True, preselect=True,
+            return self._refuse("La bibliothèque ne contient aucun fichier pour le ou les créateurs sélectionnés.")
+        intro = (f"Supprimer le contenu de : {names}.\nChoisissez les éléments à inclure et la méthode de suppression. La liste exacte des fichiers sera toujours affichée "
+                 "au préalable ; les créateurs en cours de capture seront ignorés.")
+        plan = self.ask(self.panel.toplevel, "Supprimer le contenu des créateurs", intro, recs, filters=True, preselect=True,
                         methods=self.methods(), default_method=method or act.ACTION_PENDING)
         if plan is not None:
             self.run_plan(plan)
 
-    def delete_files(self, recs, method: str | None = None, title: str = "Delete files") -> None:
+    def delete_files(self, recs, method: str | None = None, title: str = "Supprimer des fichiers") -> None:
         reason = self.can_act()
         if reason:
             return self._refuse(reason)
         if not recs:
-            return self._refuse("Tick or select some files first.")
-        plan = self.ask(self.panel.toplevel, title, f"{len(recs):,} file(s) chosen in the Clean up list.", recs,
+            return self._refuse("Cochez ou sélectionnez d’abord des fichiers.")
+        plan = self.ask(self.panel.toplevel, title, f"{len(recs):,} fichier(s) sélectionné(s) dans la liste de nettoyage.", recs,
                         filters=False, preselect=True, methods=self.methods(),
                         default_method=method or act.ACTION_PENDING)
         if plan is not None:
@@ -145,13 +145,13 @@ class Manager:
         if reason:
             return self._refuse(reason)
         if not suggestion.count:
-            return self._refuse("Nothing found for this suggestion.")
+            return self._refuse("Aucun élément trouvé pour cette suggestion.")
         if suggestion.dirs:
-            plan = self.ask(self.panel.toplevel, suggestion.title, suggestion.detail + " Untick any to keep.",
+            plan = self.ask(self.panel.toplevel, suggestion.title, suggestion.detail + " Décochez les éléments à conserver.",
                             dirs=suggestion.dirs, preselect=False)
         else:
             plan = self.ask(self.panel.toplevel, suggestion.title,
-                            suggestion.detail + "\nNothing is ticked yet: tick what you want to remove.",
+                            suggestion.detail + "\nAucun élément n’est coché : cochez ceux que vous souhaitez supprimer.",
                             suggestion.recs, filters=False, preselect=False, methods=self.methods())
         if plan is not None:
             self.run_plan(plan)
@@ -162,10 +162,10 @@ class Manager:
             return self._refuse(reason)
         recs = [r for r in act.pending_recs(self.panel.stats) if r.kind in act.DELETABLE_KINDS]
         if not recs:
-            return self._refuse("PendingDeletion is empty.")
-        plan = self.ask(self.panel.toplevel, "Empty PendingDeletion now",
-                        "These files are waiting in PendingDeletion. Emptying it deletes them permanently now, "
-                        "instead of waiting for the automatic purge.", recs, filters=False, preselect=True,
+            return self._refuse("Le dossier des éléments récupérables est vide.")
+        plan = self.ask(self.panel.toplevel, "Vider les éléments récupérables maintenant",
+                        "Ces fichiers attendent dans les éléments récupérables. Les vider les supprimera définitivement dès maintenant, "
+                        "sans attendre la suppression automatique.", recs, filters=False, preselect=True,
                         methods=(act.ACTION_PERMANENT,), default_method=act.ACTION_PERMANENT)
         if plan is not None:
             self.run_plan(plan)
@@ -176,9 +176,9 @@ class Manager:
             return self._refuse(reason)
         recs = recs if recs is not None else [r for r in act.pending_recs(self.panel.stats) if r.kind in act.DELETABLE_KINDS]
         if not recs:
-            return self._refuse("There is nothing to restore.")
-        plan = self.ask(self.panel.toplevel, "Restore from PendingDeletion",
-                        "These files go back to where they came from. Nothing is overwritten.", recs,
+            return self._refuse("Aucun élément à restaurer.")
+        plan = self.ask(self.panel.toplevel, "Restaurer depuis les éléments récupérables",
+                        "Ces fichiers seront remis à leur emplacement d’origine. Aucun fichier ne sera écrasé.", recs,
                         filters=False, preselect=True, methods=(act.ACTION_RESTORE,), default_method=act.ACTION_RESTORE)
         if plan is not None:
             self.run_plan(plan)
@@ -194,7 +194,7 @@ class Manager:
         if not plan.ok:
             self.last_batch = None
             self.panel.show_undo(False)
-            return self._refuse("Those files are no longer in PendingDeletion (already purged or moved).")
+            return self._refuse("Ces fichiers ne se trouvent plus dans Éléments récupérables (ils ont déjà été supprimés ou déplacés).")
         self.run_plan(plan)
 
     # ------------------------------------------------------------ running
@@ -225,7 +225,7 @@ class Manager:
         if result.failed:
             lines = "\n".join(f"{os.path.basename(p)}: {why}" for p, why in result.failed[:6])
             more = f"\n... and {len(result.failed) - 6} more (see the action log)." if len(result.failed) > 6 else ""
-            dialogs.show_warning(panel.toplevel, "Library", f"{text}\n\n{lines}{more}")
+            dialogs.show_warning(panel.toplevel, "Bibliothèque", f"{text}\n\n{lines}{more}")
 
     # ------------------------------------------------------------ data
     def on_stats(self, stats: lib.LibraryStats) -> None:
@@ -258,15 +258,15 @@ class FilesTab:
         ttk.Separator(f).pack(fill="x", pady=(6, 6))
         top = ttk.Frame(f)
         top.pack(fill="x")
-        ttk.Label(top, text="Channel:").pack(side="left")
-        self.channel_box = ttk.Combobox(top, state="readonly", width=26, values=["All channels"])
+        ttk.Label(top, text="Créateur :").pack(side="left")
+        self.channel_box = ttk.Combobox(top, state="readonly", width=26, values=["Tous les créateurs"])
         self.channel_box.current(0)
         self.channel_box.pack(side="left", padx=(4, 10))
-        ttk.Label(top, text="Show:").pack(side="left")
+        ttk.Label(top, text="Afficher :").pack(side="left")
         self.show_box = ttk.Combobox(top, state="readonly", width=22, values=[c[0] for c in SHOW_CHOICES])
         self.show_box.current(0)
         self.show_box.pack(side="left", padx=(4, 10))
-        ttk.Label(top, text="Search:").pack(side="left")
+        ttk.Label(top, text="Rechercher :").pack(side="left")
         self.search_var = tk.StringVar()
         ttk.Entry(top, textvariable=self.search_var, width=18).pack(side="left", padx=(4, 10))
         self.month_btn = ttk.Button(top, text="", command=lambda: self.set_month(None))
@@ -276,16 +276,16 @@ class FilesTab:
 
         bar = ttk.Frame(f)
         bar.pack(fill="x", pady=(6, 4))
-        ttk.Button(bar, text="Tick all", command=self.check_all).pack(side="left")
-        ttk.Button(bar, text="Untick all", command=self.check_none).pack(side="left", padx=(6, 0))
-        ttk.Label(bar, text="  Tick older than").pack(side="left")
+        ttk.Button(bar, text="Tout cocher", command=self.check_all).pack(side="left")
+        ttk.Button(bar, text="Tout décocher", command=self.check_none).pack(side="left", padx=(6, 0))
+        ttk.Label(bar, text="  Cocher les fichiers de plus de").pack(side="left")
         self.days_var = tk.StringVar(value="90")
         ttk.Entry(bar, textvariable=self.days_var, width=5).pack(side="left", padx=4)
-        ttk.Label(bar, text="days").pack(side="left")
-        ttk.Button(bar, text="Tick", command=self.check_older).pack(side="left", padx=(4, 0))
-        self.delete_btn = ttk.Button(bar, text="Delete\u2026", command=lambda: self.delete())
+        ttk.Label(bar, text="jours").pack(side="left")
+        ttk.Button(bar, text="Cocher", command=self.check_older).pack(side="left", padx=(4, 0))
+        self.delete_btn = ttk.Button(bar, text="Supprimer\u2026", command=lambda: self.delete())
         self.delete_btn.pack(side="right")
-        self.count = ttk.Label(bar, text="Scan the library to list files.", style="Muted.TLabel")
+        self.count = ttk.Label(bar, text="Analysez la bibliothèque pour afficher les fichiers.", style="Muted.TLabel")
         self.count.pack(side="right", padx=(0, 10))
 
         box = ttk.Frame(f)
@@ -307,10 +307,10 @@ class FilesTab:
         bind_context_menu(self.tree, self._menu)
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._sync())
         self.menu = tk.Menu(self.tree, tearoff=0)
-        self.menu.add_command(label="Tick / untick selected", command=self.toggle_selected)
-        self.menu.add_command(label="Move to PendingDeletion\u2026", command=lambda: self.delete(act.ACTION_PENDING))
-        self.menu.add_command(label="Delete\u2026", command=lambda: self.delete())
-        self.menu.add_command(label="Delete permanently\u2026", command=lambda: self.delete(act.ACTION_PERMANENT))
+        self.menu.add_command(label="Cocher ou décocher la sélection", command=self.toggle_selected)
+        self.menu.add_command(label="Déplacer vers les éléments récupérables\u2026", command=lambda: self.delete(act.ACTION_PENDING))
+        self.menu.add_command(label="Supprimer\u2026", command=lambda: self.delete())
+        self.menu.add_command(label="Supprimer définitivement\u2026", command=lambda: self.delete(act.ACTION_PERMANENT))
 
     # -- data
     def set_stats(self, stats: lib.LibraryStats) -> None:
@@ -320,7 +320,7 @@ class FilesTab:
             labels[f"{ch.name}  ({lib.platform_label(ch.platform)})"] = (ch.platform.lower(), ch.name.lower())
         current = self.channel_box.get()
         self.channel_map = labels
-        self.channel_box.configure(values=["All channels"] + sorted(labels, key=str.lower))
+        self.channel_box.configure(values=["Tous les créateurs"] + sorted(labels, key=str.lower))
         if current not in labels:
             self.channel_box.current(0)
         self.checked &= {os.path.normcase(r.path) for r in self.recs}
@@ -440,7 +440,7 @@ class FilesTab:
         return ticked or self.selected_recs()
 
     def delete(self, method: str | None = None) -> None:
-        self.mgr.delete_files(self.target_recs(), method, "Delete files")
+        self.mgr.delete_files(self.target_recs(), method, "Supprimer des fichiers")
 
     def _double(self, event):
         if self.tree.identify_column(event.x) != "#1":
@@ -458,27 +458,27 @@ class PendingTab:
     def __init__(self, mgr: Manager, parent):
         self.mgr = mgr
         self.frame = f = ttk.Frame(parent, padding=10)
-        self.info = ttk.Label(f, text="Scan the library first.", justify="left")
+        self.info = ttk.Label(f, text="Analysez d’abord la bibliothèque.", justify="left")
         self.info.pack(anchor="w")
         ttk.Label(f, style="Muted.TLabel", wraplength=820, justify="left",
-                  text="PendingDeletion is MSR's own waiting room: files MSR moved aside, and files you moved "
-                       "here from the Library, wait here until the automatic purge deletes them when MSR starts. "
-                       "Empty it now to free the space immediately, or restore what you want back.").pack(anchor="w", pady=(4, 8))
+                  text="Les éléments récupérables sont l’espace d’attente de MSR : les fichiers mis de côté par MSR et ceux que vous y avez déplacés "
+                       "depuis la bibliothèque y restent jusqu’à leur suppression automatique au démarrage de MSR. "
+                       "Videz ce dossier pour libérer immédiatement de l’espace ou restaurez les éléments souhaités.").pack(anchor="w", pady=(4, 8))
         bar = ttk.Frame(f)
         bar.pack(fill="x")
-        self.empty_btn = ttk.Button(bar, text="Empty now\u2026", command=mgr.empty_pending)
-        self.restore_btn = ttk.Button(bar, text="Restore all\u2026", command=lambda: mgr.restore_pending())
-        self.restore_sel_btn = ttk.Button(bar, text="Restore selected\u2026", command=self.restore_selected)
-        self.open_btn = ttk.Button(bar, text="Open folder", command=self.open_folder)
-        self.log_btn = ttk.Button(bar, text="Open action log", command=self.open_log)
+        self.empty_btn = ttk.Button(bar, text="Vider maintenant\u2026", command=mgr.empty_pending)
+        self.restore_btn = ttk.Button(bar, text="Tout restaurer\u2026", command=lambda: mgr.restore_pending())
+        self.restore_sel_btn = ttk.Button(bar, text="Restaurer la sélection\u2026", command=self.restore_selected)
+        self.open_btn = ttk.Button(bar, text="Ouvrir le dossier", command=self.open_folder)
+        self.log_btn = ttk.Button(bar, text="Ouvrir le journal des actions", command=self.open_log)
         for b in (self.empty_btn, self.restore_btn, self.restore_sel_btn, self.open_btn, self.log_btn):
             b.pack(side="left", padx=(0, 6))
         box = ttk.Frame(f)
         box.pack(fill="both", expand=True, pady=(8, 0))
         self.tree = ttk.Treeview(box, columns=("channel", "files", "size", "age"), show="headings",
                                  selectmode="extended", height=10)
-        for cid, text, width, anchor in (("channel", "Channel", 260, "w"), ("files", "Files", 70, "e"),
-                                         ("size", "Size", 100, "e"), ("age", "Oldest there", 120, "w")):
+        for cid, text, width, anchor in (("channel", "Créateur", 260, "w"), ("files", "Fichiers", 70, "e"),
+                                         ("size", "Taille", 100, "e"), ("age", "Plus ancien", 120, "w")):
             self.tree.heading(cid, text=text)
             self.tree.column(cid, width=width, anchor=anchor, stretch=(cid == "channel"))
         scroll = ttk.Scrollbar(box, orient="vertical", command=self.tree.yview)
@@ -502,7 +502,7 @@ class PendingTab:
             oldest = min(max(r.mtime, r.ctime) for r in recs)
             self.tree.insert("", "end", iid=f"p{index}", values=(label, f"{len(recs):,}",
                                                                    lib.fmt_size(sum(r.size for r in recs)),
-                                                                   f"{(now - oldest) / 86400:.1f} days"))
+                                                                   f"{(now - oldest) / 86400:.1f} jours"))
         self._sync()
 
     def _sync(self) -> None:
@@ -523,14 +523,14 @@ class PendingTab:
         if top and os.path.isdir(top) and opener:
             opener(top)
         else:
-            dialogs.show_info(self.mgr.panel.toplevel, "PendingDeletion", "The PendingDeletion folder does not exist yet.")
+            dialogs.show_info(self.mgr.panel.toplevel, "Éléments récupérables", "Le dossier des éléments récupérables n’existe pas encore.")
 
     def open_log(self) -> None:
         path, opener = self.mgr.ctx.log_path, self.mgr.ctx.opener
         if path and os.path.isfile(path) and opener:
             opener(path)
         else:
-            dialogs.show_info(self.mgr.panel.toplevel, "Action log", "Nothing has been deleted or moved yet, so there is no log.")
+            dialogs.show_info(self.mgr.panel.toplevel, "Journal des actions", "Aucun élément n’a encore été supprimé ou déplacé ; le journal est vide.")
 
 
 # ====================================================================== Clean up tab
@@ -541,27 +541,27 @@ class CleanupTab:
         self.suggestions: dict[str, act.Suggestion] = {}
         self.stats: lib.LibraryStats | None = None
         ttk.Label(f, style="Muted.TLabel", wraplength=820, justify="left",
-                  text="Suggestions open a review with nothing ticked; below, tick files yourself. Every delete "
-                       "is previewed first and moves to PendingDeletion by default.").pack(anchor="w")
+                  text="Les suggestions ouvrent une vérification sans élément coché ; ci-dessous, cochez les fichiers vous-même. Chaque suppression "
+                       "est précédée d’un aperçu et déplace les fichiers vers les éléments récupérables par défaut.").pack(anchor="w")
         opts = ttk.Frame(f)
         opts.pack(fill="x", pady=(6, 4))
-        ttk.Label(opts, text="Old means older than").pack(side="left")
+        ttk.Label(opts, text="Ancien signifie plus vieux que").pack(side="left")
         self.days_var = tk.StringVar(value="90")
         ttk.Entry(opts, textvariable=self.days_var, width=5).pack(side="left", padx=4)
-        ttk.Label(opts, text="days").pack(side="left")
-        ttk.Button(opts, text="Update", command=lambda: self.update(self.stats)).pack(side="left", padx=(6, 18))
-        ttk.Label(opts, text="Free up").pack(side="left")
+        ttk.Label(opts, text="jours").pack(side="left")
+        ttk.Button(opts, text="Actualiser", command=lambda: self.update(self.stats)).pack(side="left", padx=(6, 18))
+        ttk.Label(opts, text="Libérer").pack(side="left")
         self.free_var = tk.StringVar(value="100")
         ttk.Entry(opts, textvariable=self.free_var, width=7).pack(side="left", padx=4)
-        ttk.Label(opts, text="GB").pack(side="left")
-        self.free_btn = ttk.Button(opts, text="Suggest oldest first\u2026", command=self.free_up)
+        ttk.Label(opts, text="Go").pack(side="left")
+        self.free_btn = ttk.Button(opts, text="Suggérer les plus anciens\u2026", command=self.free_up)
         self.free_btn.pack(side="left", padx=(6, 0))
-        self.review_btn = ttk.Button(opts, text="Review\u2026", command=self.review)
+        self.review_btn = ttk.Button(opts, text="Vérifier\u2026", command=self.review)
         self.review_btn.pack(side="right")
         box = ttk.Frame(f)
         box.pack(fill="x")
         self.tree = ttk.Treeview(box, columns=("what", "count", "size"), show="headings", selectmode="browse", height=5)
-        for cid, text, width, anchor in (("what", "Suggestion", 330, "w"), ("count", "Items", 80, "e"), ("size", "Size", 100, "e")):
+        for cid, text, width, anchor in (("what", "Suggestion", 330, "w"), ("count", "Éléments", 80, "e"), ("size", "Taille", 100, "e")):
             self.tree.heading(cid, text=text)
             self.tree.column(cid, width=width, anchor=anchor, stretch=(cid == "what"))
         scroll = ttk.Scrollbar(box, orient="vertical", command=self.tree.yview)

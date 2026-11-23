@@ -14,6 +14,8 @@ from msr import history, storage
 from msr.deps import HAS_CURL_CFFI, HAS_WEBSOCKET
 from msr.util import (
     PENDING_DELETION_FOLDER,
+    PROCESSED_FOLDER,
+    RECORDED_FOLDER,
     channel_key_to_dirs,
     find_cookies_file,
     human_size,
@@ -22,6 +24,7 @@ from msr.util import (
     kill_process_tree,
     layout_bases,
     matching_dirs,
+    matching_layout_dirs,
     recorded_scan_bases,
     reuse_dir,
     reuse_path,
@@ -470,13 +473,12 @@ def purge_old_pending_files(root_path, max_age_days, logger=None):
     if max_age_days <= 0:
         return 0
 
-    pending_base = reuse_dir(root_path, PENDING_DELETION_FOLDER)
-    if not os.path.isdir(pending_base):
-        # The spelled folder is missing. On Linux the tree may be `pendingdeletion`.
-        others = [p for p in matching_dirs(root_path, PENDING_DELETION_FOLDER) if os.path.isdir(p)]
-        if not others:
-            return 0
-        pending_base = others[0]
+    pending_bases = matching_layout_dirs(root_path, PENDING_DELETION_FOLDER)
+    if not pending_bases:
+        pending_bases = [reuse_dir(root_path, PENDING_DELETION_FOLDER)]
+    pending_bases = [base for base in pending_bases if os.path.isdir(base)]
+    if not pending_bases:
+        return 0
 
     if logger:
         logger.info(f"PendingDeletion purge: scanning for files older than {max_age_days} day(s)...")
@@ -486,30 +488,31 @@ def purge_old_pending_files(root_path, max_age_days, logger=None):
     skipped = 0
     empty_dirs = []
 
-    for dirpath, dirnames, filenames in os.walk(pending_base, topdown=False):
-        for filename in filenames:
-            filepath = os.path.join(dirpath, filename)
-            try:
-                stat = os.stat(filepath)
-                # Use the most recent of mtime and ctime.  On Windows, ctime is the
-                # file-creation time (reset when the file is moved), so it correctly
-                # reflects when the file landed in PendingDeletion rather than when
-                # the original recording started.
-                file_age_ts = max(stat.st_mtime, stat.st_ctime)
-                if file_age_ts < cutoff:
-                    os.remove(filepath)
-                    deleted += 1
+    for pending_base in pending_bases:
+        for dirpath, dirnames, filenames in os.walk(pending_base, topdown=False):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                try:
+                    stat = os.stat(filepath)
+                    # Use the most recent of mtime and ctime.  On Windows, ctime is the
+                    # file-creation time (reset when the file is moved), so it correctly
+                    # reflects when the file landed in PendingDeletion rather than when
+                    # the original recording started.
+                    file_age_ts = max(stat.st_mtime, stat.st_ctime)
+                    if file_age_ts < cutoff:
+                        os.remove(filepath)
+                        deleted += 1
+                        if logger:
+                            logger.info(f"Purged: {filepath}")
+                    else:
+                        skipped += 1
+                except Exception as e:
                     if logger:
-                        logger.info(f"Purged: {filepath}")
-                else:
-                    skipped += 1
-            except Exception as e:
-                if logger:
-                    logger.warning(f"Failed to purge {filepath}: {e}")
+                        logger.warning(f"Failed to purge {filepath}: {e}")
 
-        # Track empty directories for cleanup
-        if not filenames and not dirnames and dirpath != pending_base:
-            empty_dirs.append(dirpath)
+            # Track empty directories for cleanup
+            if not filenames and not dirnames and dirpath != pending_base:
+                empty_dirs.append(dirpath)
 
     # Remove empty directories
     for d in empty_dirs:
@@ -1204,12 +1207,12 @@ class StreamRecorder:
             os.makedirs(self.processed_base, exist_ok=True)
             os.makedirs(self.pending_base, exist_ok=True)
         except OSError as e:
-            logging.warning(f"Recordings folder {self.root_path} is not available right now "
-                            f"({storage.REASONS[storage.classify(e)]}); it is checked again every few seconds")
+            logging.warning(f"Le dossier de captures {self.root_path} est actuellement indisponible "
+                            f"({storage.REASONS[storage.classify(e)]}) ; nouvelle vérification dans quelques secondes")
 
         # Recordings folder watch (a drive that is unplugged while we run).
         self.fallback_root = storage.fallback_root(config.get('Paths', 'fallback_dir', fallback=''), self.root_path)
-        self.fallback_recorded_base = (reuse_dir(self.fallback_root, "Recorded")
+        self.fallback_recorded_base = (reuse_dir(self.fallback_root, RECORDED_FOLDER)
                                        if self.fallback_root else None)
 
         self.manager = mp.Manager()
@@ -1801,16 +1804,16 @@ class StreamRecorder:
             state = "down"
         if state != self._storage_state:
             if state == "ok":
-                logging.info(f"Recordings folder {self.root_path} is available again")
+                logging.info(f"Le dossier de captures {self.root_path} est de nouveau disponible")
                 self._storage_notice = ""
                 self._start_fallback_return()
             elif state == "fallback":
-                self._storage_notice = (f"Recordings folder not available ({choice.reason}). "
-                                        f"Recording to {choice.path} until it returns.")
+                self._storage_notice = (f"Dossier de captures indisponible ({choice.reason}). "
+                                        f"Capture en cours dans {choice.path} jusqu’à son retour.")
                 logging.warning(self._storage_notice)
             else:
-                self._storage_notice = (f"Recordings folder not available ({choice.reason}). "
-                                        "Recording is paused until it returns.")
+                self._storage_notice = (f"Dossier de captures indisponible ({choice.reason}). "
+                                        "La capture est en pause jusqu’à son retour.")
                 logging.warning(f"{self._storage_notice} ({self.root_path})")
             self._storage_state = state
         elif state == "ok" and now >= self._fallback_next_scan:
@@ -2141,7 +2144,7 @@ class StreamRecorder:
                 return empty
         self._startup_cleanup_cancel.clear()
         seen_processed = set()
-        for processed in [self.processed_base, *matching_dirs(self.root_path, "Processed")]:
+        for processed in [self.processed_base, *matching_layout_dirs(self.root_path, PROCESSED_FOLDER)]:
             if not processed or not os.path.isdir(processed):
                 continue
             key = os.path.normcase(os.path.abspath(processed))

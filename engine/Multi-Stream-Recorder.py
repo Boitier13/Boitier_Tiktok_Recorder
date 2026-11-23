@@ -74,6 +74,7 @@ if __name__ != "__mp_main__":
             check_for_updates,
             coerce_channel_records,
             kill_orphan_recording_processes,
+            migrate_legacy_layout_folders,
             redact_for_log,
             setup_logging,
             try_acquire_single_instance,
@@ -253,8 +254,12 @@ examples:
         return
 
     config = Config(os.path.abspath(args.config))
+    streams_dir = config.get('Paths', 'streams_dir')
+    migrate_legacy_layout_folders(
+        streams_dir, os.path.join(os.path.dirname(os.path.abspath(config.config_file)), "library_moves.json")
+    )
 
-    setup_logging(config.get('Paths', 'streams_dir'), config)
+    setup_logging(streams_dir, config)
 
     _deps.configure_ffmpeg(config.get('Advanced', 'ffmpeg_path', fallback='ffmpeg'))
 

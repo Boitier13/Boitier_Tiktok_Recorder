@@ -17,6 +17,7 @@ import time
 from dataclasses import dataclass
 
 from msr.nowindow import no_window_kwargs
+from msr.util import PENDING_DELETION_FOLDER, PROCESSED_FOLDER, RECORDED_FOLDER
 
 MEDIA_EXTS = (".ts", ".mp4", ".mkv", ".mov", ".m4v", ".flv", ".webm")
 PTS_WRAP = 1 << 33
@@ -493,8 +494,14 @@ def clips_folder_for(src: str, clips_base: str) -> str:
     """Clips/<platform>/<channel> when src sits in Recorded|Processed/<platform>/<channel>/,
     else Clips/ itself."""
     parts = os.path.normpath(os.path.abspath(src)).split(os.sep)
+    from msr.util import layout_folder_names
+    layout_markers = {
+        folder.lower()
+        for canonical in (RECORDED_FOLDER, PROCESSED_FOLDER, PENDING_DELETION_FOLDER)
+        for folder in layout_folder_names(canonical)
+    }
     for i in range(len(parts) - 3, -1, -1):
-        if parts[i].lower() in ("recorded", "processed", "pendingdeletion"):
+        if parts[i].lower() in layout_markers:
             rest = parts[i + 1:-1]
             if rest:
                 from msr.util import reuse_path
@@ -620,8 +627,10 @@ def finished_successor(src: str) -> str | None:
     the .ts moved away; the editor follows it there (same timeline)."""
     parts = os.path.normpath(src).split(os.sep)
     for i in range(len(parts) - 1, -1, -1):
-        if parts[i].lower() == "recorded":
-            parts[i] = "Processed" if parts[i] == "Recorded" else "processed"
+        if parts[i].lower() in {"recorded", RECORDED_FOLDER.lower()}:
+            parts[i] = (
+                "Processed" if parts[i].lower() == "recorded" else PROCESSED_FOLDER
+            )
             cand = os.sep.join(parts)
             cand = os.path.splitext(cand)[0] + ".mp4"
             return cand if os.path.isfile(cand) else None

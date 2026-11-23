@@ -37,11 +37,11 @@ _OFFLINE_ERRNOS = {getattr(errno, name) for name in ("EIO", "ENODEV", "ENXIO", "
                    if hasattr(errno, name)}
 
 REASONS = {
-    "missing": "the drive or share is not available",
-    "offline": "the drive stopped responding (unplugged or disconnected?)",
-    "denied": "access is denied (read-only or no permission)",
-    "full": "the disk is full",
-    "error": "the folder cannot be used",
+    "missing": "le disque ou le partage n’est pas disponible",
+    "offline": "le disque ne répond plus (débranché ou déconnecté ?)",
+    "denied": "accès refusé (lecture seule ou autorisations insuffisantes)",
+    "full": "le disque est plein",
+    "error": "le dossier ne peut pas être utilisé",
 }
 UNAVAILABLE_KINDS = ("missing", "offline")
 
@@ -153,19 +153,19 @@ def choose_root(primary, fallback, min_free_gb, probe=None, free=None):
     if first.ok:
         space = free(primary)
         if space is not None and space < min_free_gb:
-            return RootChoice(primary, False, low_space=True, free_gb=space, reason="low disk space")
+            return RootChoice(primary, False, low_space=True, free_gb=space, reason="espace disque insuffisant")
         return RootChoice(primary, True, free_gb=space)
     reason = f"{first.reason}"
     if not fallback or _inside(fallback, primary):
         return RootChoice(None, False, reason=reason)
     second = probe(fallback)
     if not second.ok:
-        return RootChoice(None, False, reason=f"{reason}; the fallback folder is not usable either "
+        return RootChoice(None, False, reason=f"{reason} ; le dossier de secours n’est pas utilisable non plus "
                                                 f"({second.reason})")
     space = free(fallback)
     if space is not None and space < min_free_gb:
-        return RootChoice(None, False, free_gb=space, reason=f"{reason}; the fallback folder has only "
-                                                              f"{space:.1f} GB free")
+        return RootChoice(None, False, free_gb=space, reason=f"{reason} ; le dossier de secours ne dispose que de "
+                                                              f"{space:.1f} Go libres")
     return RootChoice(fallback, True, on_fallback=True, free_gb=space, reason=reason)
 
 

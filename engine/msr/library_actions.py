@@ -44,17 +44,17 @@ ACTION_PERMANENT = "permanent"
 ACTION_RESTORE = "restore"     # PendingDeletion -> where it came from
 ACTION_RMDIR = "rmdir"         # remove empty folders
 ACTION_LABELS = {
-    ACTION_PENDING: "Move to PendingDeletion",
-    ACTION_TRASH: "Move to the Recycle Bin",
-    ACTION_PERMANENT: "Delete permanently",
-    ACTION_RESTORE: "Restore from PendingDeletion",
-    ACTION_RMDIR: "Remove empty folders",
+    ACTION_PENDING: "Déplacer vers les éléments récupérables",
+    ACTION_TRASH: "Déplacer vers la Corbeille",
+    ACTION_PERMANENT: "Supprimer définitivement",
+    ACTION_RESTORE: "Restaurer depuis les éléments récupérables",
+    ACTION_RMDIR: "Supprimer les dossiers vides",
 }
 
 # What the clean-up tools may touch. Anything else in a channel folder is left alone and listed.
 DELETABLE_KINDS = frozenset({"recording", "raw", "partial", "clip", "screenshot", "sidecar", "media"})
-KIND_LABELS = {"recording": "Recording", "raw": "Raw .ts", "partial": "Partial", "clip": "Clip",
-               "screenshot": "Screenshot", "sidecar": "Info file", "media": "In PendingDeletion", "other": "Other"}
+KIND_LABELS = {"recording": "Vidéo finalisée", "raw": "Fichier brut .ts", "partial": "Fichier partiel", "clip": "Clip",
+               "screenshot": "Capture d’écran", "sidecar": "Fichier d’informations", "media": "Dans les éléments récupérables", "other": "Autre"}
 
 
 # ------------------------------------------------------------------ paths
@@ -226,91 +226,91 @@ class Guard:
         for part in rel[:-1] if not last_is_dir else rel:
             current = os.path.join(current, part)
             if is_link_path(current):
-                return "A folder on the way is a link or junction, so it may lead somewhere else."
+                return "Un dossier du chemin est un lien ou une jonction et peut mener ailleurs."
         real, real_top = os.path.realpath(path), os.path.realpath(top)
         if not inside(real, real_top):
-            return "It resolves to a place outside the library folders."
+            return "Il pointe vers un emplacement extérieur aux dossiers de la bibliothèque."
         # MSR's own files (config, cookies, logs) are protected by their file types. This rule only
         # matters when the data folder sits INSIDE a library folder (a library folder inside the
         # data folder is a normal portable setup and stays usable).
         if self.data_dir and inside(self.data_dir, top) and (inside(path, self.data_dir) or inside(real, self.data_dir)):
-            return "It is inside MSR's data folder."
+            return "Il se trouve dans le dossier de données de MSR."
         return None
 
     def check(self, path: str, size: int | None = None, mtime: float | None = None,
               restore: bool = False) -> str | None:
         located = self._location(path)
         if located is None:
-            return "It is not inside the Processed, Recorded, PendingDeletion or Clips folders."
+            return "Il ne se trouve pas dans les dossiers Vidéos finalisées, Captures brutes, Éléments récupérables ou Clips."
         category, top, rel = located
         if len(rel) < 2:
-            return "It sits directly in a top folder, not in a channel folder."
+            return "Il se trouve directement dans un dossier racine, et non dans un dossier de créateur."
         problem = self._problem_in_path(path, top, rel, False)
         if problem:
             return problem
         try:
             st = os.lstat(path)
         except OSError as exc:
-            return f"It cannot be read ({exc.strerror or exc})."
+            return f"Impossible de le lire ({exc.strerror or exc})."
         if stat.S_ISLNK(st.st_mode) or getattr(st, "st_file_attributes", 0) & REPARSE_POINT:
-            return "It is a link, not a file."
+            return "C’est un lien, pas un fichier."
         if not stat.S_ISREG(st.st_mode):
-            return "It is not a regular file."
+            return "Ce n’est pas un fichier ordinaire."
         kind = lib.classify(rel[-1], category)
         if kind not in DELETABLE_KINDS:
-            return "This type of file is not a recording, clip or screenshot, so it is left alone."
+            return "Ce type de fichier n’est ni une vidéo, ni un clip, ni une capture d’écran ; il est donc laissé intact."
         if size is not None and st.st_size != size:
-            return "It changed size since the preview."
+            return "Sa taille a changé depuis l’aperçu."
         if mtime is not None and int(st.st_mtime) != int(mtime):
-            return "It was modified since the preview."
+            return "Il a été modifié depuis l’aperçu."
         if _norm(path) in self._busy_files:
-            return "A recorder is writing to it right now."
+            return "Un processus de capture est en train d’y écrire."
         if self.channel_busy(rel[0], "/".join(rel[1:-1])):
-            return "This channel is recording right now. Stop it first."
+            return "Ce créateur est en cours de capture. Arrêtez d’abord la capture."
         if not restore and category != "pending" and self.clock() - st.st_mtime < self.recent_seconds:
-            return f"It was modified in the last {self.recent_seconds // 60} minutes (it may be in use)."
+            return f"Il a été modifié au cours des {self.recent_seconds // 60} dernières minutes (il est peut-être utilisé)."
         return None
 
     def check_dir(self, path: str) -> str | None:
         located = self._location(path)
         if located is None:
-            return "It is not inside the library folders."
+            return "Il ne se trouve pas dans les dossiers de la bibliothèque."
         category, top, rel = located
         problem = self._problem_in_path(path, top, rel, True)
         if problem:
             return problem
         if is_link_path(path) or not os.path.isdir(path):
-            return "It is not a plain folder."
+            return "Ce n’est pas un dossier ordinaire."
         try:
             if os.listdir(path):
-                return "It is not empty."
+                return "Le dossier n’est pas vide."
         except OSError as exc:
-            return f"It cannot be read ({exc.strerror or exc})."
+            return f"Impossible de le lire ({exc.strerror or exc})."
         if len(rel) >= 2 and self.channel_busy(rel[0], "/".join(rel[1:])):
-            return "This channel is recording right now."
+            return "Ce créateur est en cours de capture."
         if len(rel) == 1 and any(c[0] == rel[0].lower() for c in self._busy_channels):
-            return "A channel of this site is recording right now."
+            return "Un créateur de cette plateforme est en cours de capture."
         return None
 
     def check_destination(self, path: str) -> str | None:
         """Where a restored file would go: inside a library folder, no links on the way, free."""
         located = self._location(path)
         if located is None:
-            return "The original place is outside the library folders."
+            return "L’emplacement d’origine est extérieur aux dossiers de la bibliothèque."
         category, top, rel = located
         if category == "pending":
-            return "The original place is the PendingDeletion folder itself."
+            return "L’emplacement d’origine correspond au dossier Éléments récupérables lui-même."
         if len(rel) < 2:
-            return "The original place is not a channel folder."
+            return "L’emplacement d’origine n’est pas un dossier de créateur."
         current = top
         for part in rel[:-1]:
             current = os.path.join(current, part)
             if os.path.lexists(current) and is_link_path(current):
-                return "A folder on the way is a link or junction."
+                return "Un dossier du chemin est un lien ou une jonction."
         if self.channel_busy(rel[0], "/".join(rel[1:-1])):
-            return "This channel is recording right now."
+            return "Ce créateur est en cours de capture."
         if os.path.lexists(path):
-            return "Something with that name is already there."
+            return "Un élément portant ce nom existe déjà à cet emplacement."
         return None
 
 
@@ -384,15 +384,15 @@ class Plan:
 
     def summary_lines(self) -> list[str]:
         if self.action == ACTION_RMDIR:
-            return [f"{self.folders} empty folder(s) would be removed."]
+            return [f"{self.folders} dossier(s) vide(s) à supprimer."]
         first, last = self.span
-        lines = [f"{self.files:,} file(s), {lib.fmt_size(self.bytes)}, from {len(self.channels)} channel(s): "
-                 + ", ".join(self.channels[:5]) + (f" and {len(self.channels) - 5} more" if len(self.channels) > 5 else "")]
+        lines = [f"{self.files:,} fichier(s), {lib.fmt_size(self.bytes)}, provenant de {len(self.channels)} créateur(s) : "
+                 + ", ".join(self.channels[:5]) + (f" et {len(self.channels) - 5} autres" if len(self.channels) > 5 else "")]
         if first is not None:
-            lines.append(f"Recorded between {lib._day(first)} and {lib._day(last)}.")
+            lines.append(f"Enregistré entre le {lib._day(first)} et le {lib._day(last)}.")
         kinds = ", ".join(f"{n:,} {KIND_LABELS.get(k, k).lower()}" for k, (n, _b) in sorted(self.by_kind().items()))
         if kinds:
-            lines.append("Of which: " + kinds + ".")
+            lines.append("Détail : " + kinds + ".")
         return lines
 
 
@@ -416,16 +416,16 @@ def build_plan(guard: Guard, recs: Iterable, action: str, *, include_sidecars: b
         seen.add(key)
         reason = None
         if action == ACTION_RESTORE and rec.category != "pending":
-            reason = "It is not in PendingDeletion."
+            reason = "Il ne se trouve pas dans les éléments récupérables."
         elif action in (ACTION_PENDING,) and rec.category == "pending":
-            reason = "It is already in PendingDeletion."
+            reason = "Il se trouve déjà dans les éléments récupérables."
         elif rec.kind not in DELETABLE_KINDS:
-            reason = "This type of file is left alone."
+            reason = "Ce type de fichier est laissé intact."
         if reason is None:
             reason = guard.check(rec.path, rec.size, rec.mtime, restore=(action == ACTION_RESTORE))
         if reason:
             plan.skipped.append((rec.path, reason))
-            if "recording right now" in reason or "writing" in reason:
+            if "en cours de capture" in reason or "en train d’y écrire" in reason:
                 plan.blocked[f"{rec.platform}/{rec.channel}"] = reason
             continue
         located = guard._location(rec.path)
@@ -606,7 +606,7 @@ def pending_mover(guard: Guard, clock: Callable[[], float] = time.time) -> Calla
     def move(item: PlanItem) -> dict:
         pending_top = guard.library.pending_top
         if not pending_top:
-            raise OSError("There is no recordings folder to hold PendingDeletion.")
+            raise OSError("Aucun dossier de captures ne peut accueillir les éléments récupérables.")
         folder = os.path.join(pending_top, *item.rel[:-1])
         if not inside(folder, pending_top) and _norm(folder) != _norm(pending_top):
             raise OSError("The PendingDeletion path would leave its folder.")
@@ -669,14 +669,14 @@ def recycle_bin_problem(sample_path: str, total_bytes: int) -> str | None:
     Windows silently deletes for good what does not fit in the bin, so unless Windows can tell
     us the bin's limit for this drive and everything fits, the option is not offered."""
     if os.name != "nt":
-        return "The Recycle Bin is only used on Windows."
+        return "La Corbeille n’est utilisée que sous Windows."
     try:
         import ctypes
         import winreg
         root = os.path.splitdrive(os.path.abspath(sample_path))[0] + "\\"
         buf = ctypes.create_unicode_buffer(64)
         if not ctypes.windll.kernel32.GetVolumeNameForVolumeMountPointW(root, buf, 64):
-            return "Windows would not tell which volume this is, so the Recycle Bin limit is unknown."
+            return "Windows n’a pas pu identifier le volume ; la capacité de la Corbeille est inconnue."
         guid = buf.value.rstrip("\\").split("\\")[-1]  # Volume{...}
         guid = guid[len("Volume"):] if guid.lower().startswith("volume") else guid
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
@@ -688,15 +688,15 @@ def recycle_bin_problem(sample_path: str, total_bytes: int) -> str | None:
                     return None
             nuke, cap = value("NukeOnDelete"), value("MaxCapacity")
     except OSError:
-        return "The Recycle Bin limit for this drive is not set explicitly, so it cannot be checked."
+        return "La capacité de la Corbeille pour ce disque n’est pas définie explicitement et ne peut pas être vérifiée."
     except Exception:
-        return "The Recycle Bin limit could not be read."
+        return "Impossible de lire la capacité de la Corbeille."
     if nuke:
-        return "The Recycle Bin is set to delete files immediately on this drive."
+        return "La Corbeille est configurée pour supprimer immédiatement les fichiers de ce disque."
     if not cap:
-        return "The Recycle Bin limit for this drive is unknown."
+        return "La capacité de la Corbeille pour ce disque est inconnue."
     if total_bytes > int(cap) * 1024 * 1024:
-        return f"This is more than the Recycle Bin's limit for this drive ({int(cap):,} MB): Windows would delete it for good."
+        return f"La taille dépasse la capacité de la Corbeille pour ce disque ({int(cap):,} Mo) : Windows supprimerait définitivement les fichiers."
     return None
 
 
@@ -704,7 +704,7 @@ def recycle_deleter() -> Callable[[PlanItem], dict]:
     """Windows Recycle Bin through SHFileOperationW with FOF_ALLOWUNDO (no extra dependency)."""
     def trash(item: PlanItem) -> dict:
         if os.name != "nt":
-            raise OSError("The Recycle Bin is only available on Windows.")
+            raise OSError("La Corbeille n’est disponible que sous Windows.")
         import ctypes
         from ctypes import wintypes
 
@@ -742,15 +742,15 @@ class Result:
 
     @property
     def summary(self) -> str:
-        what = {ACTION_PENDING: "Moved to PendingDeletion", ACTION_TRASH: "Moved to the Recycle Bin",
-                ACTION_PERMANENT: "Deleted permanently", ACTION_RESTORE: "Restored",
-                ACTION_RMDIR: "Removed"}.get(self.action, self.action)
-        unit = "folder(s)" if self.action == ACTION_RMDIR else "file(s)"
+        what = {ACTION_PENDING: "Déplacés vers les éléments récupérables", ACTION_TRASH: "Déplacés vers la Corbeille",
+                ACTION_PERMANENT: "Supprimés définitivement", ACTION_RESTORE: "Restaurés",
+                ACTION_RMDIR: "Supprimés"}.get(self.action, self.action)
+        unit = "dossier(s)" if self.action == ACTION_RMDIR else "fichier(s)"
         text = f"{what}: {self.done:,} {unit}" + ("" if self.action == ACTION_RMDIR else f" ({lib.fmt_size(self.bytes)})")
         if self.cancelled:
-            text += f". Cancelled after {self.done:,} of {self.total:,}"
+            text += f". Annulation après {self.done:,} sur {self.total:,}"
         if self.failed:
-            text += f". {len(self.failed)} could not be handled (see the log)"
+            text += f". {len(self.failed)} élément(s) n’ont pas pu être traité(s) (voir le journal)"
         return text + "."
 
 
@@ -911,20 +911,20 @@ class PendingInfo:
     def lines(self, now: float | None = None) -> list[str]:
         now = time.time() if now is None else now
         if not self.files:
-            return ["PendingDeletion is empty."]
-        out = [f"{self.files:,} file(s), {lib.fmt_size(self.bytes)} waiting."]
+            return ["Le dossier des éléments récupérables est vide."]
+        out = [f"{self.files:,} fichier(s), {lib.fmt_size(self.bytes)} en attente."]
         if self.oldest:
-            out.append(f"Oldest has been there {max(0, (now - self.oldest) / 86400):.1f} day(s).")
+            out.append(f"Le plus ancien y est depuis {max(0, (now - self.oldest) / 86400):.1f} jour(s).")
         if self.purge_days <= 0 or not self.purge_on_startup:
-            out.append("Automatic purge is off (Cleanup settings): nothing leaves this folder by itself.")
+            out.append("La suppression automatique est désactivée (paramètres de nettoyage) : aucun fichier ne sera supprimé automatiquement.")
         else:
-            out.append(f"Automatic purge: files older than {self.purge_days} day(s) are deleted when MSR starts "
-                       "(not while it runs).")
+            out.append(f"Suppression automatique : les fichiers de plus de {self.purge_days} jour(s) sont supprimés au démarrage de MSR "
+                       "(pas pendant son exécution).")
             if self.due_files:
-                out.append(f"{self.due_files:,} file(s) ({lib.fmt_size(self.due_bytes)}) are already old enough and "
-                           "go at the next start.")
+                out.append(f"{self.due_files:,} fichier(s) ({lib.fmt_size(self.due_bytes)}) ont déjà atteint cette durée et "
+                           "seront supprimés au prochain démarrage.")
             if self.next_due:
-                out.append("Next file becomes old enough on " + lib._day(self.next_due) + ".")
+                out.append("Le prochain fichier atteindra cette durée le " + lib._day(self.next_due) + ".")
         return out
 
 
@@ -980,9 +980,9 @@ def free_up_suggestion(stats: lib.LibraryStats, target_bytes: int) -> Suggestion
         picked.append(rec)
         total += rec.size
     reached = total >= target_bytes
-    detail = (f"Oldest recordings first: {len(picked):,} file(s), {lib.fmt_size(total)}"
-              + ("" if reached else f" (everything there is; {lib.fmt_size(target_bytes - total)} short)"))
-    return Suggestion("free", f"Free up {lib.fmt_size(target_bytes)}", detail, picked)
+    detail = (f"Vidéos les plus anciennes en premier : {len(picked):,} fichier(s), {lib.fmt_size(total)}"
+              + ("" if reached else f" (tout le contenu ; il manque {lib.fmt_size(target_bytes - total)})"))
+    return Suggestion("free", f"Libérer {lib.fmt_size(target_bytes)}", detail, picked)
 
 
 def build_suggestions(stats: lib.LibraryStats, *, older_days: int = 90, now: float | None = None) -> list[Suggestion]:
@@ -990,23 +990,23 @@ def build_suggestions(stats: lib.LibraryStats, *, older_days: int = 90, now: flo
     done = _finished(stats)
     out: list[Suggestion] = []
     largest = sorted(done, key=lambda r: -r.size)[:10]
-    out.append(Suggestion("largest", "Largest 10 recordings", "The biggest single files.", largest))
+    out.append(Suggestion("largest", "10 vidéos les plus volumineuses", "Les fichiers individuels les plus volumineux.", largest))
     oldest = sorted(done, key=lambda r: (r.when, r.path))[:25]
-    out.append(Suggestion("oldest", "Oldest 25 recordings", "The earliest recordings in the library.", oldest))
+    out.append(Suggestion("oldest", "25 vidéos les plus anciennes", "Les captures les plus anciennes de la bibliothèque.", oldest))
     old = [r for r in done if now - r.when >= older_days * 86400]
-    out.append(Suggestion("older", f"Recordings older than {older_days} days", "Finished recordings by their date.", old))
+    out.append(Suggestion("older", f"Vidéos de plus de {older_days} jours", "Vidéos finalisées classées par date.", old))
     strangers = []
     for rec in done:
         ch = stats.channels.get((rec.platform, rec.channel.lower()))
         if ch is not None and ch.in_roster is False:
             strangers.append(rec)
-    out.append(Suggestion("roster", "Channels not in my roster",
-                          "Recordings of channels that are no longer in channels.json.", strangers))
+    out.append(Suggestion("roster", "Créateurs absents de ma liste",
+                          "Vidéos de créateurs qui ne figurent plus dans channels.json.", strangers))
     leftovers = [r for r in stats.files
                  if (r.kind == "partial" and now - r.mtime > 86400)
                  or (r.kind == "raw" and r.category == "recorded" and now - r.mtime > 2 * 86400)]
-    out.append(Suggestion("leftover", "Leftover raw / partial files",
-                          "Raw .ts files not touched for 2 days and partial downloads older than a day.", leftovers))
+    out.append(Suggestion("leftover", "Fichiers bruts ou partiels restants",
+                          "Fichiers bruts .ts inutilisés depuis 2 jours et téléchargements partiels de plus d’un jour.", leftovers))
     groups: dict[tuple, list] = {}
     for rec in stats.files:
         if rec.kind in ("recording", "clip"):
@@ -1016,11 +1016,11 @@ def build_suggestions(stats: lib.LibraryStats, *, older_days: int = 90, now: flo
         if len(copies) > 1:
             copies.sort(key=lambda r: (r.category != "processed", r.mtime, r.path))
             extras.extend(copies[1:])
-    out.append(Suggestion("duplicates", "Duplicates (same name and size)",
-                          "Extra copies; the first one found (Processed first) is kept.", extras))
+    out.append(Suggestion("duplicates", "Doublons (même nom et même taille)",
+                          "Copies supplémentaires ; la première trouvée (vidéo finalisée en priorité) est conservée.", extras))
     media = {os.path.splitext(r.path)[0].lower() for r in stats.files if r.kind in ("recording", "raw", "clip", "media")}
     orphans = [r for r in stats.files if r.kind == "sidecar"
                and r.path[:-len(lib.SIDECAR_SUFFIX)].lower() not in media]
-    out.append(Suggestion("orphans", "Info files without a video", "A .meta.json whose video is gone.", orphans))
-    out.append(Suggestion("empty", "Empty folders", "Folders with nothing in them.", [], list(stats.empty_dirs)))
+    out.append(Suggestion("orphans", "Fichiers d’informations sans vidéo", "Fichier .meta.json dont la vidéo associée est absente.", orphans))
+    out.append(Suggestion("empty", "Dossiers vides", "Dossiers ne contenant aucun fichier.", [], list(stats.empty_dirs)))
     return out

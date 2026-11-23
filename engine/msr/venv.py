@@ -264,18 +264,18 @@ class PipProgress:
         if m:
             self.found += 1
             if self.top_level and self.found <= self.top_level:
-                return f"Looking up package {self.found} of {self.top_level}: {m.group(1)}"
-            return f"Looking up {m.group(1)} (dependency, {self.found} packages so far)"
+                return f"Recherche du composant {self.found} sur {self.top_level} : {m.group(1)}"
+            return f"Recherche de {m.group(1)} (dépendance, {self.found} composants trouvés)"
         m = _DOWNLOAD.match(text)
         if m:
             name, ver, size = m.group(1).replace("_", "-"), m.group(2), m.group(3)
-            return f"Downloading {name}" + (f" {ver}" if ver else "") + (f" ({size})" if size else "")
+            return f"Téléchargement de {name}" + (f" {ver}" if ver else "") + (f" ({size})" if size else "")
         m = _CACHED.match(text)
         if m:
-            return f"Using the cached download of {m.group(1).replace('_', '-')}"
+            return f"Utilisation du téléchargement en cache de {m.group(1).replace('_', '-')}"
         m = _BUILDING.match(text)
         if m:
-            return f"Building {m.group(1)} (can take a moment)"
+            return f"Compilation de {m.group(1)} (cela peut prendre un instant)"
         m = _INSTALLING.match(text)
         if m:
             names = [n.strip() for n in m.group(1).split(",") if n.strip()]
@@ -326,16 +326,16 @@ def _stream(cmd, timeout, on_line, popen=subprocess.Popen):
 def _explain(text: str, step: str) -> str:
     low = (text or "").lower()
     if "no module named venv" in low or "ensurepip" in low:
-        return ("This Python cannot make virtual environments (the venv/ensurepip module is missing; "
-                "on Debian/Ubuntu: sudo apt install python3-venv).")
+        return ("Cette version de Python ne peut pas créer d’environnements virtuels (module venv/ensurepip absent ; "
+                "sur Debian/Ubuntu : sudo apt install python3-venv).")
     if any(s in low for s in ("permission denied", "access is denied", "winerror 5", "winerror 32")):
-        return "No permission to write the .venv folder inside the MSR folder."
+        return "Autorisation insuffisante pour écrire le dossier .venv dans le dossier de MSR."
     if any(s in low for s in ("could not fetch", "newconnectionerror", "getaddrinfo failed", "read timed out",
                               "failed to establish a new connection", "no matching distribution",
                               "temporary failure in name resolution")):
-        return "Could not download packages (offline, or PyPI not reachable)."
+        return "Impossible de télécharger les composants (connexion hors ligne ou PyPI inaccessible)."
     lines = [ln for ln in (text or "").strip().splitlines() if ln.strip()]
-    return f"{step} failed: " + (lines[-1][:300] if lines else "unknown error")
+    return f"Échec de l’étape {step} : " + (lines[-1][:300] if lines else "unknown error")
 
 
 def ensure(root: str, progress=None, run=subprocess.run, python: str | None = None, log=None,
@@ -399,20 +399,20 @@ def ensure(root: str, progress=None, run=subprocess.run, python: str | None = No
             for line in ((r.stdout or "") + (r.stderr or "")).splitlines():
                 out(line)
         if r.returncode != 0:
-            return False, _explain((r.stderr or "") + (r.stdout or ""), "Installing packages")
+            return False, _explain((r.stderr or "") + (r.stdout or ""), "Installation des composants")
         with open(os.path.join(d, MARKER), "w", encoding="utf-8") as fh:
             json.dump({"complete": True, "root": os.path.abspath(root), "python": python or base_python(),
                        "version": "%d.%d" % sys.version_info[:2], "requirements": requirements_hash(root),
                        "created": time.strftime("%Y-%m-%d %H:%M:%S")}, fh, indent=1)
         say("Done. Starting Multi-Stream Recorder\u2026")
-        out("Setup finished.")
+        out("Configuration terminée.")
         return True, ""
     except subprocess.TimeoutExpired:
-        return False, "Setting up .venv took too long and was stopped."
+        return False, "La configuration de .venv a pris trop de temps et a été interrompue."
     except OSError as e:
-        return False, _explain(str(e), "Setting up .venv")
+        return False, _explain(str(e), "Configuration de .venv")
     except Exception as e:  # the launcher must always get an answer and start MSR
-        return False, f"Setting up .venv failed: {type(e).__name__}: {e}"
+        return False, f"Échec de la configuration de .venv : {type(e).__name__} : {e}"
     finally:
         if logfile is not None:
             try:
@@ -434,9 +434,9 @@ def write_error(root: str, message: str) -> None:
 
 
 def notice_text(message: str) -> str:
-    return (f"MSR could not set up its own Python environment (.venv): {message} "
-            "It runs on your normal Python for now and tries again next launch. "
-            "Package updates from the Updates dialog are off until .venv works.")
+    return (f"MSR n’a pas pu configurer son environnement Python (.venv) : {message} "
+            "L’application utilise temporairement votre installation Python habituelle et réessaiera au prochain démarrage. "
+            "La mise à jour des composants depuis la fenêtre dédiée restera indisponible tant que .venv ne fonctionne pas.")
 
 
 def take_launch_notice() -> str:
@@ -495,11 +495,11 @@ class SetupWindow:
             appicon.apply(root)
         except Exception:
             pass
-        root.title("Multi-Stream Recorder \u2014 first-time setup")
+        root.title("Multi-Stream Recorder \u2014 configuration initiale")
         root.configure(bg=theme["bg"])
         root.resizable(True, True)
         bg, fg = theme["bg"], theme["fg"]
-        self.status = tk.Label(root, text="Preparing\u2026", bg=bg, fg=fg, wraplength=520, justify="left",
+        self.status = tk.Label(root, text="Préparation\u2026", bg=bg, fg=fg, wraplength=520, justify="left",
                                anchor="w", padx=12, pady=8)
         self.status.pack(fill="x")
         self.detail = tk.Label(root, text="", bg=bg, fg=theme.get("muted", fg), anchor="w", padx=12)
@@ -518,7 +518,7 @@ class SetupWindow:
         self.log.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")   # first, so a narrow window never hides it
         self.log.pack(side="left", fill="both", expand=True)
-        self.button = ttk.Button(self.footer, text="Continue", command=root.destroy)
+        self.button = ttk.Button(self.footer, text="Continuer", command=root.destroy)
         root.update_idletasks()
         w, h = root.winfo_reqwidth(), root.winfo_reqheight()
         root.minsize(min(w, 420), max(160, h - self.log.winfo_reqheight() + 3 * 15))   # ~3 log lines
@@ -551,15 +551,15 @@ class SetupWindow:
             self.log.see("end")
 
     def tick(self) -> None:
-        self.detail.configure(text=f"Elapsed {fmt_elapsed(time.time() - self.started)}  \u00b7  "
-                                   "only on the first start; later starts are instant")
+        self.detail.configure(text=f"Temps écoulé : {fmt_elapsed(time.time() - self.started)}  \u00b7  "
+                                   "uniquement au premier démarrage ; les suivants sont immédiats")
 
     def failed(self, message: str, log_path: str) -> None:
         """Stop the bar, keep the log, say what failed and where the full log is; wait for Continue."""
         self.bar.stop()
         self.bar.pack_forget()
-        self.set_status(f"Setup did not finish: {message}\n\nFull log: {log_path}\n"
-                        "Multi-Stream Recorder will start on your normal Python and try again next time.")
+        self.set_status(f"La configuration n’a pas abouti : {message}\n\nJournal complet : {log_path}\n"
+                        "Multi-Stream Recorder démarrera avec votre installation Python habituelle et réessaiera au prochain lancement.")
         self.button.pack(side="right", padx=12, pady=(0, 10))
         self.root.protocol("WM_DELETE_WINDOW", self.root.destroy)
         self.button.focus_set()

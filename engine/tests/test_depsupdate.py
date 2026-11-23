@@ -162,7 +162,7 @@ class RowTests(unittest.TestCase):
         self.assertEqual(row["status"], "update_available")
         self.assertTrue(row["updatable"])
         self.assertEqual(row["latest"], "9.9.9")
-        self.assertEqual(row["note"], "Restart to finish updating")
+        self.assertEqual(row["note"], "Redémarrer pour terminer la mise à jour")
 
     def test_http_404(self):
         def gh404(req, timeout=None):

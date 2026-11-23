@@ -308,7 +308,7 @@ class EditorWindowTests(unittest.TestCase):
         self.assertIn("keyframe 0:08.0", self.ed.status.cget("text"))
 
     def test_save_button_and_every_label_fit_at_default_and_minimum_size(self):
-        self.assertEqual(self.ed.save_btn.cget("text"), "Save clip")
+        self.assertEqual(self.ed.save_btn.cget("text"), "Enregistrer le clip")
         for geometry in ("797x688", "%dx%d" % self.mod.MIN_SIZE):
             self.ed.win.geometry(geometry + "+-3000+0")   # offscreen, never seen
             self.ed.win.deiconify()

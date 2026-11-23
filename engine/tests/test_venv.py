@@ -129,23 +129,23 @@ class FailureTests(Base):
     def test_no_venv_module(self):
         ok, msg = venv.ensure(self.root, run=FakeTools(venv_rc=1, venv_err="No module named venv"))
         self.assertFalse(ok)
-        self.assertIn("cannot make virtual environments", msg)
+        self.assertIn("ne peut pas créer d’environnements virtuels", msg)
 
     def test_offline_then_retry_next_launch(self):
         ok, msg = venv.ensure(self.root, run=FakeTools(pip_rc=1, pip_err="ERROR: Could not fetch URL"))
         self.assertFalse(ok)
-        self.assertIn("offline", msg)
+        self.assertIn("hors ligne", msg)
         self.assertEqual(venv.check(self.root)[0], "rebuild")      # half-done: rebuilt next launch
         self.assertTrue(venv.ensure(self.root, run=FakeTools())[0])
 
     def test_permission(self):
         ok, msg = venv.ensure(self.root, run=FakeTools(venv_rc=1, venv_err="[WinError 5] Access is denied"))
-        self.assertIn("No permission", msg)
+        self.assertIn("Autorisation insuffisante", msg)
 
     def test_timeout_and_oserror(self):
         def slow(cmd, **kw):
             raise subprocess.TimeoutExpired(cmd, 1)
-        self.assertIn("too long", venv.ensure(self.root, run=slow)[1])
+        self.assertIn("trop de temps", venv.ensure(self.root, run=slow)[1])
 
         def gone(cmd, **kw):
             raise FileNotFoundError("python missing")
@@ -188,7 +188,7 @@ class OptOutAndPrepareTests(Base):
         with mock.patch.object(venv, "ensure", return_value=(False, "Could not download packages.")):
             py, notice = venv.prepare(self.root, show_window=False)
         self.assertIsNone(py)
-        self.assertIn("tries again next launch", notice)
+        self.assertIn("réessaiera au prochain démarrage", notice)
         self.assertTrue(os.path.isfile(os.path.join(self.root, venv.ERROR_FILE)))
         venv.ensure(self.root, run=FakeTools())
         py, notice = venv.prepare(self.root, show_window=False)

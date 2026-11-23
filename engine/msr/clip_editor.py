@@ -28,7 +28,7 @@ POLL_MS = 40
 PLAY_POLL_MS = 4          # while playing: a frame lands within a few ms of its time
 QUEUE_SECONDS = 0.2       # decoded frames kept ahead (6 at 30 fps, 12 at 60)
 MAX_FPS = 60              # source rate up to this
-LIMITED_FPS = 30          # "Limit preview to 30 fps"
+LIMITED_FPS = 30          # "Limiter l’aperçu à 30 i/s"
 LIMIT_KEY = "clip_editor_limit_30fps"
 WAVE_KEY = "clip_editor_waveform"
 WAVE_REFRESH_S = 30.0   # re-read the new end of a live file this often
@@ -219,7 +219,7 @@ class ClipEditor:
         self.live_label = ttk.Label(top, text="")
         self.live_label.pack(side="right")
 
-        self.preview = ttk.Label(body, anchor="center", text="Loading preview\u2026")
+        self.preview = ttk.Label(body, anchor="center", text="Chargement de l’aperçu\u2026")
         self.preview.grid(row=1, column=0, sticky="nsew", pady=(6, 6))
 
         self.timeline = tk.Canvas(body, height=TIMELINE_H, highlightthickness=0, bd=0)
@@ -234,7 +234,7 @@ class ClipEditor:
         times.grid(row=3, column=0, sticky="ew", pady=(4, 0))
         self.pos_label = ttk.Label(times, text="0:00.0 / --:--")
         self.pos_label.pack(side="left")
-        self.marks_label = ttk.Label(times, text="In --  Out --  Clip --")
+        self.marks_label = ttk.Label(times, text="Début --  Fin --  Clip --")
         self.marks_label.pack(side="right")
 
         row = ttk.Frame(body)
@@ -242,13 +242,13 @@ class ClipEditor:
         b = lambda text, cmd, w=None: ttk.Button(row, text=text, command=cmd, width=w)  # noqa: E731
         b("\u25c0 5s", lambda: self.seek(self.pos - 5), 5).pack(side="left")
         b("\u25c0 1s", lambda: self.seek(self.pos - 1), 5).pack(side="left", padx=(2, 0))
-        self.play_btn = b("Play", self.toggle_play, 7)
+        self.play_btn = b("Lire", self.toggle_play, 7)
         self.play_btn.pack(side="left", padx=4)
         b("1s \u25b6", lambda: self.seek(self.pos + 1), 5).pack(side="left")
         b("5s \u25b6", lambda: self.seek(self.pos + 5), 5).pack(side="left", padx=(2, 10))
-        b("Mark In (I)", self.mark_in).pack(side="left")
-        b("Mark Out (O)", self.mark_out).pack(side="left", padx=(4, 10))
-        self.live_btn = b("Jump to live", self.jump_live)
+        b("Marquer le début (I)", self.mark_in).pack(side="left")
+        b("Marquer la fin (O)", self.mark_out).pack(side="left", padx=(4, 10))
+        self.live_btn = b("Aller au direct", self.jump_live)
         self.live_btn.pack(side="left")
         vol = ttk.Frame(row)
         vol.pack(side="right")
@@ -260,19 +260,19 @@ class ClipEditor:
         row2 = ttk.Frame(body)
         row2.grid(row=5, column=0, sticky="ew", pady=(6, 0))
         b2 = lambda text, cmd, w=None: ttk.Button(row2, text=text, command=cmd, width=w)  # noqa: E731
-        ttk.Label(row2, text="In").pack(side="left")
+        ttk.Label(row2, text="Début").pack(side="left")
         b2("-", lambda: self.nudge("in", -NUDGE), 2).pack(side="left", padx=(2, 0))
         b2("+", lambda: self.nudge("in", NUDGE), 2).pack(side="left")
-        b2("Replay In", lambda: self.replay("in")).pack(side="left", padx=(4, 12))
-        ttk.Label(row2, text="Out").pack(side="left")
+        b2("Revoir le début", lambda: self.replay("in")).pack(side="left", padx=(4, 12))
+        ttk.Label(row2, text="Fin").pack(side="left")
         b2("-", lambda: self.nudge("out", -NUDGE), 2).pack(side="left", padx=(2, 0))
         b2("+", lambda: self.nudge("out", NUDGE), 2).pack(side="left")
-        b2("Replay Out", lambda: self.replay("out")).pack(side="left", padx=(4, 12))
+        b2("Revoir la fin", lambda: self.replay("out")).pack(side="left", padx=(4, 12))
         self.limit_fps = tk.BooleanVar(value=self._load_limit())
-        ttk.Checkbutton(row2, text="Limit preview to 30 fps", variable=self.limit_fps,
+        ttk.Checkbutton(row2, text="Limiter l’aperçu à 30 i/s", variable=self.limit_fps,
                         command=self._limit_changed).pack(side="left")
         self.show_wave = tk.BooleanVar(value=self._load_wave_pref())
-        ttk.Checkbutton(row2, text="Waveform", variable=self.show_wave,
+        ttk.Checkbutton(row2, text="Forme d’onde", variable=self.show_wave,
                         command=self._wave_changed).pack(side="left", padx=(10, 0))
         if self.show_wave.get():
             self.timeline.configure(height=TIMELINE_H + WAVE_H)
@@ -281,12 +281,12 @@ class ClipEditor:
         # (it was last on the crowded row above and got zero width at the default size).
         actions = ttk.Frame(body)
         actions.grid(row=6, column=0, sticky="ew", pady=(10, 0))
-        self.save_btn = ttk.Button(actions, text="Save clip", style="Accent.TButton", command=self.save)
+        self.save_btn = ttk.Button(actions, text="Enregistrer le clip", style="Accent.TButton", command=self.save)
         self.save_btn.pack(side="left")
         self.exact = tk.BooleanVar(value=False)
-        ttk.Checkbutton(actions, text="Exact (re-encode)", variable=self.exact).pack(side="left", padx=(10, 0))
-        ttk.Button(actions, text="Close", command=self.close).pack(side="right")
-        self.clips_btn = ttk.Button(actions, text="Clips folder", command=self.open_clips)
+        ttk.Checkbutton(actions, text="Précis (réencodage)", variable=self.exact).pack(side="left", padx=(10, 0))
+        ttk.Button(actions, text="Fermer", command=self.close).pack(side="right")
+        self.clips_btn = ttk.Button(actions, text="Dossier des clips", command=self.open_clips)
         self.clips_btn.pack(side="right", padx=(0, 6))
 
         self.status = ttk.Label(body, text=HINT, wraplength=660)
@@ -522,10 +522,10 @@ class ClipEditor:
                                         f"Out {core.fmt_time(m.cut_out) if m.cut_out is not None else '--'}   "
                                         f"Clip {core.fmt_time(m.clip_length) if m.clip_length else '--'}")
         self.live_label.configure(text="\u25cf recording (live edge grows)" if self.live and not self._gone else "")
-        self.play_btn.configure(text="Pause" if self.playing else "Play")
+        self.play_btn.configure(text="Pause" if self.playing else "Lire")
         state = "normal" if (m.ready and not self._saving and not self._gone) else "disabled"
         self.save_btn.configure(state=state)
-        self.live_btn.configure(text="Jump to live" if self.live else "Jump to end")
+        self.live_btn.configure(text="Aller au direct" if self.live else "Aller à la fin")
 
     def say(self, text: str) -> None:
         self.status.configure(text=text)
@@ -564,7 +564,7 @@ class ClipEditor:
     def replay(self, which: str) -> None:
         point = self.marks.cut_in if which == "in" else self.marks.cut_out
         if point is None:
-            self.say(f"Mark the {which} point first.")
+            self.say(f"Marquez d’abord le point {'de début' if which == 'in' else 'de fin'}.")
             return
         self._start_playback(max(0.0, point - REPLAY), point + REPLAY)
 
@@ -594,7 +594,7 @@ class ClipEditor:
             self.audio.start(t)
         except Exception as e:  # no sound: the picture still plays on the wall clock
             self.audio = None
-            self.say(f"No sound ({e}); playing the picture only.")
+            self.say(f"Pas de son ({e}) ; lecture de l’image uniquement.")
         size, fps = None, FPS
         if self._vinfo:
             w, h, src_fps = self._vinfo
@@ -691,7 +691,7 @@ class ClipEditor:
             return
         if not ppm:
             if exact and not self._img:
-                self.preview.configure(text="No preview at this point yet.")
+                self.preview.configure(text="Aucun aperçu disponible à cet endroit.")
             return
         if exact:
             key = self._cache_key(self.src, self.pos)
@@ -746,18 +746,18 @@ class ClipEditor:
         if not exists:
             nxt = core.finished_successor(self.src)
             if nxt:
-                self._switch(nxt, "The recording ended; now editing the finished file (same timeline).")
+                self._switch(nxt, "La capture est terminée ; modification du fichier final sur la même ligne temporelle.")
                 return
             if not self._gone:
                 self._gone = True
                 self._stop_playback()
-                self.say("The recording file is not reachable any more (moved, or the drive is gone). "
-                         "Your marks are kept; Save is off until it is back.")
+                self.say("Le fichier de capture n’est plus accessible (déplacé ou disque déconnecté). "
+                         "Vos repères sont conservés ; l’enregistrement du clip est désactivé jusqu’à son retour.")
             self._draw()
             return
         if self._gone:
             self._gone = False
-            self.say("The file is back.")
+            self.say("Le fichier est de nouveau accessible.")
         if n is not None:
             self.marks.grow(n)
         if self.live and self.follow is not None:
@@ -769,7 +769,7 @@ class ClipEditor:
                 self.live = False
             elif os.path.normcase(current) != os.path.normcase(self.src):
                 self.live = False
-                self.say("A new part of the recording started; this editor keeps the part you opened.")
+                self.say("Une nouvelle partie de la capture a commencé ; cet éditeur conserve la partie ouverte.")
             if not self.live:
                 self._wave_at = 0.0   # live edge stopped growing: one last waveform read of the tail
         if first and n:
@@ -796,7 +796,7 @@ class ClipEditor:
         self._saving = True
         a, b, exact = self.marks.cut_in, self.marks.cut_out, self.exact.get()
         src, out_dir = self.src, core.clips_folder_for(self.src, self.clips_base)
-        self.say("Saving the clip\u2026" + (" (re-encoding, this takes a moment)" if exact else ""))
+        self.say("Enregistrement du clip\u2026" + (" (réencodage, cela peut prendre un instant)" if exact else ""))
         self._draw()
 
         def work():
@@ -813,13 +813,13 @@ class ClipEditor:
     def _on_saved(self, res, err) -> None:
         self._saving = False
         if err:
-            self.say(f"Not saved: {err}")
+            self.say(f"Non enregistré : {err}")
         else:
             self.last_saved = res
             how = ("exact cut" if res.exact else
                    f"starts at the keyframe {core.fmt_time(res.start)} (asked {core.fmt_time(res.requested_start)})"
                    if res.snapped else "keyframe-aligned")
-            self.say(f"Saved {os.path.basename(res.path)}: {core.fmt_time(res.start)} \u2013 "
+            self.say(f"Enregistré : {os.path.basename(res.path)} — {core.fmt_time(res.start)} \u2013 "
                      f"{core.fmt_time(res.end)}, {res.duration:.1f} s, {how}.")
             if self.logger is not None:
                 self.logger.info(f"Clip Editor: saved {res.path} ({res.duration:.1f} s)")
@@ -834,7 +834,7 @@ class ClipEditor:
                 raise OSError("no opener")
             self.opener(folder)   # the app's own (hidden) folder opener
         except Exception:
-            self.say(f"Clips folder: {folder}")
+            self.say(f"Dossier des clips : {folder}")
 
     # ------------------------------------------------------------- loop
     def _drain(self) -> None:
@@ -889,6 +889,6 @@ class ClipEditor:
 
 def open_editor(parent, src, **kw) -> ClipEditor | None:
     if not src or not os.path.isfile(src):
-        dialogs.show_info(parent, "Clip Editor", "There is no recording file to edit for this yet.")
+        dialogs.show_info(parent, "Éditeur de clips", "Aucun fichier de capture à modifier pour le moment.")
         return None
     return ClipEditor(parent, src, **kw)

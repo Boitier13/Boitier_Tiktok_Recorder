@@ -255,7 +255,7 @@ class ClipTabTests(TabTests):
         self.assertIn("2 linked clips", self.tab.count.cget("text"))
         self.tab.tree.selection_set(kids[0])
         self.root.update()
-        self.assertEqual(self.tab.clip_btn.cget("text"), "Open source")
+        self.assertEqual(self.tab.clip_btn.cget("text"), "Ouvrir la vidéo source")
         self.tab.play()
         self.tab.reveal()
         self.tab.open_clip_editor()
@@ -265,7 +265,7 @@ class ClipTabTests(TabTests):
         self.tab.select_source()
         self.assertEqual(self.tab.tree.selection(), (rid,))
         self.root.update()
-        self.assertEqual(self.tab.clip_btn.cget("text"), "Clip Editor")
+        self.assertEqual(self.tab.clip_btn.cget("text"), "Éditeur de clips")
         self.tab._build_menu()  # recording menu offers show/hide clips
         labels = [self.tab.menu.entrycget(i, "label") for i in range(self.tab.menu.index("end") + 1)
                   if self.tab.menu.type(i) == "command"]

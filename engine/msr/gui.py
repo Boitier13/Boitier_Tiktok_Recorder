@@ -128,7 +128,7 @@ _notif_throttle = NotificationThrottle()
 def _show_about(root, config):
     """About: version, sites, tools and packages, environment, folders, msr_ctl, disclaimer."""
     from msr.about import about_for
-    _dialogs.show_info(root, f"About Multi-Stream Recorder v{__version__}", about_for(config, __version__))
+    _dialogs.show_info(root, f"À propos de Multi-Stream Recorder v{__version__}", about_for(config, __version__))
 
 
 def send_notification(title, message, timeout=5, category="info", channel="", detail=""):
@@ -177,6 +177,55 @@ def ordered_status_keys(keys, status_lookup, roster_names, recording_first=True)
         group = live if recording_first else 0
         return (group, index.get(ch, 10 ** 9), ch or "")
     return sorted(keys, key=sort_key)
+
+
+def _french_status_label(status):
+    """Translate engine state codes only at the desktop presentation boundary."""
+    value = str(status or "")
+    low = value.lower()
+    labels = {
+        "recording": "Capture en cours",
+        "checking...": "Vérification…",
+        "initializing": "Initialisation",
+        "completed": "Terminé",
+        "error": "Erreur",
+        "offline": "Hors ligne",
+        "paused": "En pause",
+        "stopped": "Arrêté",
+        "unknown": "Inconnu",
+        "remux failed": "Échec de conversion",
+    }
+    for code, label in labels.items():
+        if low == code:
+            return label
+    if low.startswith("remuxing"):
+        return value.replace("Remuxing...", "Conversion…", 1)
+    if low.startswith("processing"):
+        return value.replace("Processing...", "Traitement…", 1)
+    if low.startswith("checking"):
+        return value.replace("Checking...", "Vérification…", 1)
+    return value
+
+
+def _french_status_detail(detail):
+    """Translate the short worker fragments shown beside a status, not the diagnostic log."""
+    value = str(detail or "")
+    low = value.lower().strip()
+    exact = {
+        "starting": "démarrage",
+        "retry (streamlink)": "nouvel essai (streamlink)",
+        "fallback (streamlink)": "solution de repli (streamlink)",
+        "no cookie": "aucun cookie",
+    }
+    if low in exact:
+        return exact[low]
+    for prefix, translated in (("remuxing", "Conversion"), ("processing", "Traitement"),
+                               ("checking", "Vérification"), ("retry", "Nouvel essai"),
+                               ("fallback", "Solution de repli")):
+        if low.startswith(prefix):
+            suffix = value[len(prefix):].strip()
+            return translated + (f" {suffix}" if suffix else "…")
+    return value
 
 
 # ────────────────────────────────────────────────
@@ -577,7 +626,7 @@ def main_gui(config):
     filter_entry = tk.Entry(search_frame, textvariable=roster_filter_var,
                             font=("Segoe UI", 10), borderwidth=0, relief="flat")
     filter_entry.pack(fill=tk.X, ipady=4)
-    search_placeholder = tk.Label(search_frame, text="Search channels…",
+    search_placeholder = tk.Label(search_frame, text="Rechercher un créateur…",
                                   font=("Segoe UI", 10), anchor="w", cursor="xterm")
     search_placeholder.bind("<Button-1>", lambda e: filter_entry.focus_set())
 
@@ -594,7 +643,7 @@ def main_gui(config):
     view_frame = tk.Frame(frame_left)
     view_frame.pack(fill=tk.X, pady=(0, 6))
     view_buttons = []
-    for _label, _val in (("All", cp.VIEW_ALL), ("Enabled", cp.VIEW_ENABLED), ("Live", cp.VIEW_LIVE)):
+    for _label, _val in (("Tous", cp.VIEW_ALL), ("Actifs", cp.VIEW_ENABLED), ("En direct", cp.VIEW_LIVE)):
         _b = tk.Radiobutton(view_frame, text=_label, value=_val, variable=roster_view_var,
                             indicatoron=0, font=("Segoe UI", 9), relief="flat", bd=0,
                             padx=10, pady=3, cursor="hand2")
@@ -784,9 +833,9 @@ def main_gui(config):
             ch_tree.see(items[0])
 
     _GROUP_TITLES = {
-        cp.GROUP_RECORDING: "Recording",
-        cp.GROUP_ENABLED: "Watching",
-        cp.GROUP_DISABLED: "Off",
+        cp.GROUP_RECORDING: "En capture",
+        cp.GROUP_ENABLED: "Surveillés",
+        cp.GROUP_DISABLED: "Désactivés",
     }
 
     def _layout_signature(groups):
@@ -922,7 +971,7 @@ def main_gui(config):
             return False, error_msg
         ch_name = cp.build_channel_key(name, platform)
         if ch_name in existing_names:
-            return False, f"{ch_name} is already in the list."
+            return False, f"{ch_name} figure déjà dans la liste."
         ch = {"name": ch_name, "enabled": True}
         channels.append(ch)
         if roster_filter_var.get():
@@ -950,9 +999,9 @@ def main_gui(config):
         shown = "\n".join(names[:8]) + (f"\n… and {len(names) - 8} more" if len(names) > 8 else "")
         if not _dialogs.ask_yes_no(
                 root,
-                "Remove channel" + ("s" if len(names) > 1 else ""),
-                f"Remove from the list (recordings on disk are kept)?\n\n{shown}\n\n"
-                "You can bring the old list back with \u22ef \u2192 Restore previous channel list."):
+                "Retirer le créateur" + ("s" if len(names) > 1 else ""),
+                f"Retirer de la liste (les vidéos sur le disque seront conservées) ?\n\n{shown}\n\n"
+                "Vous pourrez restaurer la liste précédente avec \u22ef \u2192 Restaurer la liste précédente."):
             return
         drop = set(names)
         for ch_name in names:
@@ -1030,18 +1079,18 @@ def main_gui(config):
         logging.info(f"Channel list sorted ({mode})")
 
     sort_menu = tk.Menu(root, tearoff=0)
-    sort_menu.add_command(label="Enabled First", command=lambda: _sort_channels("enabled"))
-    sort_menu.add_command(label="By Platform", command=lambda: _sort_channels("platform"))
-    sort_menu.add_command(label="By Name (A–Z)", command=lambda: _sort_channels("name"))
+    sort_menu.add_command(label="Actifs en premier", command=lambda: _sort_channels("enabled"))
+    sort_menu.add_command(label="Par plateforme", command=lambda: _sort_channels("platform"))
+    sort_menu.add_command(label="Par nom (A–Z)", command=lambda: _sort_channels("name"))
 
     add_frame = tk.Frame(frame_left)
     add_frame.pack(fill=tk.X, pady=(8, 0))
-    add_btn = tk.Button(add_frame, text="+  Add channel", command=add_channel,
+    add_btn = tk.Button(add_frame, text="+  Ajouter un créateur", command=add_channel,
                         font=("Segoe UI", 9), cursor="hand2")
     add_btn.pack(fill=tk.X, ipady=2)
-    Tooltip(add_btn, "Add a Kick / Twitch / YouTube / Rumble / TikTok /\n"
-                      "Fishtank channel or a custom URL  (Ctrl+N or Insert).\n"
-                      "Right-click a channel to enable, remove, or reorder.")
+    Tooltip(add_btn, "Ajouter un créateur Kick / Twitch / YouTube / Rumble / TikTok /\n"
+                      "Fishtank.live ou une URL personnalisée (Ctrl+N ou Inser).\n"
+                      "Clic droit sur un créateur pour l’activer, le retirer ou le déplacer.")
 
     def _search_enter(_e=None):
         text = roster_filter_var.get().strip()
@@ -1049,8 +1098,8 @@ def main_gui(config):
         return "break"
 
     filter_entry.bind("<Return>", _search_enter)
-    Tooltip(filter_entry, "Filter as you type (name or platform).\n"
-                           "Enter: add a channel with this name.  Esc: clear.")
+    Tooltip(filter_entry, "Filtrer au fur et à mesure (nom ou plateforme).\n"
+                           "Entrée : ajouter le créateur correspondant. Échap : effacer.")
 
     # ── Cookie status line ──
     cookie_frame = tk.Frame(frame_left)
@@ -1058,18 +1107,18 @@ def main_gui(config):
 
     cookie_indicator = tk.Label(cookie_frame, text="●", font=("Segoe UI", 10))
     cookie_indicator.pack(side=tk.LEFT, padx=(0, 4))
-    cookie_label = tk.Label(cookie_frame, text="Cookies: checking...", font=("Segoe UI", 8))
+    cookie_label = tk.Label(cookie_frame, text="Cookies : vérification…", font=("Segoe UI", 8))
     cookie_label.pack(side=tk.LEFT)
 
     def _cookie_summary_tip():
         summary = cp.platform_cookie_summary(
             _cookie_info_cache[0], get_status=get_cookie_status_for_channel,
             fishtank_login=_fishtank_login)
-        words = {"present": "ok", "missing": "no cookie", "expired": "EXPIRED",
-                 "unknown": "unknown", "login": "email/password login"}
+        words = {"present": "présents", "missing": "aucun cookie", "expired": "EXPIRÉS",
+                 "unknown": "inconnu", "login": "connexion e-mail/mot de passe"}
         lines = [f"{cp.PLATFORM_LABELS[p]}: {words.get(s, s)}" for p, s in summary.items()]
-        return ("Per-site cookies (cookies.txt):\n" + "\n".join(lines) +
-                f"\n\n{cp.BADGE_GLYPH} on a channel = its site needs attention.")
+        return ("Cookies par plateforme (cookies.txt) :\n" + "\n".join(lines) +
+                f"\n\n{cp.BADGE_GLYPH} à côté d’un créateur = sa plateforme nécessite votre attention.")
 
     Tooltip(cookie_frame, _cookie_summary_tip)
 
@@ -1089,10 +1138,10 @@ def main_gui(config):
 
         if not cookies_path:
             _cookie_dot("○", "muted")
-            cookie_label.configure(text="No cookies.txt found")
+            cookie_label.configure(text="Aucun fichier cookies.txt trouvé")
         elif not info['valid']:
             _cookie_dot("●", "error")
-            warning = info['warnings'][0] if info['warnings'] else "Invalid format"
+            warning = info['warnings'][0] if info['warnings'] else "Format invalide"
             cookie_label.configure(text=f"Cookies: {warning}")
         elif info['has_expired_auth']:
             _cookie_dot("●", "warn")
@@ -1231,9 +1280,9 @@ def main_gui(config):
             all_on = all(channels[_index_for_name(n)].get("enabled", True)
                          for n in names if _index_for_name(n) >= 0)
             if all_on:
-                ctx_menu.add_command(label="Disable", command=lambda: _set_enabled(names, False))
+                ctx_menu.add_command(label="Désactiver", command=lambda: _set_enabled(names, False))
             else:
-                ctx_menu.add_command(label="Enable", command=lambda: _set_enabled(names, True))
+                ctx_menu.add_command(label="Activer", command=lambda: _set_enabled(names, True))
 
         if recorder and recorder.is_running and names:
             ch_name = names[0]
@@ -1242,30 +1291,30 @@ def main_gui(config):
                 st = recorder.status_dict.get(ch_name, {})
                 status_lower = st.get("status", "").lower()
                 if status_lower in ("stopped",) or ch_name not in recorder.status_dict:
-                    ctx_menu.add_command(label="Start Recording", command=_start_selected_channel_from_list)
+                    ctx_menu.add_command(label="Démarrer la capture", command=_start_selected_channel_from_list)
                 elif "recording" in status_lower or "checking" in status_lower or "offline" in status_lower or "initializing" in status_lower:
-                    ctx_menu.add_command(label="Stop Recording", command=_stop_selected_channel_from_list)
+                    ctx_menu.add_command(label="Arrêter la capture", command=_stop_selected_channel_from_list)
                 else:
-                    ctx_menu.add_command(label="Start Recording", command=_start_selected_channel_from_list)
+                    ctx_menu.add_command(label="Démarrer la capture", command=_start_selected_channel_from_list)
                 if status_lower.startswith(("offline", "error")):
-                    ctx_menu.add_command(label="Check Now", command=_check_now_selected_from_list)
+                    ctx_menu.add_command(label="Vérifier maintenant", command=_check_now_selected_from_list)
         ctx_menu.add_separator()
 
-        ctx_menu.add_command(label="Open stream page", command=open_channel_url)
-        ctx_menu.add_command(label="Open Clips Folder", command=_open_roster_clips_dir)
-        ctx_menu.add_command(label="Copy Name", command=copy_channel_name)
+        ctx_menu.add_command(label="Ouvrir la page du direct", command=open_channel_url)
+        ctx_menu.add_command(label="Ouvrir le dossier des clips", command=_open_roster_clips_dir)
+        ctx_menu.add_command(label="Copier le nom", command=copy_channel_name)
         ctx_menu.add_separator()
-        ctx_menu.add_command(label="Move to Top", command=_move_channels_to_top)
-        ctx_menu.add_command(label="Move Up", command=_move_channel_up)
-        ctx_menu.add_command(label="Move Down", command=_move_channel_down)
-        ctx_menu.add_command(label="Move to Bottom", command=_move_channels_to_bottom)
-        ctx_menu.add_cascade(label="Sort", menu=sort_menu)
+        ctx_menu.add_command(label="Déplacer en haut", command=_move_channels_to_top)
+        ctx_menu.add_command(label="Déplacer vers le haut", command=_move_channel_up)
+        ctx_menu.add_command(label="Déplacer vers le bas", command=_move_channel_down)
+        ctx_menu.add_command(label="Déplacer en bas", command=_move_channels_to_bottom)
+        ctx_menu.add_cascade(label="Trier", menu=sort_menu)
         ctx_menu.add_separator()
-        ctx_menu.add_command(label="Enable All", command=_enable_all_channels)
-        ctx_menu.add_command(label="Disable All", command=_disable_all_channels)
-        ctx_menu.add_command(label="Add channel…", command=add_channel)
+        ctx_menu.add_command(label="Tout activer", command=_enable_all_channels)
+        ctx_menu.add_command(label="Tout désactiver", command=_disable_all_channels)
+        ctx_menu.add_command(label="Ajouter un créateur…", command=add_channel)
         ctx_menu.add_separator()
-        ctx_menu.add_command(label="Remove…", command=remove_selected)
+        ctx_menu.add_command(label="Retirer…", command=remove_selected)
 
         try:
             ctx_menu.tk_popup(event.x_root, event.y_root)
@@ -1329,10 +1378,10 @@ def main_gui(config):
     def _restore_channels():
         def blocked():
             if recorder and recorder.is_running:
-                return "Stop recording first, then restore the channel list."
+                return "Arrêtez d’abord les captures, puis restaurez la liste des créateurs."
             return None
 
-        _restore_dialog.open_restore(root, channels_file, "Restore previous channel list",
+        _restore_dialog.open_restore(root, channels_file, "Restaurer la liste précédente",
                                      can_restore=blocked, on_restored=_reload_channels_from_disk,
                                      state_file=state_file)
 
@@ -1342,8 +1391,8 @@ def main_gui(config):
             logging.info("config.ini restored from history")
 
         _restore_dialog.open_restore(
-            root, config.config_file, "Restore previous settings (config.ini)", on_restored=restored,
-            state_file=state_file, note="Restart Multi-Stream Recorder to use the restored settings.")
+            root, config.config_file, "Restaurer les paramètres précédents (config.ini)", on_restored=restored,
+            state_file=state_file, note="Redémarrez Multi-Stream Recorder pour appliquer les paramètres restaurés.")
 
     def _about_dialog():
         _show_about(root, config)
@@ -1362,7 +1411,7 @@ def main_gui(config):
 
     # ── Tab 1: Status ──
     status_tab = ttk.Frame(notebook)
-    notebook.add(status_tab, text="  Status  ")
+    notebook.add(status_tab, text="  État  ")
 
     status_header = tk.Frame(status_tab)
     status_header.pack(fill=tk.X, padx=10, pady=(10, 6))
@@ -1373,18 +1422,18 @@ def main_gui(config):
     storage_notice_label = tk.Label(status_tab, text="", anchor="w", justify="left",
                                     font=("Segoe UI", 9, "bold"), wraplength=820)
     _storage_notice_shown = [""]
-    status_label = tk.Label(status_header, text="Live Recording Status",
+    status_label = tk.Label(status_header, text="État des captures en direct",
                             font=("Segoe UI", 13, "bold"), anchor="w")
     status_label.pack(side=tk.LEFT)
     recording_first_cb = ttk.Checkbutton(
-        status_header, text="Recording first",
+        status_header, text="Captures en premier",
         variable=recording_first_var,
         command=lambda: _reorder_status_rows() if recorder else None,
     )
     recording_first_cb.pack(side=tk.LEFT, padx=(12, 0))
     Tooltip(recording_first_cb,
-             "Keep Recording / Remuxing rows at the\n"
-             "top of the status table, in roster order.")
+             "Garder les lignes En cours / Conversion en haut\n"
+             "du tableau, dans l’ordre de la liste.")
 
     # Experimental live-frame strip. ffmpeg grabs a scaled still from each
     # recording's .ts on a worker thread every PREVIEW_MS. Sizes/rate are
@@ -1411,10 +1460,10 @@ def main_gui(config):
         preview_big_header, text="", font=("Segoe UI", 10, "bold"), anchor="w",
     )
     preview_big_name.pack(side=tk.LEFT)
-    preview_big_close = ttk.Button(preview_big_header, text="Close", width=7)
+    preview_big_close = ttk.Button(preview_big_header, text="Fermer", width=7)
     preview_big_close.pack(side=tk.RIGHT)
     preview_big_hint = tk.Label(
-        preview_big_header, text="Double-click a tile to pin · Close to dismiss",
+        preview_big_header, text="Double-cliquez sur une vignette pour l’agrandir · Fermer pour la masquer",
         font=("Segoe UI", 8), anchor="e",
     )
     preview_big_hint.pack(side=tk.RIGHT, padx=(8, 6))
@@ -1433,7 +1482,7 @@ def main_gui(config):
     _preview_canvas_win = preview_canvas.create_window((0, 0), window=preview_inner, anchor="nw")
     preview_empty = tk.Label(
         preview_inner,
-        text="Live previews appear here while channels are recording",
+        text="Les aperçus des créateurs en cours de capture apparaîtront ici",
         font=("Segoe UI", 9), anchor="w", padx=8, pady=4,
     )
     preview_empty.pack(side=tk.LEFT)
@@ -1475,11 +1524,11 @@ def main_gui(config):
     columns = VISIBLE_STATUS_COLUMNS + ("_key",)
     tree = ttk.Treeview(status_tab, columns=columns, displaycolumns=VISIBLE_STATUS_COLUMNS,
                         show="headings", height=20)
-    tree.heading("Channel", text="Channel")
-    tree.heading("Status", text="Status")
-    tree.heading("Size", text="Size")
-    tree.heading("Elapsed", text="Elapsed")
-    tree.heading("Platform", text="Platform")
+    tree.heading("Channel", text="Créateur")
+    tree.heading("Status", text="État")
+    tree.heading("Size", text="Taille")
+    tree.heading("Elapsed", text="Durée")
+    tree.heading("Platform", text="Plateforme")
     tree.column("Channel", width=200, anchor="w")
     tree.column("Status", width=300, anchor="w")
     tree.column("Size", width=90, anchor="center")
@@ -1576,12 +1625,12 @@ def main_gui(config):
         """Off the GUI thread: resolve the live .ts, cut a clip or grab a
         screenshot, and report the result via log line + desktop notification."""
         display = _get_display_name(ch_name)
-        label = "Clip" if kind == "clip" else "Screenshot"
+        label = "Clip" if kind == "clip" else "Capture d’écran"
 
         raw_file = find_active_recording_file(recorder, ch_name)
         if not raw_file:
             logging.warning(f"{label}: no active recording file found for {display}")
-            send_notification(f"{label} failed", f"{display}: no active recording found",
+            send_notification(f"Échec : {label.lower()}", f"{display} : aucune capture active",
                               category="error", channel=ch_name)
             return
 
@@ -1605,12 +1654,12 @@ def main_gui(config):
 
         if ok:
             logging.info(f"{label} saved for {display}: {out_file}")
-            send_notification(f"{label} saved", f"{display} — {os.path.basename(out_file)}",
+            send_notification(f"{label} enregistrée", f"{display} — {os.path.basename(out_file)}",
                               category="complete", channel=ch_name)
             sounds.play("clip")
         else:
             logging.error(f"{label} failed for {display}: {msg}")
-            send_notification(f"{label} failed", f"{display}: {msg}",
+            send_notification(f"Échec : {label.lower()}", f"{display}: {msg}",
                               category="error", channel=ch_name)
             sounds.play("problem", f"clip:{ch_name}")
 
@@ -1622,7 +1671,7 @@ def main_gui(config):
     def _start_media_job(ch_name, kind, start_msg):
         """Run a clip or screenshot off the GUI thread, at most one per channel+kind."""
         job_key = (ch_name, kind)
-        label = "Clip Now" if kind == "clip" else "Screenshot Now"
+        label = "Créer un clip" if kind == "clip" else "Prendre une capture d’écran"
         if job_key in _media_jobs_in_flight:
             logging.info(f"{label}: already in progress for {_get_display_name(ch_name)} — ignored")
             return
@@ -1699,7 +1748,7 @@ def main_gui(config):
                 opener=open_local_path, start_at=start_at, end_at=end_at)
         except Exception as e:
             logging.error(f"Clip Editor: could not open: {e}")
-            _dialogs.show_error(root, "Clip Editor", f"Could not open the Clip Editor: {e}")
+            _dialogs.show_error(root, "Éditeur de clips", f"Impossible d’ouvrir l’éditeur de clips : {e}")
 
     def _newest_processed(ch_name):
         try:
@@ -1721,19 +1770,19 @@ def main_gui(config):
         finished recording."""
         ch_name = _get_selected_status_channel()
         if not ch_name:
-            _dialogs.show_info(root, "DVR / Clip Editor",
-                               "Select a channel in the status list first.\n\n"
-                               "While it records you can scrub back and cut a clip; otherwise its "
-                               "newest finished recording opens.")
+            _dialogs.show_info(root, "DVR / Éditeur de clips",
+                               "Sélectionnez d’abord un créateur dans la liste d’état.\n\n"
+                               "Pendant une capture, vous pouvez revenir en arrière et créer un clip ; sinon, "
+                               "la dernière vidéo terminée s’ouvre.")
             return "break"
         raw = None
         if recorder and recorder.is_running:
             st = recorder.status_dict.get(ch_name, {})
             if clip_unavailable_reason(st):
-                _dialogs.show_info(root, "Clip Editor",
-                                   f"{_get_display_name(ch_name)}: {CATCHUP_UNAVAILABLE}.\n\n"
-                                   "It is still catching up from the start of the broadcast. "
-                                   "The live Clip Editor works once it reaches live.")
+                _dialogs.show_info(root, "Éditeur de clips",
+                                   f"{_get_display_name(ch_name)} : {CATCHUP_UNAVAILABLE}.\n\n"
+                                   "La capture récupère encore le début du direct. L’éditeur de clips en direct "
+                                   "sera disponible lorsqu’il aura rattrapé le direct.")
                 return "break"
             if channel_status_allows_clip(st.get("status", "")):
                 raw = find_active_recording_file(recorder, ch_name)
@@ -1744,9 +1793,9 @@ def main_gui(config):
             if done:
                 _open_clip_editor(done, ch_name, live=False)
             else:
-                _dialogs.show_info(root, "Clip Editor",
-                                   f"{_get_display_name(ch_name)} is not recording and has no finished "
-                                   "recording yet.")
+                _dialogs.show_info(root, "Éditeur de clips",
+                                   f"{_get_display_name(ch_name)} n’est pas en capture et ne possède pas encore "
+                                   "de vidéo terminée.")
         return "break"
 
     def _open_clips_dir_for_channel(ch_name):
@@ -1784,46 +1833,46 @@ def main_gui(config):
         ok, why = open_existing_folder(config.get("Paths", "streams_dir", fallback=""),
                                        default_streams_dir())
         if not ok:
-            _dialogs.show_info(root, "Streams folder", why)
+            _dialogs.show_info(root, "Dossier des enregistrements", why)
 
     # Left to right: Clip Now (primary, accent) | DVR | Clips | Screenshot | Streams.
     # pack(side=RIGHT) puts the first packed button rightmost, so they are packed in reverse.
-    streams_folder_btn = _header_action_button(status_header, text="Streams",
+    streams_folder_btn = _header_action_button(status_header, text="Enregistrements",
                                                command=_open_recordings_folder, width=8)
     streams_folder_btn.pack(side=tk.RIGHT)
     Tooltip(streams_folder_btn,
-             "Open the recordings folder\n"
-             "(streams_dir: Recorded, Processed, Clips...).")
+             "Ouvrir le dossier des enregistrements\n"
+             "(captures brutes, vidéos finalisées, clips…).")
 
-    screenshot_now_btn = _header_action_button(status_header, text="Screenshot",
+    screenshot_now_btn = _header_action_button(status_header, text="Capture d’écran",
                                                command=_screenshot_selected_channel, width=11)
     screenshot_now_btn.pack(side=tk.RIGHT, padx=(0, 6))
     Tooltip(screenshot_now_btn,
-             "Grab a still frame from the channel\n"
-             "selected in the status list.")
+             "Prendre une image fixe du créateur\n"
+             "sélectionné dans la liste d’état.")
 
     clips_folder_btn = _header_action_button(status_header, text="Clips",
                                              command=_open_selected_clips_dir, width=6)
     clips_folder_btn.pack(side=tk.RIGHT, padx=(0, 6))
     Tooltip(clips_folder_btn,
-             "Open the clips & screenshots folder\n"
-             "of the channel selected in the status list.")
+             "Ouvrir le dossier des clips et captures d’écran\n"
+             "du créateur sélectionné dans la liste d’état.")
 
     dvr_btn = _header_action_button(status_header, text="DVR",
                                     command=_clip_editor_selected_channel, width=6)
     dvr_btn.pack(side=tk.RIGHT, padx=(0, 6))
     Tooltip(dvr_btn,
-             "Scrub back through a live recording and cut a clip\n"
-             "(Clip Editor: In/Out marks, sound, live edge).\n"
-             "Not recording? Opens the channel's newest finished recording.")
+             "Revenir en arrière dans un direct en capture et créer un clip\n"
+             "(éditeur de clips : points d’entrée/sortie, son, direct).\n"
+             "Sans capture en cours, ouvre la dernière vidéo terminée du créateur.")
 
-    clip_now_btn = _header_action_button(status_header, text="Clip Now", style="Accent.TButton",
+    clip_now_btn = _header_action_button(status_header, text="Créer un clip", style="Accent.TButton",
                                          command=_clip_selected_channel, width=9)
     clip_now_btn.pack(side=tk.RIGHT, padx=(0, 6))
     clip_now_btn.bind("<Shift-Button-1>", _clip_editor_selected_channel)
-    _CLIP_TIP = ("Cut the last N seconds (Clip Length setting)\n"
-                 "of the channel selected in the status list.\n"
-                 "Shift+click or DVR: open the Clip Editor.")
+    _CLIP_TIP = ("Créer un clip des N dernières secondes (réglage Durée du clip)\n"
+                 "du créateur sélectionné dans la liste d’état.\n"
+                 "Maj+clic ou DVR : ouvrir l’éditeur de clips.")
 
     def _clip_now_tip():
         # a YouTube from-start capture has no live file yet: say so instead
@@ -1898,25 +1947,25 @@ def main_gui(config):
             status_lower = st.get("status", "").lower()
 
             if status_lower == "stopped":
-                status_ctx_menu.add_command(label="Restart Channel", command=_start_selected_channel)
+                status_ctx_menu.add_command(label="Redémarrer le créateur", command=_start_selected_channel)
             else:
-                status_ctx_menu.add_command(label="Stop Channel", command=_stop_selected_channel)
+                status_ctx_menu.add_command(label="Arrêter la capture", command=_stop_selected_channel)
                 if status_lower.startswith(("offline", "error")):
-                    status_ctx_menu.add_command(label="Check Now", command=_check_now_selected_channel)
+                    status_ctx_menu.add_command(label="Vérifier maintenant", command=_check_now_selected_channel)
                 if channel_status_allows_clip(status_lower) and clip_unavailable_reason(st):
-                    status_ctx_menu.add_command(label=f"Clip Now: {CATCHUP_UNAVAILABLE}", state=tk.DISABLED)
+                    status_ctx_menu.add_command(label=f"Créer un clip : {CATCHUP_UNAVAILABLE}", state=tk.DISABLED)
                 elif channel_status_allows_clip(status_lower):
                     clip_seconds = config.getint('Clipping', 'clip_length_seconds', fallback=30)
                     status_ctx_menu.add_command(
-                        label=f"Clip Now ({clip_seconds}s)", command=_clip_selected_channel)
+                        label=f"Créer un clip ({clip_seconds} s)", command=_clip_selected_channel)
                     status_ctx_menu.add_command(
-                        label="Screenshot Now", command=_screenshot_selected_channel)
-                status_ctx_menu.add_command(label="Clip Editor\u2026", command=_clip_editor_selected_channel)
+                        label="Prendre une capture d’écran", command=_screenshot_selected_channel)
+                status_ctx_menu.add_command(label="Éditeur de clips\u2026", command=_clip_editor_selected_channel)
 
             status_ctx_menu.add_separator()
 
-        status_ctx_menu.add_command(label="Open in Browser", command=_open_status_channel_url)
-        status_ctx_menu.add_command(label="Open Clips Folder", command=_open_selected_clips_dir)
+        status_ctx_menu.add_command(label="Ouvrir dans le navigateur", command=_open_status_channel_url)
+        status_ctx_menu.add_command(label="Ouvrir le dossier des clips", command=_open_selected_clips_dir)
 
         try:
             status_ctx_menu.tk_popup(event.x_root, event.y_root)
@@ -1927,21 +1976,21 @@ def main_gui(config):
 
     # ── Tab 2: Logs ──
     log_tab = ttk.Frame(notebook)
-    notebook.add(log_tab, text="  Logs  ")
+    notebook.add(log_tab, text="  Journaux  ")
 
     log_toolbar = ttk.Frame(log_tab)
     log_toolbar.pack(fill=tk.X, padx=10, pady=(8, 4))
 
     auto_scroll_var = tk.BooleanVar(value=True)
     ttk.Checkbutton(
-        log_toolbar, text="Auto-scroll", variable=auto_scroll_var,
+        log_toolbar, text="Défilement automatique", variable=auto_scroll_var,
         command=lambda: auto_scroll_var.get() and log_follow.jump(),
     ).pack(side=tk.LEFT)
 
     def clear_logs():
         log_follow.clear()
 
-    ttk.Button(log_toolbar, text="Clear", command=clear_logs).pack(side=tk.RIGHT)
+    ttk.Button(log_toolbar, text="Effacer", command=clear_logs).pack(side=tk.RIGHT)
 
     def _log_file_path():
         """The file the app is logging to (the shared rotating handler), else the default."""
@@ -1957,15 +2006,15 @@ def main_gui(config):
         ok, why = logview.open_log_file(_log_file_path(), open_local_path,
                                         _notepad if os.name == "nt" else None)
         if not ok:
-            _dialogs.show_info(root, "Open log file", why)
+            _dialogs.show_info(root, "Ouvrir le journal", why)
 
-    ttk.Button(log_toolbar, text="Open log file", command=open_log_file).pack(side=tk.RIGHT, padx=(0, 6))
+    ttk.Button(log_toolbar, text="Ouvrir le journal", command=open_log_file).pack(side=tk.RIGHT, padx=(0, 6))
 
     # Filter: words (all must match, any case) and a minimum level.
     log_filter_var = tk.StringVar()
     log_level_var = tk.StringVar(value=logview.level_label(logview.LEVEL_ALL))
     log_filter_info = ttk.Label(log_toolbar, text="")
-    ttk.Label(log_toolbar, text="Filter:").pack(side=tk.LEFT, padx=(18, 4))
+    ttk.Label(log_toolbar, text="Filtrer :").pack(side=tk.LEFT, padx=(18, 4))
     log_filter_entry = ttk.Entry(log_toolbar, textvariable=log_filter_var, width=24)
     log_filter_entry.pack(side=tk.LEFT)
     log_filter_clear = ttk.Button(log_toolbar, text="\u2715", width=3,
@@ -1994,7 +2043,7 @@ def main_gui(config):
     log_text = tk.Text(log_tab, wrap=tk.WORD, font=("Consolas", 9), state=tk.DISABLED,
                        borderwidth=0, relief="flat")
     log_scroll = ttk.Scrollbar(log_tab, orient=tk.VERTICAL, command=log_text.yview)
-    new_lines_btn = ttk.Button(log_tab, text="\u2193 New lines")
+    new_lines_btn = ttk.Button(log_tab, text="\u2193 Nouveaux messages")
 
     def _show_new_lines(count):
         # Auto-scroll follows the log only while you are at the bottom; when you have
@@ -2061,7 +2110,7 @@ def main_gui(config):
     def _library_save_extra_dirs(text):
         # Same write path as Options and config_set. A rescan reads the new list.
         running = bool(recorder and recorder.is_running)
-        _control.apply_setting(config, "Library", "extra_dirs", text, recording=running)
+        _control.apply_setting(config, "Bibliothèque", "extra_dirs", text, recording=running)
 
     library_panel = _library_window.LibraryPanel(
         notebook,
@@ -2079,7 +2128,7 @@ def main_gui(config):
         opener=open_local_path,
         save_extra_dirs=_library_save_extra_dirs)
     _library_panel[0] = library_panel
-    notebook.add(library_panel.frame, text="  Library  ")
+    notebook.add(library_panel.frame, text="  Bibliothèque  ")
 
     def _library_tab_opened(_event=None):
         try:
@@ -2112,7 +2161,7 @@ def main_gui(config):
         notebook, config, library_data_dir, _options_apply_setting,
         on_twitch_changed=_options_twitch_changed, tooltip=Tooltip, sound_test=sounds.test,
         open_updates=lambda: _open_updates())
-    notebook.add(options_panel.frame, text="  Options  ")
+    notebook.add(options_panel.frame, text="  Paramètres  ")
 
     def _options_tab_opened(_event=None):
         try:
@@ -2132,14 +2181,14 @@ def main_gui(config):
     btn_frame.pack(side=tk.LEFT, padx=10)
 
     start_button = tk.Button(
-        btn_frame, text=" Start Recording ", command=lambda: start_recording(),
+        btn_frame, text=" Démarrer les captures ", command=lambda: start_recording(),
         bg=_themes.current()['start_bg'], fg=_themes.current()['start_fg'],
         font=("Segoe UI", 11, "bold"), width=18, height=2,
     )
     start_button.pack(side=tk.LEFT, padx=(0, 12))
 
     stop_button = tk.Button(
-        btn_frame, text=" Stop Recording ", command=lambda: stop_recording(),
+        btn_frame, text=" Arrêter les captures ", command=lambda: stop_recording(),
         bg=_themes.current()['stop_bg'], fg=_themes.current()['stop_fg'],
         font=("Segoe UI", 11, "bold"), width=18, height=2,
         state=tk.DISABLED,
@@ -2168,23 +2217,23 @@ def main_gui(config):
             root, apply=_apply_chosen_theme, save=_save_chosen_theme, reload=_load_user_themes,
             folder=user_themes_dir, opener=open_local_path, problems=lambda: list(user_theme_problems))
 
-    theme_button = ttk.Button(toggle_frame, text="Theme...", command=open_theme_dialog)
+    theme_button = ttk.Button(toggle_frame, text="Thème…", command=open_theme_dialog)
     theme_button.pack(side=tk.RIGHT, padx=8)
 
     # ── Polling speed selector ──
     POLL_PRESETS = {
-        "Relaxed (5 min)": 5.0,
-        "Normal (3 min)": 3.0,
-        "Fast (1 min)": 1.0,
+        "Lente (5 min)": 5.0,
+        "Normale (3 min)": 3.0,
+        "Rapide (1 min)": 1.0,
     }
-    CUSTOM_POLL_LABEL = "Custom…"
+    CUSTOM_POLL_LABEL = "Personnalisée…"
     POLL_MIN_MINUTES = 0.5   # floor — protects against rate limiting / IP bans
     POLL_MAX_MINUTES = 120.0
 
     def _custom_poll_display(minutes):
-        return f"Custom ({minutes:g} min)"
+        return f"Personnalisée ({minutes:g} min)"
 
-    poll_label = tk.Label(toggle_frame, text="Polling:", font=("Segoe UI", 9))
+    poll_label = tk.Label(toggle_frame, text="Fréquence :", font=("Segoe UI", 9))
 
     current_poll = config.getfloat('Timeouts', 'poll_interval_minutes', fallback=3.0)
     # Find the matching preset name, or show it as a custom value
@@ -2220,11 +2269,11 @@ def main_gui(config):
         if selected == CUSTOM_POLL_LABEL:
             minutes = _dialogs.ask_float(
                 root,
-                "Custom Polling Interval",
-                f"Minutes between offline checks "
-                f"({POLL_MIN_MINUTES:g}–{POLL_MAX_MINUTES:g}):\n\n"
-                f"Values below {POLL_MIN_MINUTES:g} min are not allowed — "
-                f"checking too often risks rate limiting or IP bans.",
+                "Fréquence de vérification personnalisée",
+                f"Délai entre les vérifications des chaînes hors ligne "
+                f"({POLL_MIN_MINUTES:g}–{POLL_MAX_MINUTES:g} min) :\n\n"
+                f"Les délais inférieurs à {POLL_MIN_MINUTES:g} min sont interdits : "
+                "des vérifications trop fréquentes peuvent entraîner une limitation ou un blocage de l’adresse IP.",
                 minvalue=POLL_MIN_MINUTES, maxvalue=POLL_MAX_MINUTES)
             if minutes is None:
                 # Cancelled — restore whatever was selected before
@@ -2249,21 +2298,21 @@ def main_gui(config):
     # ── Clip length selector — length used by "Clip Now" in the status
     # tree's right-click menu (see _clip_selected_channel below) ──
     CLIP_PRESETS = {
-        "15 sec": 15,
-        "30 sec": 30,
+        "15 s": 15,
+        "30 s": 30,
         "1 min": 60,
         "2 min": 120,
         "5 min": 300,
     }
-    CUSTOM_CLIP_LABEL = "Custom…"
+    CUSTOM_CLIP_LABEL = "Personnalisée…"
     CLIP_MIN_SECONDS = 5
     CLIP_MAX_SECONDS = 1800  # 30 min — a stream-copy cut stays fast even at
                               # this length, no real reason to allow more
 
     def _custom_clip_display(seconds):
-        return f"Custom ({seconds}s)"
+        return f"Personnalisée ({seconds} s)"
 
-    clip_label = tk.Label(toggle_frame, text="Clip Length:", font=("Segoe UI", 9))
+    clip_label = tk.Label(toggle_frame, text="Durée du clip :", font=("Segoe UI", 9))
 
     current_clip_len = config.getint('Clipping', 'clip_length_seconds', fallback=30)
     clip_default = _custom_clip_display(current_clip_len)
@@ -2295,9 +2344,9 @@ def main_gui(config):
         if selected == CUSTOM_CLIP_LABEL:
             seconds = _dialogs.ask_int(
                 root,
-                "Custom Clip Length",
-                f"Seconds to grab when clipping a live recording "
-                f"({CLIP_MIN_SECONDS}–{CLIP_MAX_SECONDS}):",
+                "Durée de clip personnalisée",
+                f"Nombre de secondes à extraire d’un direct en cours "
+                f"({CLIP_MIN_SECONDS}–{CLIP_MAX_SECONDS}) :",
                 minvalue=CLIP_MIN_SECONDS, maxvalue=CLIP_MAX_SECONDS)
             if seconds is None:
                 # Cancelled — restore whatever was selected before
@@ -2317,8 +2366,8 @@ def main_gui(config):
     clip_combo.bind("<<ComboboxSelected>>", on_clip_length_change)
     clip_label.pack(side=tk.RIGHT, padx=(0, 2))
     Tooltip(clip_combo,
-             "Length of the clip cut when you use\n'Clip Now' on a recording channel\n"
-             "(button above the status list, or\nright-click the channel).")
+             "Durée du clip créé avec le bouton\n« Créer un clip » pour un créateur en capture\n"
+             "(bouton au-dessus de la liste ou\nclic droit sur le créateur).")
 
     # ── Check Now button — skip the poll timer on all active channels ──
     def _check_all_now():
@@ -2327,20 +2376,20 @@ def main_gui(config):
         else:
             logging.info("Check Now clicked but no recording session is running")
 
-    check_now_btn = ttk.Button(toggle_frame, text="Check Now",
+    check_now_btn = ttk.Button(toggle_frame, text="Vérifier maintenant",
                                command=_check_all_now, width=10)
     check_now_btn.pack(side=tk.RIGHT, padx=(0, 6))
     Tooltip(check_now_btn,
-             "Skip the wait — immediately check all\nenabled channels for live streams.\n(Right-click a single channel for a\nper-channel Check Now.)")
+             "Ignorer l’attente et vérifier immédiatement\ntous les créateurs actifs pour détecter les directs.\n(Clic droit sur un créateur pour le vérifier seul.)")
 
-    about_btn = ttk.Button(toggle_frame, text="About", command=_about_dialog, width=6)
+    about_btn = ttk.Button(toggle_frame, text="À propos", command=_about_dialog, width=6)
     about_btn.pack(side=tk.RIGHT, padx=(0, 4))
 
     # Updates: dependency versions and pip updates (msr/depsupdate.py, msr/deps_dialog.py)
     from msr import depsupdate as _depsupdate
 
     def _set_updates_badge(names):
-        updates_btn.configure(text="Updates \u2022" if names else "Updates\u2026")
+        updates_btn.configure(text="Mises à jour \u2022" if names else "Mises à jour\u2026")
 
     def _open_updates(event=None):
         from msr.deps_dialog import open_deps_dialog
@@ -2349,10 +2398,10 @@ def main_gui(config):
                          on_msr_update=lambda row, parent=None: _begin_in_app_update(release=row, parent=parent),
                          on_badge=_set_updates_badge, on_checked=_apply_banner_from_rows)
 
-    updates_btn = ttk.Button(toggle_frame, text="Updates\u2026", command=_open_updates, width=10)
+    updates_btn = ttk.Button(toggle_frame, text="Mises à jour\u2026", command=_open_updates, width=10)
     updates_btn.pack(side=tk.RIGHT, padx=(0, 4))
-    Tooltip(updates_btn, "Versions of MSR, yt-dlp, streamlink, ffmpeg and Python packages;\n"
-                          "check and install updates. A dot means updates are available.")
+    Tooltip(updates_btn, "Versions de MSR, yt-dlp, streamlink, ffmpeg et composants Python ;\n"
+                          "vérifiez et installez les mises à jour. Le point signale une mise à jour disponible.")
     _set_updates_badge(_depsupdate.remembered_updates(win_state))
 
     # Health: startup + periodic checks, one line in the bottom bar (msr/health.py, msr/health_ui.py)
@@ -2380,10 +2429,10 @@ def main_gui(config):
     health_ctl.label.pack(side=tk.LEFT, padx=(6, 0))
     more_btn = ttk.Menubutton(toggle_frame, text="\u22ef", width=3)
     more_menu = tk.Menu(more_btn, tearoff=0)
-    more_menu.add_command(label="Library summary\u2026", command=lambda: notebook.select(library_panel.frame))
+    more_menu.add_command(label="Résumé de la bibliothèque\u2026", command=lambda: notebook.select(library_panel.frame))
     more_menu.add_separator()
-    more_menu.add_command(label="Restore previous channel list\u2026", command=_restore_channels)
-    more_menu.add_command(label="Restore previous settings (config.ini)\u2026", command=_restore_settings)
+    more_menu.add_command(label="Restaurer la liste précédente\u2026", command=_restore_channels)
+    more_menu.add_command(label="Restaurer les paramètres précédents (config.ini)\u2026", command=_restore_settings)
     more_btn.configure(menu=more_menu)
     more_btn.pack(side=tk.RIGHT, padx=(0, 4))
 
@@ -2395,7 +2444,7 @@ def main_gui(config):
         dep_parts.append(f"streamlink {STREAMLINK_VERSION}")
     if _deps.HAS_FFMPEG:
         dep_parts.append(f"ffmpeg")
-    dep_str = " | ".join(dep_parts) if dep_parts else "No recording tools found"
+    dep_str = " | ".join(dep_parts) if dep_parts else "Aucun outil de capture trouvé"
 
     status_bar = tk.Label(root, text=f"  v{__version__}  —  {dep_str}  —  Ctrl+Q quit, F1 about, Enter add, Del remove",
                           font=("Segoe UI", 8), anchor="w", padx=6, pady=2)
@@ -2474,7 +2523,7 @@ def main_gui(config):
         _update_busy[0] = False
         _show_update_banner(_update_tag[0])
 
-    def _cannot_start(msg, title="Cannot update", parent=None, *, clear_busy=True):
+    def _cannot_start(msg, title="Impossible de mettre à jour", parent=None, *, clear_busy=True):
         logging.warning("In-app update did not start: %s", " ".join((msg or "").split()))
         _dialogs.show_error(_ui_parent(parent), title, msg)
         if clear_busy:
@@ -2555,16 +2604,16 @@ def main_gui(config):
             # including when the dialog row stores the tag as "latest".
             _remember_release(chosen["tag"], chosen.get("url"), chosen.get("zipball"))
         if plan["action"] == "blocked":
-            _cannot_start(plan["message"], title=plan.get("title") or "Cannot update", parent=parent)
+            _cannot_start(plan["message"], title=plan.get("title") or "Impossible de mettre à jour", parent=parent)
             return False
         if plan["action"] == "git_manual":
             _explain_update(plan["title"], plan["message"], parent=parent)
             return False
         if plan["action"] == "zip" and not os.access(target, os.W_OK):
-            _cannot_start(f"The install folder is not writable:\n{target}", parent=parent)
+            _cannot_start(f"Impossible d’écrire dans le dossier d’installation :\n{target}", parent=parent)
             return False
         if plan["confirm"] and not _dialogs.ask_yes_no(parent, plan["title"], plan["message"]):
-            logging.info("In-app update cancelled")
+            logging.info("Mise à jour intégrée annulée")
             return False
         _update_busy[0] = True
         if plan["action"] == "zip":
@@ -2573,11 +2622,11 @@ def main_gui(config):
             _download_zip(plan, target)
             return True
         if plan["action"] == "git_pull":
-            update_label.configure(text="  Updating with git…", cursor="arrow")
+            update_label.configure(text="  Mise à jour avec Git…", cursor="arrow")
             update_label.grid()
             _pull_then_restart(target, parent)
             return True
-        update_label.configure(text="  Restarting…", cursor="arrow")
+        update_label.configure(text="  Redémarrage…", cursor="arrow")
         update_label.grid()
         _stop_then(_restart_then_quit, open_release=False)
         return True
@@ -2585,7 +2634,7 @@ def main_gui(config):
     def _fail(msg, *, open_release=True):
         logging.warning("In-app update failed: %s", msg)
         detail = f"{msg}\n\nYou can still open the release page from GitHub." if open_release else msg
-        _dialogs.show_error(root, "Update failed", detail)
+        _dialogs.show_error(root, "Échec de la mise à jour", detail)
         if open_release and _update_url[0]:
             import webbrowser
             webbrowser.open(_update_url[0])
@@ -2600,7 +2649,7 @@ def main_gui(config):
     def _stop_then(after_stop, *, open_release):
         rec = recorder
         if rec and rec.is_running:
-            update_label.configure(text="  Stopping recordings…")
+            update_label.configure(text="  Arrêt des captures…")
 
             def _bg_stop():
                 try:
@@ -2608,7 +2657,7 @@ def main_gui(config):
                 except Exception:
                     logging.exception("Stop before update failed")
                     root.after(0, lambda: _fail(
-                        "Could not stop recordings. Try Stop Recording, then click the banner again.",
+                        "Impossible d’arrêter les captures. Arrêtez-les manuellement, puis cliquez de nouveau sur la bannière.",
                         open_release=open_release,
                     ))
                     return
@@ -2631,7 +2680,7 @@ def main_gui(config):
             try:
                 staging = prepare_update(zip_url)
             except Exception as exc:
-                err = str(exc) or "Download failed"
+                err = str(exc) or "Échec du téléchargement"
                 root.after(0, lambda m=err: _fail(m))
                 return
             root.after(0, lambda: _stop_then(lambda: _spawn_then_quit(staging), open_release=True))
@@ -2647,7 +2696,7 @@ def main_gui(config):
                 if not ok:
                     logging.warning("In-app update failed: git pull --ff-only: %s", text)
                     _dialogs.show_error(
-                        _ui_parent(parent), "Update failed",
+                        _ui_parent(parent), "Échec de la mise à jour",
                         "git pull --ff-only failed.\n\n" + (text or "git pull --ff-only failed."),
                     )
                     _restore_update_banner()
@@ -2703,7 +2752,7 @@ def main_gui(config):
                     _depsupdate.remember(state_file, rs)
                 _deps_q.put(rs)
             except Exception:
-                logging.debug("Daily dependency check failed", exc_info=True)
+                logging.debug("Échec de la vérification quotidienne des composants", exc_info=True)
                 _deps_q.put(None)
 
         threading.Thread(target=work, daemon=True, name="deps-daily").start()
@@ -2727,14 +2776,14 @@ def main_gui(config):
             return
         try:
             with open(path, encoding="utf-8") as fh:
-                msg = fh.read().strip() or "The previous in-app update failed."
+                msg = fh.read().strip() or "La précédente mise à jour intégrée a échoué."
         except Exception:
-            msg = "The previous in-app update failed."
+            msg = "La précédente mise à jour intégrée a échoué."
         try:
             os.remove(path)
         except OSError:
             pass
-        _dialogs.show_error(root, "Update failed", msg)
+        _dialogs.show_error(root, "Échec de la mise à jour", msg)
 
     def _show_update_notice():
         from msr.apply_update import NOTICE_FILE
@@ -2748,14 +2797,14 @@ def main_gui(config):
         except OSError:
             return
         if msg:
-            _dialogs.show_info(root, "Update installed", msg)
+            _dialogs.show_info(root, "Mise à jour installée", msg)
 
     root.after(400, _warn_if_last_update_failed)
 
     def _show_venv_notice():
         from msr import venv as _venv
         if _venv.LAUNCH_NOTICE:
-            _dialogs.show_warning(root, "Multi-Stream Recorder environment", _venv.LAUNCH_NOTICE)
+            _dialogs.show_warning(root, "Environnement Multi-Stream Recorder", _venv.LAUNCH_NOTICE)
     root.after(2500, _show_venv_notice)   # after recording has started; never blocks it
     root.after(500, _show_update_notice)
 
@@ -3217,7 +3266,7 @@ def main_gui(config):
         if text and text != _storage_notice_shown[0]:
             sounds.play("problem", "storage")
         if text and text != _storage_notice_shown[0] and notifications_enabled:
-            send_notification("Recordings folder", text, category="error", channel="storage",
+            send_notification("Dossier des captures", text, category="error", channel="storage",
                               detail=text)
         _storage_notice_shown[0] = text
 
@@ -3254,13 +3303,13 @@ def main_gui(config):
                 if "recording" in curr:
                     detail = st.get("detail", "")
                     if detail:
-                        display = f"Recording  {detail}"
+                        display = f"Capture en cours  {_french_status_detail(detail)}"
                     else:
-                        display = "Recording"
+                        display = "Capture en cours"
                 else:
-                    display = st["status"]
+                    display = _french_status_label(st["status"])
                     if st.get("detail"):
-                        display += f" ({st['detail']})"
+                        display += f" ({_french_status_detail(st['detail'])})"
 
                 platform_label = _get_platform_label(ch_name)
 
@@ -3278,7 +3327,7 @@ def main_gui(config):
                         _notified_live.add(ch_name)
                         sounds.play("live")
                         if notifications_enabled:
-                            send_notification("Stream Recording", f"Now recording: {ch_name}",
+                            send_notification("Capture du direct", f"Capture en cours : {ch_name}",
                                               category="recording", channel=ch_name)
                 elif "remuxing" in curr or "pending" in curr:
                     tag = "remuxing"
@@ -3288,14 +3337,14 @@ def main_gui(config):
                     tag = "error"
                     sounds.play("problem", f"{ch_name}:{display}")
                     if notifications_enabled:
-                        send_notification("Recording Error", f"{ch_name}: {display}",
+                        send_notification("Erreur de capture", f"{ch_name} : {display}",
                                           category="error", channel=ch_name, detail=display)
                 elif "completed" in curr:
                     tag = "completed"
                     _notified_live.discard(ch_name)
                     if notifications_enabled and ch_name not in _notified_complete:
                         _notified_complete.add(ch_name)
-                        send_notification("Recording Complete", f"{ch_name}: {st.get('detail', '')}",
+                        send_notification("Capture terminée", f"{ch_name} : {_french_status_detail(st.get('detail', ''))}",
                                           category="complete", channel=ch_name)
                 elif "offline" in curr:
                     tag = "offline"
@@ -3358,26 +3407,26 @@ def main_gui(config):
         if _stop_in_progress[0]:
             logging.info("Start ignored — stop is still finishing")
             if not interactive:
-                raise _control.ControlError("The last stop is still finishing; try again shortly.", "busy")
+                raise _control.ControlError("L’arrêt précédent n’est pas terminé ; réessayez dans un instant.", "busy")
             return
         enabled = get_enabled_channels()
         if not enabled:
             if not interactive:
-                raise _control.ControlError("Enable at least one channel first.", "conflict")
-            _dialogs.show_warning(root, "No channels", "Enable at least one channel (click the checkbox).")
+                raise _control.ControlError("Activez au moins un créateur.", "conflict")
+            _dialogs.show_warning(root, "Aucun créateur", "Activez au moins un créateur (cochez sa case).")
             return
         if recorder and recorder.is_running:
             if not interactive:
-                raise _control.ControlError("Recording is already running.", "conflict")
-            _dialogs.show_info(root, "Already running", "Recording is active.")
+                raise _control.ControlError("Une capture est déjà en cours.", "conflict")
+            _dialogs.show_info(root, "Déjà en cours", "Une capture est en cours.")
             return
 
         # Warn about large number of concurrent recordings
         if len(enabled) >= 15 and interactive:
-            if not _dialogs.ask_yes_no(root, "High Channel Count",
-                    f"You're about to monitor {len(enabled)} channels simultaneously.\n\n"
-                    "This may strain your CPU, RAM, and disk I/O. Each channel spawns "
-                    "its own process.\n\nContinue?"):
+            if not _dialogs.ask_yes_no(root, "Nombre élevé de créateurs",
+                    f"Vous êtes sur le point de surveiller {len(enabled)} créateurs simultanément.\n\n"
+                    "Cela peut fortement solliciter le processeur, la mémoire et le disque. Chaque créateur lance "
+                    "son propre processus.\n\nContinuer ?"):
                 return
 
         # Pre-flight checks — warn about channels that can't be recorded
@@ -3387,25 +3436,25 @@ def main_gui(config):
 
         if twitch_channels and not HAS_STREAMLINK:
             names = ", ".join(twitch_channels[:3])
-            issues.append(f"Twitch channels ({names}) require streamlink, which is not installed.")
+            issues.append(f"Les créateurs Twitch ({names}) nécessitent streamlink, qui n’est pas installé.")
 
         if ytdlp_channels and not HAS_YTDLP:
             names = ", ".join(ytdlp_channels[:3])
-            issues.append(f"Kick/YouTube/custom channels ({names}) require yt-dlp, which is not installed.")
+            issues.append(f"Les créateurs Kick, YouTube ou personnalisés ({names}) nécessitent yt-dlp, qui n’est pas installé.")
 
         if not _deps.HAS_FFMPEG:
-            issues.append("ffmpeg is not installed — recordings cannot be remuxed to MP4.")
+            issues.append("ffmpeg n’est pas installé : les captures ne peuvent pas être converties en MP4.")
 
         if issues and not interactive:
             for issue in issues:
                 logging.warning(f"Start (control): {issue}")
         elif issues:
-            msg = "The following issues may prevent recording:\n\n" + "\n\n".join(issues) + "\n\nStart anyway?"
-            if not _dialogs.ask_yes_no(root, "Dependency Warning", msg):
+            msg = "Les problèmes suivants risquent d’empêcher la capture :\n\n" + "\n\n".join(issues) + "\n\nDémarrer quand même ?"
+            if not _dialogs.ask_yes_no(root, "Avertissement concernant les dépendances", msg):
                 return
 
         logging.info("=" * 60)
-        logging.info("Starting recording session...")
+        logging.info("Démarrage de la session de capture…")
         for ch in enabled:
             logging.info(f"  Channel: {ch}")
         disabled_count = len(channels) - len(enabled)
@@ -3425,7 +3474,7 @@ def main_gui(config):
         _notif_throttle.reset()
 
         if notifications_enabled:
-            send_notification("Recording Started", f"Monitoring {len(enabled)} channel(s)")
+            send_notification("Capture démarrée", f"Monitoring {len(enabled)} channel(s)")
         return "starting"
 
     def stop_recording():
@@ -3485,7 +3534,7 @@ def main_gui(config):
             _notified_complete.clear()
             _notif_throttle.reset()
             if notifications_enabled:
-                send_notification("Recording Stopped", "All recordings have been stopped.")
+                send_notification("Capture arrêtée", "Toutes les captures ont été arrêtées.")
 
         def _bg():
             try:
@@ -3615,11 +3664,11 @@ def main_gui(config):
             root.after(0, stop_recording)
 
         menu = pystray.Menu(
-            pystray.MenuItem("Show Window", show_window, default=True),
-            pystray.MenuItem("Hide to Tray", hide_to_tray),
+            pystray.MenuItem("Afficher la fenêtre", show_window, default=True),
+            pystray.MenuItem("Réduire dans la zone de notification", hide_to_tray),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Start Recording", tray_start),
-            pystray.MenuItem("Stop Recording", tray_stop),
+            pystray.MenuItem("Démarrer la capture", tray_start),
+            pystray.MenuItem("Arrêter la capture", tray_stop),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", quit_app),
         )

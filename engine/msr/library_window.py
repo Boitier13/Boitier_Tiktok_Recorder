@@ -38,20 +38,20 @@ def _dash(n: int, text: str) -> str:
 
 # (id, heading, width, anchor, sort key, cell text)
 COLUMNS = (
-    ("name", "Channel", 150, "w", lambda c: c.name.lower(), lambda c: c.name),
-    ("site", "Site", 80, "w", lambda c: lib.platform_label(c.platform).lower(),
+    ("name", "Créateur", 150, "w", lambda c: c.name.lower(), lambda c: c.name),
+    ("site", "Plateforme", 80, "w", lambda c: lib.platform_label(c.platform).lower(),
      lambda c: lib.platform_label(c.platform)),
-    ("size", "Recordings", 100, "e", lambda c: c.recordings_bytes, lambda c: _dash(c.recordings_bytes, lib.fmt_size(c.recordings_bytes))),
-    ("files", "Files", 65, "e", lambda c: c.rec_files + c.raw_files, lambda c: _dash(c.rec_files + c.raw_files, f"{c.rec_files + c.raw_files:,}")),
-    ("raw", "Raw .ts", 75, "e", lambda c: c.raw_bytes, lambda c: _dash(c.raw_bytes, lib.fmt_size(c.raw_bytes))),
-    ("pending", "Pending delete", 105, "e", lambda c: c.pending_bytes, lambda c: _dash(c.pending_bytes, lib.fmt_size(c.pending_bytes))),
-    ("clips", "Clips + shots", 100, "e", lambda c: c.clip_bytes + c.shot_bytes,
+    ("size", "Vidéos", 100, "e", lambda c: c.recordings_bytes, lambda c: _dash(c.recordings_bytes, lib.fmt_size(c.recordings_bytes))),
+    ("files", "Fichiers", 65, "e", lambda c: c.rec_files + c.raw_files, lambda c: _dash(c.rec_files + c.raw_files, f"{c.rec_files + c.raw_files:,}")),
+    ("raw", "Fichiers bruts .ts", 75, "e", lambda c: c.raw_bytes, lambda c: _dash(c.raw_bytes, lib.fmt_size(c.raw_bytes))),
+    ("pending", "Éléments récupérables", 105, "e", lambda c: c.pending_bytes, lambda c: _dash(c.pending_bytes, lib.fmt_size(c.pending_bytes))),
+    ("clips", "Clips et captures d’écran", 100, "e", lambda c: c.clip_bytes + c.shot_bytes,
      lambda c: _dash(c.clip_bytes + c.shot_bytes, lib.fmt_size(c.clip_bytes + c.shot_bytes))),
-    ("hours", "Hours", 70, "e", lambda c: -1 if c.seconds is None else c.seconds,
+    ("hours", "Heures", 70, "e", lambda c: -1 if c.seconds is None else c.seconds,
      lambda c: "" if c.seconds is None else lib.fmt_hours(c.seconds)),
-    ("last", "Last", 90, "w", lambda c: c.last or 0, lambda c: lib._day(c.last) if c.last else "-"),
-    ("roster", "In roster", 75, "w", lambda c: {True: 2, False: 1}.get(c.in_roster, 0),
-     lambda c: {True: "yes", False: "no"}.get(c.in_roster, "")),
+    ("last", "Dernière capture", 90, "w", lambda c: c.last or 0, lambda c: lib._day(c.last) if c.last else "-"),
+    ("roster", "Dans la liste", 75, "w", lambda c: {True: 2, False: 1}.get(c.in_roster, 0),
+     lambda c: {True: "oui", False: "non"}.get(c.in_roster, "")),
 )
 _COLUMN = {c[0]: c for c in COLUMNS}
 
@@ -86,14 +86,14 @@ def donut_rows(stats: lib.LibraryStats):
     for i, (p, b, f) in enumerate(shown):
         label = lib.platform_label(p)
         pct = b * 100 / total
-        rows.append((label, b, f"{label}  {lib.fmt_size(b)}  ({pct:.0f}%)",
-                     f"{label}: {lib.fmt_size(b)} in {f:,} files ({pct:.1f}% of recordings). Click to list its channels",
+        rows.append((label, b, f"{label}  {lib.fmt_size(b)}  ({pct:.0f} %)",
+                     f"{label} : {lib.fmt_size(b)} dans {f:,} fichiers ({pct:.1f} % des vidéos). Cliquez pour afficher les créateurs",
                      charts.color_for(p, i), p))
     if rest:
         b = sum(r[1] for r in rest)
         f = sum(r[2] for r in rest)
-        rows.append(("Other", b, f"Other sites  {lib.fmt_size(b)}  ({b * 100 / total:.0f}%)",
-                     f"{len(rest)} more sites: {lib.fmt_size(b)} in {f:,} files", charts.color_for("other")))
+        rows.append(("Autres", b, f"Autres plateformes  {lib.fmt_size(b)}  ({b * 100 / total:.0f}%)",
+                     f"{len(rest)} autres plateformes : {lib.fmt_size(b)} dans {f:,} fichiers", charts.color_for("other")))
     return rows
 
 
@@ -102,7 +102,7 @@ def bar_rows(stats: lib.LibraryStats, count: int = TOP_CHANNELS):
     rows = []
     for ch in [c for c in stats.ranked_channels() if c.recordings_bytes > 0][:count]:
         label = lib.platform_label(ch.platform)
-        tip = (f"{ch.name} ({label}): {lib.fmt_size(ch.recordings_bytes)} in {ch.rec_files + ch.raw_files:,} files, "
+        tip = (f"{ch.name} ({label}) : {lib.fmt_size(ch.recordings_bytes)} dans {ch.rec_files + ch.raw_files:,} fichiers, "
                f"{ch.recordings_bytes * 100 / total:.1f}% of recordings")
         if ch.last:
             tip += f"; last {lib._day(ch.last)}"
@@ -193,7 +193,7 @@ def month_rows(stats: lib.LibraryStats):
     for key in charts.month_axis(stats.months):
         b, f = stats.months.get(key, (0, 0))
         out.append((f"{key[2:4]}-{key[5:]}", b,
-                    f"{key}: {lib.fmt_size(b)} in {f:,} recordings. Click to list them" if f else f"{key}: nothing recorded",
+                    f"{key} : {lib.fmt_size(b)} dans {f:,} vidéos. Cliquez pour les afficher" if f else f"{key} : aucune capture",
                     key if f else None))
     return out
 
@@ -226,18 +226,18 @@ class LibraryPanel:
 
         top = ttk.Frame(frame)
         top.pack(fill="x")
-        self.status = ttk.Label(top, text="Not scanned yet.")
+        self.status = ttk.Label(top, text="Pas encore analysé.")
         self.status.pack(side="left")
-        self.undo_btn = ttk.Button(top, text="Undo", command=lambda: self.mgr and self.mgr.undo_last())
+        self.undo_btn = ttk.Button(top, text="Annuler la dernière action", command=lambda: self.mgr and self.mgr.undo_last())
 
         bar = self.toolbar = ttk.Frame(frame)
         bar.pack(fill="x", pady=(8, 6))
-        self.rescan_btn = ttk.Button(bar, text="Rescan", command=self.start_scan)
-        self.cancel_btn = ttk.Button(bar, text="Cancel", command=self.cancel)
-        self.hours_btn = ttk.Button(bar, text="Count hours", command=lambda: self.start_hours(False))
-        self.copy_btn = ttk.Button(bar, text="Copy summary", command=self.copy_summary)
-        self.add_folder_btn = ttk.Button(bar, text="Add folder\u2026", command=self.add_extra_folder)
-        self.remove_folder_btn = ttk.Button(bar, text="Remove folder", command=self.remove_extra_folder)
+        self.rescan_btn = ttk.Button(bar, text="Relancer l’analyse", command=self.start_scan)
+        self.cancel_btn = ttk.Button(bar, text="Annuler", command=self.cancel)
+        self.hours_btn = ttk.Button(bar, text="Calculer les durées", command=lambda: self.start_hours(False))
+        self.copy_btn = ttk.Button(bar, text="Copier le résumé", command=self.copy_summary)
+        self.add_folder_btn = ttk.Button(bar, text="Ajouter un dossier\u2026", command=self.add_extra_folder)
+        self.remove_folder_btn = ttk.Button(bar, text="Retirer un dossier", command=self.remove_extra_folder)
         self._toolbar_buttons = (self.rescan_btn, self.cancel_btn, self.hours_btn, self.copy_btn,
                                  self.add_folder_btn, self.remove_folder_btn)
         self._toolbar_sig = None
@@ -261,20 +261,20 @@ class LibraryPanel:
         self.overview_scroll = ScrollArea(self.tabs, padding=8, stretch=True, passive=True)
         overview = self.overview_scroll.body
         channels = ttk.Frame(self.tabs, padding=8)
-        self.tabs.add(self.overview_scroll.frame, text="  Overview  ")
-        self.tabs.add(channels, text="  Channels  ")
+        self.tabs.add(self.overview_scroll.frame, text="  Vue d’ensemble  ")
+        self.tabs.add(channels, text="  Créateurs  ")
 
         overview.columnconfigure(1, weight=1)
         overview.rowconfigure(1, weight=1)
-        donut_box = ttk.LabelFrame(overview, text="Share by site", padding=6)
+        donut_box = ttk.LabelFrame(overview, text="Répartition par plateforme", padding=6)
         donut_box.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
         self.donut = charts.DonutChart(donut_box, height=190, width=380)
         self.donut.pack(fill="both", expand=True)
-        bars_box = ttk.LabelFrame(overview, text="Biggest channels", padding=6)
+        bars_box = ttk.LabelFrame(overview, text="Créateurs avec le plus de vidéos", padding=6)
         bars_box.grid(row=0, column=1, sticky="nsew")
         self.bars = charts.BarChart(bars_box, width=520)
         self.bars.pack(fill="both", expand=True)
-        month_box = ttk.LabelFrame(overview, text="Recorded per month (finished files)", padding=6)
+        month_box = ttk.LabelFrame(overview, text="Vidéos finalisées par mois", padding=6)
         month_box.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
         self.months = charts.ColumnChart(month_box, height=150, width=900)
         self.months.pack(fill="both", expand=True)
@@ -287,7 +287,7 @@ class LibraryPanel:
             self.tabs, self, opener=opener or (ctx.opener if ctx else None),
             revealer=revealer or (ctx.revealer if ctx else None),
             clip_editor=clip_editor or (ctx.clip_editor if ctx else None))
-        self.tabs.add(self.recordings.frame, text="  Recordings  ")
+        self.tabs.add(self.recordings.frame, text="  Vidéos  ")
         self.donut.on_click = self.donut.on_double = self.pick_site
         self.bars.on_click = self.pick_channel
         self.bars.on_double = lambda key: (self.pick_channel(key), self.open_selected_folder())
@@ -331,30 +331,30 @@ class LibraryPanel:
     def _build_channels_tab(self, tab) -> None:
         tool = ttk.Frame(tab)
         tool.pack(fill="x")
-        ttk.Label(tool, text="Filter:").pack(side="left")
+        ttk.Label(tool, text="Filtrer :").pack(side="left")
         self.filter_var = tk.StringVar()
         entry = ttk.Entry(tool, textvariable=self.filter_var, width=24)
         entry.pack(side="left", padx=(4, 12))
         self.filter_var.trace_add("write", lambda *_: self._fill_tree())
         self.orphan_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(tool, text="Only channels not in my roster", variable=self.orphan_var,
+        ttk.Checkbutton(tool, text="Créateurs absents de ma liste", variable=self.orphan_var,
                         command=self._fill_tree).pack(side="left")
         self.site_btn = ttk.Button(tool, text="", command=lambda: self.pick_site(None))
         bar = ttk.Frame(tab)
         bar.pack(fill="x", pady=(6, 4))
-        self.open_btn = ttk.Button(bar, text="Open folder", command=self.open_selected_folder)
+        self.open_btn = ttk.Button(bar, text="Ouvrir le dossier", command=self.open_selected_folder)
         self.open_btn.pack(side="left")
-        self.recs_btn = ttk.Button(bar, text="Recordings", command=self.show_selected_recordings)
+        self.recs_btn = ttk.Button(bar, text="Vidéos", command=self.show_selected_recordings)
         self.recs_btn.pack(side="left", padx=(6, 0))
-        self.files_btn = ttk.Button(bar, text="Files\u2026", command=self.show_selected_files)
-        self.delete_btn = ttk.Button(bar, text="Delete\u2026", command=lambda: self.delete_selected())
+        self.files_btn = ttk.Button(bar, text="Fichiers\u2026", command=self.show_selected_files)
+        self.delete_btn = ttk.Button(bar, text="Supprimer\u2026", command=lambda: self.delete_selected())
         if self.mgr_enabled:
             self.files_btn.pack(side="left", padx=(6, 0))
             self.delete_btn.pack(side="left", padx=(6, 0))
-            hint = ("Click a heading to sort. Select channels and press Delete\u2026 (or right-click, or the Delete key): "
-                    "you always get a preview first, and the default is a reversible move to PendingDeletion.")
+            hint = ("Cliquez sur un en-tête pour trier. Sélectionnez des créateurs et appuyez sur Supprimer\u2026 (ou faites un clic droit, ou appuyez sur la touche Suppr) : "
+                    "un aperçu est toujours affiché et l’action par défaut déplace les fichiers vers les éléments récupérables.")
         else:
-            hint = "Click a heading to sort. This list only shows sizes; use Open folder to clean up in Explorer."
+            hint = "Cliquez sur un en-tête pour trier. Cette liste affiche uniquement les tailles ; utilisez Ouvrir le dossier pour gérer les fichiers dans l’Explorateur."
         ttk.Label(tab, style="Muted.TLabel", justify="left", wraplength=820, text=hint).pack(anchor="w", pady=(0, 4))
         box = ttk.Frame(tab)
         box.pack(fill="both", expand=True)
@@ -371,17 +371,17 @@ class LibraryPanel:
         self.tree.bind("<Control-a>", lambda _e: (self.tree.selection_set(self.tree.get_children()), "break")[1])
         bind_context_menu(self.tree, self._channel_menu)
         self.menu = tk.Menu(self.tree, tearoff=0)
-        self.menu.add_command(label="Open folder", command=self.open_selected_folder)
-        self.menu.add_command(label="Show recordings", command=self.show_selected_recordings)
-        self.menu.add_command(label="Copy summary of selection", command=self.copy_selection_summary)
+        self.menu.add_command(label="Ouvrir le dossier", command=self.open_selected_folder)
+        self.menu.add_command(label="Afficher les vidéos", command=self.show_selected_recordings)
+        self.menu.add_command(label="Copier le résumé de la sélection", command=self.copy_selection_summary)
         if self.mgr_enabled:
             self.tree.bind("<Delete>", lambda _e: (self.delete_selected(), "break")[1])
-            self.menu.insert_command(1, label="Show files\u2026", command=self.show_selected_files)
+            self.menu.insert_command(1, label="Afficher les fichiers\u2026", command=self.show_selected_files)
             self.menu.add_separator()
-            self.menu.add_command(label="Delete content\u2026", command=lambda: self.delete_selected())
-            self.menu.add_command(label="Move to PendingDeletion\u2026",
+            self.menu.add_command(label="Supprimer le contenu\u2026", command=lambda: self.delete_selected())
+            self.menu.add_command(label="Déplacer vers les éléments récupérables\u2026",
                                   command=lambda: self.delete_selected(act.ACTION_PENDING))
-            self.menu.add_command(label="Delete permanently\u2026",
+            self.menu.add_command(label="Supprimer définitivement\u2026",
                                   command=lambda: self.delete_selected(act.ACTION_PERMANENT))
 
     @property
@@ -484,7 +484,7 @@ class LibraryPanel:
                  for c in picked]
         self.win.clipboard_clear()
         self.win.clipboard_append("\n".join(lines))
-        self.status.configure(text=f"Copied a summary of {len(picked)} channel(s)")
+        self.status.configure(text=f"Résumé copié pour {len(picked)} créateur(s)")
 
     # ------------------------------------------------------------ actions
     @property
@@ -520,13 +520,13 @@ class LibraryPanel:
 
     def _store_extras(self, dirs: tuple[str, ...]) -> None:
         if self.save_extra_dirs is None:
-            dialogs.show_info(self.toplevel, "Library folders",
-                              "Extra folders are saved from the running app.")
+            dialogs.show_info(self.toplevel, "Dossiers de bibliothèque",
+                              "Les dossiers supplémentaires sont enregistrés depuis l’application en cours d’exécution.")
             return
         try:
             self.save_extra_dirs(lib.join_extra_dirs(dirs))
         except Exception as exc:
-            dialogs.show_error(self.toplevel, "Library folders", str(exc))
+            dialogs.show_error(self.toplevel, "Dossiers de bibliothèque", str(exc))
             return
         self.start_scan()
 
@@ -534,29 +534,29 @@ class LibraryPanel:
         """Ask for a folder outside the layout and remember it in [Library] extra_dirs."""
         current = tuple(self.get_roots().extra_dirs)
         initial = current[-1] if current else (self.get_roots().streams_dir or "")
-        got = filedialog.askdirectory(parent=self.toplevel, title="Add library folder",
+        got = filedialog.askdirectory(parent=self.toplevel, title="Ajouter un dossier à la bibliothèque",
                                       initialdir=initial or None)
         if not got:
             return
         added = lib.add_extra_dir(current, got)
         if isinstance(added, str):
-            dialogs.show_info(self.toplevel, "Library folders", added)
+            dialogs.show_info(self.toplevel, "Dossiers de bibliothèque", added)
             return
         if not os.path.isdir(added[-1]):
-            dialogs.show_error(self.toplevel, "Library folders", "That folder is not there.")
+            dialogs.show_error(self.toplevel, "Dossiers de bibliothèque", "Ce dossier est introuvable.")
             return
         self._store_extras(added)
 
     def remove_extra_folder(self) -> None:
         current = tuple(self.get_roots().extra_dirs)
         if not current:
-            dialogs.show_info(self.toplevel, "Library folders",
-                              "No extra folders yet. Add folder\u2026 includes one in the next scan.")
+            dialogs.show_info(self.toplevel, "Dossiers de bibliothèque",
+                              "Aucun dossier supplémentaire. Ajoutez-en un avec Ajouter un dossier\u2026 pour l’inclure à la prochaine analyse.")
             return
         if len(current) == 1:
-            if dialogs.ask_yes_no(self.toplevel, "Library folders",
-                                  f"Stop scanning this folder?\n\n{current[0]}\n\n"
-                                  "Nothing in it is deleted."):
+            if dialogs.ask_yes_no(self.toplevel, "Dossiers de bibliothèque",
+                                  f"Ne plus analyser ce dossier ?\n\n{current[0]}\n\n"
+                                  "Aucun fichier ne sera supprimé."):
                 self._store_extras(())
             return
         picked = self._pick_extra(current)
@@ -564,9 +564,9 @@ class LibraryPanel:
             self._store_extras(lib.remove_extra_dir(current, picked))
 
     def _pick_extra(self, dirs: tuple[str, ...]) -> str | None:
-        win, frame = dialogs.new_dialog(self.toplevel, "Remove library folder")
-        ttk.Label(frame, text="Which extra folder should the Library stop scanning?\n"
-                  "The files stay where they are.").pack(anchor="w")
+        win, frame = dialogs.new_dialog(self.toplevel, "Retirer un dossier de la bibliothèque")
+        ttk.Label(frame, text="Quel dossier supplémentaire ne doit plus être analysé par la bibliothèque ?\n"
+                  "Les fichiers restent à leur emplacement.").pack(anchor="w")
         tree = ttk.Treeview(frame, show="tree", height=min(8, len(dirs)), selectmode="browse")
         tree.pack(fill="x", pady=(8, 0))
         for index, folder in enumerate(dirs):
@@ -618,12 +618,12 @@ class LibraryPanel:
             return
         job = lib.ScanJob(self.get_roots(), self.out, cache_path=self.cache_path, ffprobe=self.ffprobe,
                           hours_for=self.stats, probe_missing=probe)
-        self._start(job, "Counting hours..." if not probe else "Reading lengths with ffprobe...")
+        self._start(job, "Calcul des durées…" if not probe else "Lecture des durées avec ffprobe…")
 
     def cancel(self) -> None:
         if self.job is not None:
             self.job.cancel()
-            self.status.configure(text="Cancelling...")
+            self.status.configure(text="Annulation…")
 
     def shutdown(self) -> None:
         """Stop the scan and the polling (the window is closing)."""
@@ -649,7 +649,7 @@ class LibraryPanel:
             return
         self.win.clipboard_clear()
         self.win.clipboard_append(lib.summary_text(self.stats))
-        self.status.configure(text="Summary copied to the clipboard")
+        self.status.configure(text="Résumé copié dans le presse-papiers")
 
     def open_selected_folder(self) -> None:
         channel = self.selected_channel()
@@ -659,7 +659,7 @@ class LibraryPanel:
         try:
             self.opener(folder)
         except Exception as exc:
-            dialogs.show_error(self.toplevel, "Open folder", f"Could not open the folder: {exc}")
+            dialogs.show_error(self.toplevel, "Ouvrir le dossier", f"Impossible d’ouvrir le dossier : {exc}")
 
     def refresh_theme(self) -> None:
         if not self.exists():
@@ -690,7 +690,7 @@ class LibraryPanel:
                 if kind == "progress":
                     _k, files, size, label = msg
                     if label != "done":
-                        self.status.configure(text=f"Scanning {label}: {files:,} files, {lib.fmt_size(size)}")
+                        self.status.configure(text=f"Analyse de {label} : {files:,} fichiers, {lib.fmt_size(size)}")
                 elif kind == "done":
                     self.stats = msg[1]
                     self.render()
@@ -701,21 +701,21 @@ class LibraryPanel:
                         text, self._result_text = f"{self._result_text}  \u00b7  rescanned", ""
                     self.status.configure(text=text)
                 elif kind == "act_progress":
-                    self.status.configure(text=f"Working: {msg[1]:,} of {msg[2]:,} done ({lib.fmt_size(msg[3])})")
+                    self.status.configure(text=f"Analyse en cours : {msg[1]:,} sur {msg[2]:,} terminés ({lib.fmt_size(msg[3])})")
                 elif kind == "act_done":
                     finished = True
                     if self.mgr is not None:
                         self.mgr.finished(msg[1])
                 elif kind == "hours_progress":
-                    self.status.configure(text=f"Counting hours: {msg[1]:,} of {msg[2]:,} recordings")
+                    self.status.configure(text=f"Calcul des durées : {msg[1]:,} sur {msg[2]:,} vidéos")
                 elif kind == "hours_done":
                     self.render()
                     finished = True
                     self._after_hours(msg[2], msg[3])
                 elif kind == "error":
                     finished = True
-                    self.status.configure(text="Scan failed")
-                    dialogs.show_error(self.toplevel, "Library", f"The scan failed: {msg[1]}")
+                    self.status.configure(text="Échec de l’analyse")
+                    dialogs.show_error(self.toplevel, "Bibliothèque", f"Échec de l’analyse : {msg[1]}")
         except queue.Empty:
             pass
         if self.job is not None and not self.job.is_alive() and self.out.empty():
@@ -735,14 +735,14 @@ class LibraryPanel:
             self._schedule_poll()
 
     def _after_hours(self, known: int, missing: int) -> None:
-        self.status.configure(text=f"Recorded time counted for {known:,} of {known + missing:,} recordings")
+        self.status.configure(text=f"Durée calculée pour {known:,} vidéo(s) sur {known + missing:,}")
         if missing and self.ffprobe and not self._probe_offered and not self.stats.cancelled:
             self._probe_offered = True
             if dialogs.ask_yes_no(
-                    self.toplevel, "Count hours",
-                    f"{missing:,} recordings have no length saved by MSR.\n\nRead them with ffprobe? It looks at "
-                    "one file at a time, gently, and can take a few minutes for a big library. You can cancel "
-                    "any time and the results are remembered."):
+                    self.toplevel, "Calculer les durées",
+                    f"Aucune durée enregistrée par MSR pour {missing:,} vidéo(s).\n\nLes lire avec ffprobe ? L’outil les examine "
+                    "une par une, sans solliciter excessivement le système. Cela peut prendre quelques minutes pour une grande bibliothèque. Vous pouvez annuler "
+                    "à tout moment ; les résultats obtenus seront conservés."):
                 self.win.after(50, lambda: self.start_hours(True))
 
     # ------------------------------------------------------------ drawing

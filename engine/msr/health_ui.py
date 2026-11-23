@@ -54,12 +54,12 @@ class HealthController:
         self._next = None
         self._dialog = None
         self._stopped = False
-        self.label = ttk.Label(parent, text="\u25cf Health: checking soon", style="Muted.TLabel", cursor="hand2")
+        self.label = ttk.Label(parent, text="\u25cf État : prochaine vérification bientôt", style="Muted.TLabel", cursor="hand2")
         self.label.bind("<Button-1>", lambda _e: self.show_details())
         if tooltip is not None:
-            tooltip(self.label, "Health checks: recording tools, recordings folder and free space, Twitch sign-in;\n"
-                                "every few minutes: free space, stalled recordings, sites whose checks keep failing.\n"
-                                "Click for details. Interval: Options > Other > Health check every (min).")
+            tooltip(self.label, "Vérifications de santé : outils de capture, dossier et espace disque, connexion Twitch ;\n"
+                                "toutes les quelques minutes : espace libre, captures bloquées, plateformes en échec.\n"
+                                "Cliquez pour afficher les détails. Intervalle : Options > Santé > Vérifier toutes les (min).")
         self._ids: dict[str, str] = {}
         if autostart:
             self._ids["start"] = self.parent.after(STARTUP_DELAY_MS, lambda: self.run(startup=True))
@@ -92,11 +92,11 @@ class HealthController:
                          + health.stale_issues(versions, self.get_state()))
             periodic = self.monitor.periodic(dict(self.get_status() or {}), time.time(), folder, free, min_gb)
             if self.push_failed():
-                periodic.append(health.Issue(health.WARN, "twitch", "Twitch sign-in is no longer valid: "
-                                                                   "reconnect it in Options (timed checks still run)"))
+                periodic.append(health.Issue(health.WARN, "twitch", "La connexion Twitch n’est plus valide : reconnectez-vous dans les options "
+                                                                   "(les vérifications périodiques continuent)"))
             self.q.put((first, periodic))
         except Exception as e:  # a health check must never take the app down
-            self.q.put((None, [health.Issue(health.WARN, "health", f"Health check failed: {e}")]))
+            self.q.put((None, [health.Issue(health.WARN, "health", f"Échec de la vérification de santé : {e}")]))
 
     def run(self, startup: bool = False) -> None:
         if self._busy:
@@ -165,10 +165,10 @@ class HealthController:
         self._body.pack(fill="x")
         row = ttk.Frame(frame)
         row.pack(fill="x", pady=(10, 0))
-        ttk.Button(row, text="Close", command=win.destroy).pack(side="right")
-        ttk.Button(row, text="Check now", command=self.check_now).pack(side="right", padx=(0, 6))
+        ttk.Button(row, text="Fermer", command=win.destroy).pack(side="right")
+        ttk.Button(row, text="Vérifier maintenant", command=self.check_now).pack(side="right", padx=(0, 6))
         if self.open_updates is not None:
-            ttk.Button(row, text="Updates\u2026", command=self.open_updates).pack(side="right", padx=(0, 6))
+            ttk.Button(row, text="Mises à jour\u2026", command=self.open_updates).pack(side="right", padx=(0, 6))
         win.bind("<Escape>", lambda _e: win.destroy())
         self._fill_dialog()
         dialogs.present(win, self.parent)
@@ -178,16 +178,16 @@ class HealthController:
             w.destroy()
         report = self.report
         if report is None:
-            ttk.Label(self._body, text="Not checked yet (the first check runs shortly after start).").pack(anchor="w")
+            ttk.Label(self._body, text="Pas encore vérifié (la première vérification aura lieu peu après le démarrage).").pack(anchor="w")
             return
         if not report.issues:
-            ttk.Label(self._body, text="\u2714 Everything checked is fine.", style="Ok.TLabel").pack(anchor="w")
+            ttk.Label(self._body, text="\u2714 Tout est en ordre.", style="Ok.TLabel").pack(anchor="w")
         for issue in report.issues:
             mark = "\u2716" if issue.level == health.ERROR else "\u26a0"
             ttk.Label(self._body, text=f"{mark} {issue.text}", style=STYLE[issue.level], wraplength=520,
                       justify="left").pack(anchor="w", pady=1)
         minutes = interval_minutes(self.config)
-        every = f"every {minutes:g} min" if minutes else "periodic checks off"
+        every = f"toutes les {minutes:g} min" if minutes else "vérifications périodiques désactivées"
         ttk.Label(self._body, style="Muted.TLabel",
-                  text=f"Checked {time.strftime('%H:%M', time.localtime(report.checked_at))}; {every}. "
-                       "Updates never install on their own.").pack(anchor="w", pady=(6, 0))
+                  text=f"Vérifié à {time.strftime('%H:%M', time.localtime(report.checked_at))}; {every}. "
+                       "Les mises à jour ne s’installent jamais automatiquement.").pack(anchor="w", pady=(6, 0))

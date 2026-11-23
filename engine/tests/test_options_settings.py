@@ -44,12 +44,12 @@ class Case(unittest.TestCase):
                 if c.winfo_class() == "TButton":
                     yield c
                 yield from buttons(c)
-        btn = next(b for b in buttons(p.body) if b.cget("text") == "Updates\u2026")
+        btn = next(b for b in buttons(p.body) if b.cget("text") == "Mises à jour\u2026")
         btn.invoke()
         self.assertEqual(opened, [1])
         self.assertIn(("Health", "check_minutes"), p.vars)
         self.assertEqual(control.validate_setting("Health", "check_minutes", "0"), "0.0")
-        self.assertFalse(any(b.cget("text") == "Updates\u2026" for b in buttons(self.make().body)))
+        self.assertFalse(any(b.cget("text") == "Mises à jour\u2026" for b in buttons(self.make().body)))
 
     def pump(self, until, timeout=5):
         end = time.monotonic() + timeout

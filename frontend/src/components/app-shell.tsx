@@ -75,9 +75,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <div className="hidden p-3 md:block">
             <div className="rounded-lg border border-sidebar-border bg-surface p-3 text-xs">
-              <p className="font-medium text-foreground">Application locale</p>
+              <p className="font-medium text-foreground">Application sur cet ordinateur</p>
               <p className="mt-1 text-muted-foreground">
-                Réduire garde la fenêtre dans la barre des tâches ; fermer la masque dans le tray.
+                Réduire garde la fenêtre dans la barre des tâches ; fermer la masque dans la zone de notification.
                 Un nouveau double-clic sur l’EXE la restaure. Le démarrage automatique se règle dans
                 Paramètres sous Windows.
               </p>

@@ -118,7 +118,7 @@ def driver(self):
         status_tab = next(i for i in nb.tabs() if "Status" in str(nb.tab(i, "text")))
         other_tab = next(i for i in nb.tabs() if i != status_tab)
         nb.select(status_tab)
-        start = next(w for w in walk(self) if w.winfo_class() == "Button" and "Start Recording" in str(w.cget("text")))
+        start = next(w for w in walk(self) if w.winfo_class() == "Button" and "Démarrer la capture" in str(w.cget("text")))
         start.invoke()
         # 1. the timer: a tile appears and keeps being refreshed
         wait_for(tile_label)

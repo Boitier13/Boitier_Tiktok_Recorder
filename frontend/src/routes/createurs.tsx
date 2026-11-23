@@ -210,7 +210,7 @@ function CreatorsPage() {
                     <p className="truncate text-xs text-muted-foreground">@{c.username}</p>
                   </div>
                   <div className="hidden w-44 text-xs text-muted-foreground md:block">
-                    <p className="uppercase tracking-wider">Dernier live</p>
+                    <p className="uppercase tracking-wider">Dernier direct</p>
                     <p className="text-foreground">{c.lastLive}</p>
                     {c.detail && (
                       <p className="mt-1 line-clamp-2" title={c.detail}>
@@ -223,7 +223,7 @@ function CreatorsPage() {
                     variant="ghost"
                     size="sm"
                     disabled={!connected || !monitoringActive || !c.enabled}
-                    title="Demande au worker TikTok une vérification immédiate"
+                    title="Demander au moteur une vérification immédiate sur TikTok"
                     onClick={async () => {
                       try {
                         await checkCreator(c.id);

@@ -25,7 +25,7 @@ STALL_SECONDS = 300          # a recording file that has not grown for this long
 STALE_DAYS = 14              # yt-dlp / streamlink older than this, with a newer one out: note
 SITE_STREAK = 2              # periodic checks in a row with every channel of a site failing
 SITE_STREAK_SINGLE = 3       # ... when the site has only one channel (could be that channel)
-STORAGE_WORDS = ("disk space", "drive not available", "not writable")
+STORAGE_WORDS = ("disk space", "drive not available", "not writable", "espace disque", "disque indisponible", "non accessible")
 UPDATES = "updates"          # Issue.action: the Updates window can fix it
 
 
@@ -52,15 +52,15 @@ def summary(report: Report) -> str:
     """One line for the main window."""
     stamp = time.strftime("%H:%M", time.localtime(report.checked_at)) if report.checked_at else ""
     if not report.issues:
-        return "\u25cf Health OK" + (f" \u00b7 {stamp}" if stamp else "")
+        return "\u25cf État : OK" + (f" \u00b7 {stamp}" if stamp else "")
     n = len(report.issues)
-    word = "problem" if report.level == ERROR else "warning"
+    word = "problème" if report.level == ERROR else "avertissement"
     return f"\u25cf {n} {word}{'s' if n > 1 else ''}: {report.issues[0].text[:48]}" + ("\u2026" if n > 1 or len(report.issues[0].text) > 48 else "")
 
 
 def details(report: Report) -> str:
     if not report.issues:
-        return "Everything checked is fine."
+        return "Tous les éléments vérifiés fonctionnent correctement."
     marks = {ERROR: "\u2716", WARN: "\u26a0", OK: "\u2714"}
     return "\n".join(f"{marks.get(i.level, '-')} {i.text}" for i in report.issues)
 
@@ -74,9 +74,9 @@ def tool_issues(versions: dict) -> list[Issue]:
     out = []
     for name in TOOLS:
         if not versions.get(name):
-            hint = ("install ffmpeg and put it on PATH (or set it in Options)" if name == "ffmpeg"
-                    else "open Updates to install it")
-            out.append(Issue(ERROR, f"tool:{name}", f"{name} does not run: {hint}",
+            hint = ("installez ffmpeg et ajoutez-le au PATH (ou indiquez son chemin dans les options)" if name == "ffmpeg"
+                    else "ouvrez Mises à jour pour l’installer")
+            out.append(Issue(ERROR, f"tool:{name}", f"{name} ne fonctionne pas : {hint}",
                              "" if name == "ffmpeg" else UPDATES))
     return out
 
@@ -91,34 +91,34 @@ def check_tools(ffmpeg_path: str = "ffmpeg") -> dict:
 def probe_writable(folder: str) -> str | None:
     """None if a small temp file can be created and removed in folder, else the reason."""
     if not folder:
-        return "no recordings folder set"
+        return "aucun dossier de captures n’est défini"
     if not os.path.isdir(folder):
-        return "the recordings folder does not exist (it is created at the first recording)"
+        return "le dossier de captures n’existe pas (il sera créé lors de la première capture)"
     try:
         with tempfile.NamedTemporaryFile(dir=folder, prefix=".msr_health_", suffix=".tmp"):
             pass
         return None
     except OSError as e:
-        return f"cannot write there ({e.strerror or e})"
+        return f"impossible d’écrire à cet emplacement ({e.strerror or e})"
 
 
 def disk_issues(folder: str, free_gb: float | None, min_gb: float) -> list[Issue]:
     if free_gb is None:
         return []
     if min_gb > 0 and free_gb < min_gb:
-        return [Issue(ERROR, "disk", f"Only {free_gb:.1f} GB free on the recordings drive: new recordings "
-                                     f"wait until {min_gb:g} GB is free")]
+        return [Issue(ERROR, "disk", f"Il ne reste que {free_gb:.1f} Go sur le disque de captures : les nouvelles captures "
+                                     f"attendront qu’il reste {min_gb:g} Go libres")]
     warn_at = max(min_gb * 2, min_gb + 10) if min_gb > 0 else 10
     if free_gb < warn_at:
-        return [Issue(WARN, "disk", f"Recordings drive is getting full: {free_gb:.1f} GB free")]
+        return [Issue(WARN, "disk", f"Le disque de captures est presque plein : {free_gb:.1f} Go libres")]
     return []
 
 
 def folder_issues(folder: str, free_gb: float | None, min_gb: float,
                   probe: Callable[[str], str | None] = probe_writable) -> list[Issue]:
     why = probe(folder)
-    out = [Issue(WARN if "does not exist" in (why or "") else ERROR, "folder",
-                 f"Recordings folder {folder or '(none)'}: {why}")] if why else []
+    out = [Issue(WARN if not os.path.isdir(folder) else ERROR, "folder",
+                 f"Dossier de captures {folder or '(aucun)'} : {why}")] if why else []
     return out + disk_issues(folder, free_gb, min_gb)
 
 
@@ -139,8 +139,8 @@ def twitch_issue(token: dict | None, push_enabled: bool, validate: Callable[[dic
             except auth_error:
                 validate(fresh(force=True, used=token.get("refresh_token")))
     except auth_error:
-        return Issue(WARN, "twitch", "Twitch sign-in is no longer valid: reconnect it in Options "
-                                     "(timed checks still run)")
+        return Issue(WARN, "twitch", "La connexion Twitch n’est plus valide : reconnectez-vous dans les options "
+                                     "(les vérifications périodiques continuent)")
     except Exception:
         return None
     return None
@@ -192,11 +192,11 @@ def stale_issues(versions: dict, state: dict, now: float | None = None, days: in
         if age <= days:
             continue
         if name in newer:
-            out.append(Issue(WARN, f"stale:{name}", f"{name} {ver} is {age} days old and a newer version is "
-                                                    "out: open Updates (one click, the old one is kept as backup)",
+            out.append(Issue(WARN, f"stale:{name}", f"{name} {ver} date de {age} jours et une version plus récente est "
+                                                    "disponible : ouvrez Mises à jour (l’ancienne version est conservée en sauvegarde)",
                              UPDATES))
         elif not check:
-            out.append(Issue(WARN, f"stale:{name}", f"{name} {ver} is {age} days old: open Updates to check",
+            out.append(Issue(WARN, f"stale:{name}", f"{name} {ver} date de {age} jours : ouvrez Mises à jour pour vérifier",
                              UPDATES))
     return out
 
@@ -240,7 +240,7 @@ class Monitor:
                 continue
             idle = now - prev[2]
             if idle >= STALL_SECONDS:
-                out.append(Issue(WARN, f"stall:{key}", f"{key}: recording file has not grown for {int(idle // 60)} min "
+                out.append(Issue(WARN, f"stall:{key}", f"{key} : le fichier de capture n’a pas grossi depuis {int(idle // 60)} min "
                                                        f"({os.path.basename(raw)})"))
         for key in list(self._grow):
             if key not in seen:
@@ -264,8 +264,8 @@ class Monitor:
             need = SITE_STREAK if len(flags) > 1 else SITE_STREAK_SINGLE
             if self._streak[site] >= need:
                 tool = tool_for_site(site)
-                out.append(Issue(WARN, f"site:{site}", f"Every {site} channel ({len(flags)}) keeps failing its go-live "
-                                                       f"check: {tool} probably needs an update (open Updates)",
+                out.append(Issue(WARN, f"site:{site}", f"Les {len(flags)} créateurs {site} échouent régulièrement à la vérification de disponibilité : "
+                                                       f"le composant {tool} doit probablement être mis à jour (ouvrez Mises à jour)",
                                  UPDATES))
         for site in list(self._streak):
             if site not in sites:

@@ -51,7 +51,7 @@ class TestDpapi(TempData):
             json.dump({"v": 2, "dpapi": "bm90LWEtcmVhbC1ibG9i"}, f)
         with self.assertLogs(level="INFO") as cm:
             self.assertIsNone(te.load_token(self.d))
-        self.assertIn("Connect Twitch", "".join(cm.output))
+        self.assertIn("Connecter Twitch", "".join(cm.output))
         self.assertEqual(tc.status_of(self.d, "cid"), ("none", None))
 
 

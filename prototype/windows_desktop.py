@@ -1,12 +1,14 @@
 """Windows WebView2 shell and development frontend server for the BTL prototype."""
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -19,6 +21,39 @@ class DesktopUnavailable(RuntimeError):
 
 WEBVIEW2_INSTALL_URL = "https://developer.microsoft.com/microsoft-edge/webview2/"
 WEBVIEW2_CLIENTS_KEY = r"SOFTWARE\Microsoft\EdgeUpdate\Clients"
+
+
+def webview2_temp_profile_dir(temp_root=None):
+    """Return BTL's single private WebView2 profile under the user's temp root.
+
+    pywebview otherwise creates a fresh random TemporaryDirectory for every process.
+    Keeping a stable, app-specific path prevents abandoned WebView2 caches from
+    accumulating under ``%TEMP%`` after an interrupted shutdown.
+    """
+    return Path(temp_root or tempfile.gettempdir()) / "BoitierTiktokRecorder" / "WebView2"
+
+
+def cleanup_webview2_temp_profile(path, *, attempts=6, delay=0.5, sleep=time.sleep):
+    """Remove BTL's private WebView2 cache after its browser process has exited."""
+    path = Path(path)
+    attempts = max(1, int(attempts))
+    for attempt in range(attempts):
+        try:
+            shutil.rmtree(path)
+        except FileNotFoundError:
+            break
+        except OSError as exc:
+            if attempt + 1 >= attempts:
+                logging.warning("Could not remove the temporary WebView2 profile %s: %s", path, exc)
+                return False
+            sleep(delay)
+        else:
+            break
+    try:
+        path.parent.rmdir()
+    except OSError:
+        pass
+    return not path.exists()
 
 
 def enable_edge_default_context_menus(edgechromium_module):
@@ -193,12 +228,14 @@ class WindowsDesktopShell:
     """Native titlebar/window hosting the actual React app through Microsoft Edge WebView2."""
 
     def __init__(self, ui_url: str, *, webview_module=None, platform=None,
-                 runtime_probe=webview2_runtime_version, edgechromium_module=None):
+                 runtime_probe=webview2_runtime_version, edgechromium_module=None,
+                 webview_profile_dir=None):
         self.ui_url = ui_url
         self.platform = sys.platform if platform is None else platform
         self.webview = webview_module
         self.runtime_probe = runtime_probe
         self.edgechromium_module = edgechromium_module
+        self.webview_profile_dir = Path(webview_profile_dir or webview2_temp_profile_dir())
         self.window = None
         self.tray = None
         self._allow_close = False
@@ -286,10 +323,24 @@ class WindowsDesktopShell:
                 f"{exc}"
             ) from exc
 
+        # A previous forced exit may have left this private cache behind. The BTL
+        # single-instance guard ensures no other BTL window is using this app-specific path.
+        cleanup_webview2_temp_profile(self.webview_profile_dir)
         try:
-            self.webview.start(gui="edgechromium", debug=False)
+            # Keep pywebview's private-mode behavior (no cookies/local storage between runs),
+            # but use one named temp profile instead of a random TemporaryDirectory per launch.
+            self.webview.start(
+                gui="edgechromium",
+                debug=False,
+                private_mode=True,
+                storage_path=str(self.webview_profile_dir),
+            )
         except Exception as exc:
             raise DesktopUnavailable(
                 "WebView2 n’a pas pu démarrer. Installez/réparez le runtime Microsoft Edge WebView2 Evergreen "
                 f"({WEBVIEW2_INSTALL_URL}) et relancez BTL. Détail : {exc}"
             ) from exc
+        finally:
+            # pywebview already tries to clear private data on close. Retry after its
+            # event loop returns in case Edge still held cache files during that attempt.
+            cleanup_webview2_temp_profile(self.webview_profile_dir)

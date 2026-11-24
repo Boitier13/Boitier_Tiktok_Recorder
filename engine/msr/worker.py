@@ -2338,7 +2338,7 @@ def record_worker(args):
 
     # Get configuration
     root_path = config.get('Paths', 'streams_dir', fallback='') or default_streams_dir()
-    quality = config.get('Recording', 'quality', fallback='best')
+    quality = config.get('Recording', 'quality', fallback='480p')
     max_record_hours = parser_getfloat(config, 'Recording', 'max_record_hours', 12.0)
     min_file_size_mb = parser_getfloat(config, 'Recording', 'min_file_size_mb', 2.0)
     min_disk_space_gb = parser_getfloat(config, 'Recording', 'min_disk_space_gb', 5.0)

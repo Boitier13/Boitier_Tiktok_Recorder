@@ -30,6 +30,7 @@ class DefaultStreamsDirTests(unittest.TestCase):
             cfg = Config(ini)
             got = cfg.get("Paths", "streams_dir")
             self.assertEqual(got, default_streams_dir())
+            self.assertEqual(cfg.get("Recording", "quality"), "480p")
             self.assertTrue(os.path.isfile(ini))
             with open(ini, encoding="utf-8") as fh:
                 text = fh.read()
@@ -46,6 +47,10 @@ class CoerceConfigTests(unittest.TestCase):
         tmp.close()
         self.addCleanup(lambda: os.path.exists(tmp.name) and os.remove(tmp.name))
         return Config(tmp.name), tmp.name
+
+    def test_existing_quality_choice_is_preserved(self):
+        cfg, _ = self._cfg("[Recording]\nquality = best\n")
+        self.assertEqual(cfg.get("Recording", "quality"), "best")
 
     def test_garbage_numbers_become_defaults(self):
         cfg, path = self._cfg(

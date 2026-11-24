@@ -82,6 +82,7 @@ export type BtlSnapshot = {
     fileName: string;
     noGrowthSec: number;
     stallTimeoutSec: number;
+    observedAtMs: number;
   }>;
   captureStates: CaptureState[];
   diskFreeGB: number | null;
@@ -320,6 +321,7 @@ export async function readSnapshot(): Promise<BtlSnapshot> {
     readArchive(),
   ]);
   const channels = engine.channels ?? [];
+  const observedAtMs = Date.now();
   const creators = channels.map(mapCreator);
   const activeRecordings = channels
     .filter((row) => row["recording"] === true)
@@ -332,6 +334,7 @@ export async function readSnapshot(): Promise<BtlSnapshot> {
         fileName: asText(row["file"]) || "Enregistrement en cours",
         noGrowthSec: parseNonNegativeNumber(row["no_growth_seconds"]),
         stallTimeoutSec: parseNonNegativeNumber(row["stall_timeout_seconds"]),
+        observedAtMs,
       };
     });
   const captureStates = channels.flatMap((row) => {

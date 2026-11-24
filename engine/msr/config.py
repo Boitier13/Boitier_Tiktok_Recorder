@@ -164,7 +164,7 @@ class Config:
             'fallback_dir': '',
         },
         'Recording': {
-            'quality': 'best',
+            'quality': '480p',
             'max_record_hours': '12.0',
             'max_file_size_gb': '8.0',   # split when file exceeds this size (0 = off); next capture
                                          # starts first (overlap), then the closed file remuxes in

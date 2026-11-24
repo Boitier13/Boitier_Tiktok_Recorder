@@ -47,7 +47,7 @@ def row(section, key, label, kind="num", hint="", tip="", applies=NEXT, choices=
 # 0-meanings verified in worker.py / recorder.py / util.py / storage.py.
 GROUPS = (
     ("Enregistrement", False, (
-        row("Recording", "quality", "Qualité", "choice", "best = qualité maximale disponible",
+        row("Recording", "quality", "Qualité", "choice", "480p = qualité par défaut · best = maximum disponible",
             "Nom de qualité streamlink / yt-dlp. Une valeur inconnue utilise best.",
             choices=("best", "1080p60", "1080p", "720p60", "720p", "480p", "360p", "worst"), width=10),
         row("Recording", "filename_pattern", "Nom du fichier", "pattern", "",

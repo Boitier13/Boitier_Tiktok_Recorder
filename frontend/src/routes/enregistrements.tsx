@@ -14,6 +14,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CreatorAvatar } from "@/components/creator-avatar";
+import { ElapsedTimer } from "@/components/elapsed-timer";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
@@ -249,8 +250,12 @@ function RecordingsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">@{active.creator.username}</p>
                   <p className="truncate font-mono text-xs text-muted-foreground">
-                    {active.fileName} · {formatDuration(active.elapsedSec)} ·{" "}
-                    {formatSize(active.sizeMB)}
+                    {active.fileName} ·{" "}
+                    <ElapsedTimer
+                      elapsedSec={active.elapsedSec}
+                      observedAtMs={active.observedAtMs}
+                    />{" "}
+                    · {formatSize(active.sizeMB)}
                   </p>
                   {active.noGrowthSec >= 30 && (
                     <p role="status" className="mt-1 text-xs text-warning">

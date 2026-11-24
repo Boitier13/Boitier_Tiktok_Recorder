@@ -40,6 +40,7 @@ export type ActiveRecording = {
   fileName: string;
   noGrowthSec: number;
   stallTimeoutSec: number;
+  observedAtMs: number;
 };
 
 type Store = {

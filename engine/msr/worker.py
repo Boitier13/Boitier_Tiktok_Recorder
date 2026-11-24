@@ -1462,6 +1462,8 @@ def monitor_recording_process(proc, raw_file, start_time, max_record_hours,
                     "time": format_elapsed(elapsed),
                     "progress": progress_pct,
                     "raw_file": status_file,
+                    "no_growth_seconds": int(stall_duration),
+                    "stall_timeout_seconds": int(STALL_TIMEOUT),
                 }
                 if from_start is not None:
                     new_status["from_start"] = True   # clip guard: see clip_unavailable_reason

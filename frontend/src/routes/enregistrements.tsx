@@ -87,8 +87,17 @@ function fileName(r: Recording) {
   return r.fileName || `Live_${r.time}.mp4`;
 }
 
+const CAPTURE_STATE_PRESENTATION = {
+  checking: { kind: "checking", label: "Vérification en cours" },
+  live_waiting: { kind: "waiting", label: "LIVE détecté, capture non démarrée" },
+  reconnecting: { kind: "reconnecting", label: "Reconnexion en cours" },
+  error: { kind: "error", label: "Erreur de capture" },
+  processing: { kind: "processing", label: "Finalisation du fichier" },
+} as const;
+
 function RecordingsPage() {
-  const { recordings, activeRecordings, stopRecording, connected, refresh } = useAppStore();
+  const { recordings, activeRecordings, captureStates, stopRecording, connected, refresh } =
+    useAppStore();
   const [librarySummary, setLibrarySummary] = useState<LibrarySummary | null>(null);
   const [libraryPending, setLibraryPending] = useState<LibraryPending | null>(null);
   const [channelLibrary, setChannelLibrary] = useState<LibraryRecordingInfo[]>([]);
@@ -229,7 +238,8 @@ function RecordingsPage() {
           <div className="border-b p-4">
             <h2 className="font-display text-lg font-semibold">Enregistrements en cours</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              La capture vidéo et la piste audio disponible sont gérées par le moteur local.
+              La taille indique ce qui a été écrit. Si elle ne progresse plus, l’état d’attente et
+              le délai avant la reprise automatique sont affichés.
             </p>
           </div>
           <ul className="divide-y">
@@ -242,8 +252,25 @@ function RecordingsPage() {
                     {active.fileName} · {formatDuration(active.elapsedSec)} ·{" "}
                     {formatSize(active.sizeMB)}
                   </p>
+                  {active.noGrowthSec >= 30 && (
+                    <p role="status" className="mt-1 text-xs text-warning">
+                      Aucune progression depuis {formatDuration(active.noGrowthSec)}. Arrêt de cette
+                      tentative estimé dans{" "}
+                      {formatDuration(
+                        Math.max(
+                          0,
+                          Math.max(active.sizeMB > 0 ? active.stallTimeoutSec : 65, 60) -
+                            active.noGrowthSec,
+                        ),
+                      )}
+                      .
+                    </p>
+                  )}
                 </div>
-                <StatusPill kind="recording" />
+                <StatusPill
+                  kind={active.noGrowthSec >= 30 ? "waiting" : "recording"}
+                  label={active.noGrowthSec >= 30 ? "Données en attente" : "Enregistrement"}
+                />
                 <Button
                   variant="ghost"
                   size="icon"
@@ -288,6 +315,39 @@ function RecordingsPage() {
                 </Button>
               </li>
             ))}
+          </ul>
+        </section>
+      )}
+
+      {captureStates.length > 0 && (
+        <section className="panel overflow-hidden">
+          <div className="border-b p-4">
+            <h2 className="font-display text-lg font-semibold">
+              Vérifications, reprises et erreurs
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Ces états ne signifient pas tous qu’un fichier est en cours d’écriture.
+            </p>
+          </div>
+          <ul className="divide-y">
+            {captureStates.map((state) => {
+              const presentation = CAPTURE_STATE_PRESENTATION[state.kind];
+              return (
+                <li
+                  key={`${state.creator.id}-${state.kind}`}
+                  className="flex flex-wrap items-center gap-3 p-4"
+                >
+                  <CreatorAvatar name={state.creator.displayName} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">@{state.creator.username}</p>
+                    {state.detail && (
+                      <p className="truncate text-xs text-muted-foreground">{state.detail}</p>
+                    )}
+                  </div>
+                  <StatusPill kind={presentation.kind} label={presentation.label} />
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

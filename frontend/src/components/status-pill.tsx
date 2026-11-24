@@ -1,6 +1,18 @@
 import { cn } from "@/lib/utils";
 
-type Kind = "live" | "recording" | "offline" | "unknown" | "paused" | "complete" | "interrupted";
+type Kind =
+  | "live"
+  | "recording"
+  | "offline"
+  | "unknown"
+  | "paused"
+  | "complete"
+  | "interrupted"
+  | "checking"
+  | "waiting"
+  | "reconnecting"
+  | "error"
+  | "processing";
 
 const styles: Record<Kind, { label: string; className: string; dot: string }> = {
   live: {
@@ -25,6 +37,31 @@ const styles: Record<Kind, { label: string; className: string; dot: string }> = 
     label: "Coupée puis reprise",
     className: "bg-warning/15 text-warning",
     dot: "bg-warning",
+  },
+  checking: {
+    label: "Vérification",
+    className: "bg-secondary text-secondary-foreground",
+    dot: "bg-secondary-foreground/70 animate-pulse",
+  },
+  waiting: {
+    label: "Données en attente",
+    className: "bg-warning/15 text-warning",
+    dot: "bg-warning animate-pulse",
+  },
+  reconnecting: {
+    label: "Reconnexion",
+    className: "bg-warning/15 text-warning",
+    dot: "bg-warning animate-pulse",
+  },
+  error: {
+    label: "Erreur",
+    className: "bg-destructive/15 text-destructive",
+    dot: "bg-destructive",
+  },
+  processing: {
+    label: "Finalisation",
+    className: "bg-secondary text-secondary-foreground",
+    dot: "bg-secondary-foreground/70 animate-pulse",
   },
 };
 

@@ -62,6 +62,15 @@ export type LibraryPlan = {
   skipped_count: number;
 };
 
+export type CaptureStateKind =
+  "checking" | "live_waiting" | "reconnecting" | "error" | "processing";
+
+export type CaptureState = {
+  creator: Creator;
+  kind: CaptureStateKind;
+  detail: string;
+};
+
 export type BtlSnapshot = {
   engine: EngineSnapshot;
   creators: Creator[];
@@ -71,7 +80,10 @@ export type BtlSnapshot = {
     elapsedSec: number;
     sizeMB: number;
     fileName: string;
+    noGrowthSec: number;
+    stallTimeoutSec: number;
   }>;
+  captureStates: CaptureState[];
   diskFreeGB: number | null;
   monitoringActive: boolean;
 };
@@ -102,18 +114,46 @@ function asText(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+function parseNonNegativeNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function captureStateKind(
+  row: Record<string, unknown>,
+): "checking" | "live_waiting" | "reconnecting" | "error" | "processing" | null {
+  if (row["enabled"] === false || row["recording"] === true) return null;
+  const status = asText(row["status"]).trim().toLowerCase();
+  const detail = asText(row["detail"]).toLowerCase();
+  if (status.startsWith("checking")) return "checking";
+  if (status.startsWith("error") || status.includes("failed")) return "error";
+  if (/^(processing|remux|stitch|finaliz)/.test(status)) return "processing";
+  if (status.startsWith("offline") && /reconnect/.test(detail)) return "reconnecting";
+  if (row["live"] === true) return "live_waiting";
+  return null;
+}
+
 function parseHumanSizeMB(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value / (1024 * 1024);
   const match = asText(value)
     .trim()
-    .match(/^([\d.]+)\s*(B|KB|MB|GB)$/i);
+    .match(/^([\d.]+)\s*(B|KiB|MiB|GiB|TiB|KB|MB|GB|TB)$/i);
   if (!match) return 0;
   const amountText = match[1];
   const unitText = match[2];
   if (!amountText || !unitText) return 0;
   const amount = Number(amountText);
   const unit = unitText.toUpperCase();
-  const factors: Record<string, number> = { B: 1 / (1024 * 1024), KB: 1 / 1024, MB: 1, GB: 1024 };
+  const factors: Record<string, number> = {
+    B: 1 / (1024 * 1024),
+    KB: 1 / 1024,
+    KIB: 1 / 1024,
+    MB: 1,
+    MIB: 1,
+    GB: 1024,
+    GIB: 1024,
+    TB: 1024 ** 2,
+    TIB: 1024 ** 2,
+  };
   return amount * (factors[unit] ?? 0);
 }
 
@@ -138,7 +178,8 @@ function mapCreator(row: Record<string, unknown>): Creator {
     status: live ? "live" : error || !confirmedOffline ? "unknown" : "offline",
     enabled,
     lastLive:
-      lastLive || (error ? "État inconnu — erreur de vérification" : "Aucune donnée sur les directs"),
+      lastLive ||
+      (error ? "État inconnu — erreur de vérification" : "Aucune donnée sur les directs"),
     detail: asText(row["detail"]),
     liveSinceSec: parseDuration(row["duration"]),
   };
@@ -278,8 +319,9 @@ export async function readSnapshot(): Promise<BtlSnapshot> {
     request<EngineSnapshot>("/api/state"),
     readArchive(),
   ]);
-  const creators = (engine.channels ?? []).map(mapCreator);
-  const activeRecordings = (engine.channels ?? [])
+  const channels = engine.channels ?? [];
+  const creators = channels.map(mapCreator);
+  const activeRecordings = channels
     .filter((row) => row["recording"] === true)
     .map((row) => {
       const creator = mapCreator(row);
@@ -288,14 +330,22 @@ export async function readSnapshot(): Promise<BtlSnapshot> {
         elapsedSec: parseDuration(row["duration"]),
         sizeMB: parseHumanSizeMB(row["size"]),
         fileName: asText(row["file"]) || "Enregistrement en cours",
+        noGrowthSec: parseNonNegativeNumber(row["no_growth_seconds"]),
+        stallTimeoutSec: parseNonNegativeNumber(row["stall_timeout_seconds"]),
       };
     });
+  const captureStates = channels.flatMap((row) => {
+    const kind = captureStateKind(row);
+    if (!kind) return [];
+    return [{ creator: mapCreator(row), kind, detail: asText(row["detail"]) }];
+  });
   const free = engine.health?.disk?.main?.free_gb;
   return {
     engine,
     creators,
     recordings,
     activeRecordings,
+    captureStates,
     diskFreeGB: typeof free === "number" ? free : null,
     monitoringActive:
       typeof engine.session?.monitoring_active === "boolean"

@@ -758,6 +758,8 @@ def _row(index, key, enabled_flag, st, stopped, push, presence):
         "file": os.path.basename(current) if current else "",
         "size": st.get("size", ""),
         "duration": st.get("time", ""),
+        "no_growth_seconds": st.get("no_growth_seconds"),
+        "stall_timeout_seconds": st.get("stall_timeout_seconds"),
         "error": redact_for_log(str(st.get("detail", ""))) if "error" in low or "failed" in low else "",
         "kick_push": push,
     }

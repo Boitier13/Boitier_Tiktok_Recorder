@@ -33,8 +33,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link to="/" aria-label="Accueil BTL — Boitier Tiktok Live" className="shrink-0">
             <img
               src="/brand/btl-logo-compact.png"
-              alt="BTL — Boitier Tiktok Live"
-              className="h-12 w-auto max-w-[140px] object-contain"
+              alt="Emblème BTL — Boitier Tiktok Live"
+              className="h-12 w-12 object-contain"
             />
           </Link>
           <span className="hidden sm:inline">Surveillance TikTok LIVE</span>

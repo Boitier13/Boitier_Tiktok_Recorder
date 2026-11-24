@@ -509,8 +509,8 @@ function SettingsPage() {
         <div className="grid gap-5 p-5 sm:grid-cols-[180px_1fr] sm:items-center">
           <img
             src="/brand/btl-logo-primary.png"
-            alt="Logo principal BTL — Boitier Tiktok Live"
-            className="mx-auto w-full max-w-[180px] rounded-xl"
+            alt="Emblème BTL — Boitier Tiktok Live"
+            className="mx-auto w-full max-w-[180px]"
           />
           <div>
             <h3 className="font-display text-lg font-semibold text-foreground">

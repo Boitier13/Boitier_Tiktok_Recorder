@@ -33,17 +33,18 @@ class BtlBrandAssetTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertTrue(brand_asset_path(name).is_file())
 
-    def test_png_source_dimensions_match_the_three_delivered_logos(self):
+    def test_png_brand_variants_are_square_and_keep_transparency(self):
         expected = {
-            "btl-windows.png": (258, 261),
-            "btl-logo-primary.png": (355, 342),
-            "btl-logo-compact.png": (356, 187),
+            "btl-windows.png": (256, 256),
+            "btl-logo-primary.png": (512, 512),
+            "btl-logo-compact.png": (256, 256),
         }
         for name, size in expected.items():
             with self.subTest(name=name), brand_asset_path(name).open("rb") as image:
-                header = image.read(24)
+                header = image.read(26)
             self.assertEqual(header[:8], b"\x89PNG\r\n\x1a\n")
             self.assertEqual(struct.unpack(">II", header[16:24]), size)
+            self.assertEqual(header[25], 6, "Brand PNG should be RGBA with an alpha channel.")
 
     def test_windows_icons_include_small_and_large_shell_sizes(self):
         expected = [16, 20, 24, 32, 40, 48, 64, 128, 256]
@@ -54,6 +55,13 @@ class BtlBrandAssetTests(unittest.TestCase):
             sizes = sorted((data[6 + 16 * i] or 256) for i in range(count))
             self.assertEqual((reserved, kind), (0, 1))
             self.assertEqual(sizes, expected)
+
+    def test_favicon_uses_the_windows_emblem_icon(self):
+        root = Path(__file__).resolve().parents[2]
+        self.assertEqual(
+            (root / "frontend" / "public" / "favicon.ico").read_bytes(),
+            brand_asset_path("btl-windows.ico").read_bytes(),
+        )
 
     def test_tray_loads_the_symbol_only_logo(self):
         opened = []

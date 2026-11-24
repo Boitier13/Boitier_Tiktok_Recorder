@@ -105,6 +105,12 @@ try {
     $Shortcut.TargetPath = Join-Path $InstallDir 'BoitierTiktokLive.exe'
     $Shortcut.Arguments = '--data-dir "' + $DataDir + '"'
     $Shortcut.WorkingDirectory = $InstallDir
+    $BrandIcon = Join-Path $InstallDir '_internal\brand\btl-logo-compact.ico'
+    if (Test-Path -LiteralPath $BrandIcon -PathType Leaf) {
+        $Shortcut.IconLocation = "$BrandIcon,0"
+    } else {
+        $Shortcut.IconLocation = "$($Shortcut.TargetPath),0"
+    }
     $Shortcut.Description = 'Boitier Tiktok Live'
     $Shortcut.Save()
 } catch {

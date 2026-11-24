@@ -2006,12 +2006,13 @@ def run_smoke(data_dir: Path | None = None):
             startup_on = startup.set_enabled(True)
             command_text = startup_calls[0][0][-1]
             startup_removed = startup.set_enabled(False)
-            result.check("démarrage Windows créé et retiré par raccourci utilisateur, sans registre ni admin",
+            result.check("démarrage Windows : raccourci utilisateur avec logo BTL compact, sans registre ni admin",
                          not startup_off["enabled"] and startup_on["enabled"]
                          and not startup_removed["enabled"] and unrelated_shortcut.exists()
                          and len(startup_calls) == 1
                          and "--background" not in command_text and "--no-desktop" in command_text
-                         and "User''s Startup" in command_text)
+                         and "User''s Startup" in command_text
+                         and "btl-logo-compact.ico" in command_text)
 
             frozen_exe = startup_root / "BoitierTiktokLive.exe"
             frozen_exe.write_bytes(b"frozen executable placeholder")

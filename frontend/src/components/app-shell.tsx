@@ -28,15 +28,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* The native WebView2 window owns minimize, maximize, and close controls. */}
-      <header className="flex h-10 shrink-0 items-center justify-between border-b border-sidebar-border bg-titlebar px-4 text-xs text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <span className="relative grid size-5 place-items-center rounded-full bg-radar/15">
-            <span className="size-2 rounded-full bg-radar" />
-          </span>
-          <span className="font-display font-semibold text-foreground">
-            BTL · Boitier Tiktok Live
-          </span>
-          <span className="hidden sm:inline">— surveillance TikTok LIVE</span>
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-sidebar-border bg-titlebar px-4 text-xs text-muted-foreground">
+        <div className="flex items-center gap-3">
+          <Link to="/" aria-label="Accueil BTL — Boitier Tiktok Live" className="shrink-0">
+            <img
+              src="/brand/btl-logo-compact.png"
+              alt="BTL — Boitier Tiktok Live"
+              className="h-12 w-auto max-w-[140px] object-contain"
+            />
+          </Link>
+          <span className="hidden sm:inline">Surveillance TikTok LIVE</span>
         </div>
         <span className="hidden items-center gap-2 md:flex">
           <span
@@ -77,9 +78,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="rounded-lg border border-sidebar-border bg-surface p-3 text-xs">
               <p className="font-medium text-foreground">Application sur cet ordinateur</p>
               <p className="mt-1 text-muted-foreground">
-                Réduire garde la fenêtre dans la barre des tâches ; fermer la masque dans la zone de notification.
-                Un nouveau double-clic sur l’EXE la restaure. Le démarrage automatique se règle dans
-                Paramètres sous Windows.
+                Réduire garde la fenêtre dans la barre des tâches ; fermer la masque dans la zone de
+                notification. Un nouveau double-clic sur l’EXE la restaure. Le démarrage automatique
+                se règle dans Paramètres sous Windows.
               </p>
               <p className="mt-3 flex items-center gap-2 text-muted-foreground">
                 <span className="size-1.5 rounded-full bg-live animate-live-pulse" />

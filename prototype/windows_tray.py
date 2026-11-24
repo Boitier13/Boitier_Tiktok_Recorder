@@ -5,6 +5,8 @@ import sys
 import threading
 import webbrowser
 
+from btl_branding import brand_asset_path
+
 
 class TrayUnavailable(RuntimeError):
     """Raised when the Windows tray integration cannot be initialized."""
@@ -42,6 +44,18 @@ class WindowsTray:
                 raise TrayUnavailable("Pillow est absent; installez les dépendances Windows du moteur.") from exc
 
     def _make_icon(self):
+        asset = brand_asset_path("btl-windows.png")
+        opener = getattr(self.image_module, "open", None)
+        if asset.is_file() and callable(opener):
+            try:
+                image = opener(str(asset)).convert("RGBA")
+                resampling = getattr(self.image_module, "Resampling", None)
+                lanczos = getattr(resampling, "LANCZOS", 1)
+                return image.resize((64, 64), lanczos)
+            except Exception:
+                pass
+
+        # Fallback keeps tray startup resilient if a source/development asset is missing.
         image = self.image_module.new("RGBA", (64, 64), (16, 20, 26, 255))
         draw = self.draw_module.Draw(image)
         draw.ellipse((7, 7, 57, 57), outline=(48, 205, 196, 255), width=3)

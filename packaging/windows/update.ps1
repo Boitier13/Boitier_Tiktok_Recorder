@@ -3,7 +3,9 @@ param(
     [string]$PayloadDir = '',
     [string]$InstallDir = '',
     [string]$DataDir = '',
-    [string]$RecordingsDir = ''
+    [string]$RecordingsDir = '',
+    [string]$ProgramsFolder = '',
+    [string]$StartupFolder = ''
 )
 $ErrorActionPreference = 'Stop'
 
@@ -142,6 +144,28 @@ try {
 } catch {
     Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue
     throw
+}
+
+# Refresh branding only on BTL-owned shortcuts; leave every unrelated shortcut untouched.
+$CompactIcon = Join-Path $InstallDir '_internal\brand\btl-logo-compact.ico'
+if (Test-Path -LiteralPath $CompactIcon -PathType Leaf) {
+    if (-not $ProgramsFolder) { $ProgramsFolder = [Environment]::GetFolderPath('Programs') }
+    if (-not $StartupFolder) { $StartupFolder = [Environment]::GetFolderPath([Environment+SpecialFolder]::Startup) }
+    $ShortcutPaths = @()
+    if ($ProgramsFolder) { $ShortcutPaths += (Join-Path $ProgramsFolder 'Boitier Tiktok Live.lnk') }
+    if ($StartupFolder) { $ShortcutPaths += (Join-Path $StartupFolder 'Boitier Tiktok Live.lnk') }
+    foreach ($ShortcutPath in $ShortcutPaths) {
+        if (-not (Test-Path -LiteralPath $ShortcutPath -PathType Leaf)) { continue }
+        try {
+            $Shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($ShortcutPath)
+            if ((Get-FullPath $Shortcut.TargetPath).Equals($InstalledExe, [StringComparison]::OrdinalIgnoreCase)) {
+                $Shortcut.IconLocation = "$CompactIcon,0"
+                $Shortcut.Save()
+            }
+        } catch {
+            Write-Warning "BTL a été mis à jour, mais l’icône du raccourci '$ShortcutPath' n’a pas pu être actualisée : $_"
+        }
+    }
 }
 Write-Host "BTL mis à jour dans : $InstallDir"
 Write-Host "Configuration et liste des créateurs conservées sans modification dans : $DataDir"

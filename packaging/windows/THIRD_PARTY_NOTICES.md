@@ -28,9 +28,9 @@ the license texts shipped by each package.
 
 ## External recording tools
 
-- `yt-dlp.exe` and `streamlink.exe` are console-mode PyInstaller launchers built
-  from the hash-locked Python packages; their versions must match the lock and
-  their `--version` smoke tests must pass in the final package. The packaging
+- `yt-dlp/yt-dlp.exe` and `streamlink/streamlink.exe` are console-mode PyInstaller
+  onedir launchers built from the hash-locked Python packages; their versions must
+  match the lock and their `--version` smoke tests must pass in the final package. The packaging
   instructions include those checks, but they still require a Windows run.
 - Microsoft Edge WebView2 Evergreen Runtime is an external Windows prerequisite;
   BTL checks its Edge Update registry entry at launch, explains how to install it,

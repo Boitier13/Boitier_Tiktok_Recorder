@@ -33,23 +33,37 @@ else:
     REPO_ROOT = ROOT.parent
 ENGINE = REPO_ROOT / "engine"
 UI = ROOT / "ui" / "index.html"
+
+
+def _bundled_tool_commands(tools_dir):
+    """Paths for the portable bundle's onedir launchers and root-level FFmpeg tools."""
+    root = Path(tools_dir)
+    return {
+        "yt-dlp": str(root / "yt-dlp" / "yt-dlp.exe"),
+        "streamlink": str(root / "streamlink" / "streamlink.exe"),
+        "ffmpeg": str(root / "ffmpeg.exe"),
+        "ffprobe": str(root / "ffprobe.exe"),
+    }
+
+
+def _bundled_tool_search_dirs(tools_dir):
+    """PATH entries required for the portable onedir tools and FFmpeg."""
+    root = Path(tools_dir)
+    return [root / "yt-dlp", root / "streamlink", root]
+
+
 if getattr(sys, "frozen", False):
-    # The BTL onedir build stages ffmpeg.exe/ffprobe.exe beside the app.
-    # Keep the shared MSR engine unchanged; expose the packaged tools at the host boundary.
+    # Keep the shared MSR engine unchanged; expose the packaged onedir tools at this host boundary.
     BUNDLED_TOOLS = Path(sys.executable).resolve().parent / "tools"
     if BUNDLED_TOOLS.is_dir():
-        os.environ["PATH"] = str(BUNDLED_TOOLS) + os.pathsep + os.environ.get("PATH", "")
+        bundled_path = os.pathsep.join(str(path) for path in _bundled_tool_search_dirs(BUNDLED_TOOLS))
+        os.environ["PATH"] = bundled_path + os.pathsep + os.environ.get("PATH", "")
 
 
 def _capture_tool_commands():
     if getattr(sys, "frozen", False):
         tools_dir = Path(sys.executable).resolve().parent / "tools"
-        return {
-            "yt-dlp": str(tools_dir / "yt-dlp.exe"),
-            "streamlink": str(tools_dir / "streamlink.exe"),
-            "ffmpeg": str(tools_dir / "ffmpeg.exe"),
-            "ffprobe": str(tools_dir / "ffprobe.exe"),
-        }
+        return _bundled_tool_commands(tools_dir)
     return {name: name for name in ("yt-dlp", "streamlink", "ffmpeg", "ffprobe")}
 
 
@@ -81,7 +95,7 @@ def _seed_engine_tool_presence(commands=None, environ=None):
 
 # msr.deps probes yt-dlp, Streamlink, FFmpeg and Deno synchronously during import.
 # BTL already validates required files by presence later in main(); seed equivalent
-# hints first so import doesn't block GUI startup while onefile tools initialize.
+# hints first so import doesn't block GUI startup while the packaged tools initialize.
 if sys.platform == "win32":
     _seed_engine_tool_presence()
 
@@ -179,7 +193,7 @@ def _claim_or_activate_windows_instance(*, title="Boitier Tiktok Live", kernel32
 def _capture_tool_version(command, args, *, timeout=45, runner=None, diagnostics=None,
                           diagnostic_key=None, retries=0, retry_delay=1.0,
                           total_timeout=None):
-    """Probe a capture tool; retry transient onefile/antivirus startup failures."""
+    """Probe a capture tool; retry transient startup failures such as antivirus scanning."""
     from msr.nowindow import no_window_kwargs
 
     if runner is None:
@@ -272,10 +286,10 @@ def _sync_engine_tool_status(status):
 def capture_tools_status(*, quick=False):
     """Check capture tools; use file presence at normal startup, deep probes on request.
 
-    yt-dlp and Streamlink are self-extracting onefile programs. Launching them
-    synchronously during GUI startup can stall behind antivirus scanning and
-    produce transient false-missing dialogs. The explicit --check-tools command
-    still performs the full runnable/version probes for diagnostics.
+    yt-dlp and Streamlink are bundled as onedir tools beside their dependencies.
+    Their version checks can still stall behind antivirus scanning on first launch,
+    so normal startup relies on the already-validated bundle and explicit
+    --check-tools performs the full runnable/version probes for diagnostics.
     """
     diagnostics = {}
     commands = _capture_tool_commands()
@@ -285,9 +299,8 @@ def capture_tools_status(*, quick=False):
         _sync_engine_tool_status(status)
         return status
 
-    # yt-dlp and Streamlink are self-extracting PyInstaller onefile executables. On
-    # Windows 10 antivirus scanning can make them slow, especially when launched at
-    # the same time. Probe sequentially with generous caps; ffmpeg/ffprobe are native.
+    # Probe the onedir launchers sequentially with a generous cap for first-run
+    # antivirus scanning; ffmpeg/ffprobe are native executables.
     yt_dlp_version = _capture_tool_version(
         commands["yt-dlp"], ["--version"], timeout=45, retries=2,
         retry_delay=2.0, total_timeout=90,
@@ -1537,7 +1550,7 @@ def run_smoke(data_dir: Path | None = None):
             "yt-dlp", ["--version"], runner=fake_probe_runner, diagnostics=probe_diagnostics,
             diagnostic_key="yt-dlp",
         )
-        result.check("probe onefile des outils utilise un délai étendu et garde le diagnostic",
+        result.check("probe onedir des outils garde un délai tolérant et le diagnostic",
                      probe_version == "2026.10.26"
                      and probe_call.get("kwargs", {}).get("timeout") == 45
                      and probe_diagnostics.get("yt-dlp", "").startswith("OK en "))

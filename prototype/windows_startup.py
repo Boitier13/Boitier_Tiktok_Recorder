@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from btl_branding import brand_asset_path
+
 
 class StartupUnavailable(RuntimeError):
     """Raised when Windows logon startup cannot be configured."""
@@ -51,7 +53,7 @@ class WindowsStartup:
         self.repo_root = Path(repo_root) if repo_root is not None else Path(__file__).resolve().parent.parent
         self.script = Path(script) if script is not None else self.repo_root / "prototype" / "btl_vertical_host.py"
         self.pythonw = Path(pythonw) if pythonw is not None else self.executable.with_name("pythonw.exe")
-        self.icon = Path(icon) if icon is not None else self.repo_root / "engine" / "assets" / "icon.ico"
+        self.icon = Path(icon) if icon is not None else brand_asset_path("btl-logo-compact.ico")
         self.run = run
 
     @property

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Bell, HardDrive, MonitorCog, Radar, Save, Video } from "lucide-react";
+import { Bell, HardDrive, Info, MonitorCog, Radar, Save, Video } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
@@ -503,6 +503,24 @@ function SettingsPage() {
             aria-label="Démarrer automatiquement avec Windows"
           />
         </Row>
+      </Section>
+
+      <Section icon={Info} title="À propos de BTL">
+        <div className="grid gap-5 p-5 sm:grid-cols-[180px_1fr] sm:items-center">
+          <img
+            src="/brand/btl-logo-primary.png"
+            alt="Logo principal BTL — Boitier Tiktok Live"
+            className="mx-auto w-full max-w-[180px] rounded-xl"
+          />
+          <div>
+            <h3 className="font-display text-lg font-semibold text-foreground">
+              Boitier Tiktok Live
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Surveillance des créateurs TikTok LIVE et enregistrement local de leurs directs.
+            </p>
+          </div>
+        </div>
       </Section>
     </div>
   );

@@ -23,6 +23,12 @@ function Get-LinkTarget([string]$Path) {
     $shortcut = $shell.CreateShortcut($Path)
     return [IO.Path]::GetFullPath($shortcut.TargetPath)
 }
+function Get-LinkIcon([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return '' }
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $shell.CreateShortcut($Path)
+    return [string]$shortcut.IconLocation
+}
 
 New-Item -ItemType Directory -Force -Path $Suite | Out-Null
 try {
@@ -68,6 +74,9 @@ try {
     & (Join-Path $PayloadDir 'maintenance\install.ps1') -SourceDir $PayloadDir -InstallDir $InstallDir -DataDir $DataDir -RecordingsDir $RecordingsDir -ProgramsFolder $ProgramsFolder
     Assert (Test-Path -LiteralPath $Exe) 'Install did not copy the BTL executable.'
     Assert (Test-Path -LiteralPath $StartMenuShortcut) 'Install did not create the per-user Start menu shortcut.'
+    $InstalledCompactIcon = Get-ChildItem -LiteralPath $InstallDir -Filter 'btl-logo-compact.ico' -File -Recurse | Select-Object -First 1
+    Assert ($null -ne $InstalledCompactIcon) 'Install did not preserve the compact BTL shortcut icon.'
+    Assert ((Get-LinkIcon $StartMenuShortcut) -like '*btl-logo-compact.ico*') 'Start menu shortcut does not use the compact BTL logo.'
     $InstallMetadata = Get-Content -Raw (Join-Path $InstallDir 'install-info.json') | ConvertFrom-Json
     Assert ($InstallMetadata.dataDir -eq [IO.Path]::GetFullPath($DataDir)) 'Install metadata did not keep the config directory.'
     Assert ($InstallMetadata.recordingsDir -eq [IO.Path]::GetFullPath($RecordingsDir)) 'Install metadata did not keep the recordings directory.'
@@ -90,12 +99,14 @@ try {
 
     New-Item -ItemType Directory -Path $NewPayload | Out-Null
     Get-ChildItem -LiteralPath $PayloadDir -Force | Copy-Item -Destination $NewPayload -Recurse -Force
-    & (Join-Path $NewPayload 'maintenance\update.ps1') -PayloadDir $NewPayload -InstallDir $InstallDir -DataDir $DataDir -RecordingsDir $RecordingsDir
+    & (Join-Path $NewPayload 'maintenance\update.ps1') -PayloadDir $NewPayload -InstallDir $InstallDir -DataDir $DataDir -RecordingsDir $RecordingsDir -ProgramsFolder $ProgramsFolder -StartupFolder $StartupFolder
     Assert (Test-Path -LiteralPath $Exe) 'Update did not leave the new application installed.'
     Assert ((Get-FileHash -Algorithm SHA256 (Join-Path $DataDir 'config.ini')).Hash -eq $BeforeConfig) 'Update changed config.ini.'
     Assert ((Get-FileHash -Algorithm SHA256 (Join-Path $RecordingsDir 'keep.mp4')).Hash -eq $BeforeMedia) 'Update changed a recording.'
     Assert ((Get-LinkTarget $StartupShortcut) -eq [IO.Path]::GetFullPath($Exe)) 'Update broke/changed the Startup shortcut.'
     Assert ((Get-LinkTarget $StartMenuShortcut) -eq [IO.Path]::GetFullPath($Exe)) 'Update broke/changed the Start menu shortcut.'
+    Assert ((Get-LinkIcon $StartupShortcut) -like '*btl-logo-compact.ico*') 'Update did not refresh the Startup shortcut BTL logo.'
+    Assert ((Get-LinkIcon $StartMenuShortcut) -like '*btl-logo-compact.ico*') 'Update did not refresh the Start menu shortcut BTL logo.'
 
     & (Join-Path $InstallDir 'maintenance\uninstall.ps1') -InstallDir $InstallDir `
         -StartupFolder $StartupFolder -ProgramsFolder $ProgramsFolder

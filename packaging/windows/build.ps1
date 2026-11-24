@@ -103,7 +103,9 @@ maintenance\update.ps1. To uninstall and keep user data, run the installed
 maintenance\uninstall.ps1. Add -PurgeUserData only to erase data after explicit path confirmation.
 
 The tools folder contains yt-dlp/yt-dlp.exe, streamlink/streamlink.exe, ffmpeg.exe and ffprobe.exe.
-Use BoitierTiktokLive.exe --check-tools to verify them. The app requires the Microsoft
+BTL branding assets are bundled in _internal\brand; the EXE uses the compact Windows symbol,
+and Start-menu/autostart shortcuts use the compact wordmark. Use BoitierTiktokLive.exe
+--check-tools to verify the capture tools. The app requires the Microsoft
 Edge WebView2 Evergreen Runtime; if it is missing, BTL explains how to install it and
 opens the UI in your browser as a fallback. See THIRD_PARTY_NOTICES.md for the pending
 redistribution audit and tools\ffmpeg-licenses\ for FFmpeg/ffprobe notices.

@@ -21,6 +21,7 @@ datas = [
     (str(FRONTEND), "frontend/.output/public"),
     (str(ROOT / "prototype" / "ui"), "prototype/ui"),
     (str(ROOT / "engine" / "assets"), "engine/assets"),
+    (str(ROOT / "frontend" / "public" / "brand"), "brand"),
     (str(ROOT / "engine" / "LICENSE"), "engine"),
     (str(ROOT / "engine" / "THIRD_PARTY_NOTICES.md"), "engine"),
 ]
@@ -59,7 +60,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
-    icon=str(ROOT / "engine" / "assets" / "icon.ico"),
+    icon=str(ROOT / "frontend" / "public" / "brand" / "btl-windows.ico"),
 )
 collect = COLLECT(
     exe,

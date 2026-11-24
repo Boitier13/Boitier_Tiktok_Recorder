@@ -55,7 +55,7 @@ export const draftSettings: Settings = {
   notificationsEnabled: true,
   saveFolder: "",
   checkIntervalSec: 180,
-  quality: "best",
+  quality: "480p",
   filenamePattern: "{username}_{timestamp}",
   splitOnResolutionChange: true,
   maxRecordHours: 12,

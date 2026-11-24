@@ -1208,7 +1208,7 @@ def monitor_recording_process(proc, raw_file, start_time, max_record_hours,
     # Stall detection: kill the process if the file stops growing for this long.
     # streamlink's --retry-streams keeps it alive even after the stream ends, so
     # without this the worker would never notice the stream dropped.
-    STALL_TIMEOUT = 90  # seconds without file growth before terminating
+    STALL_TIMEOUT = 180 if platform == "tiktok" else 90  # bounded grace for transient TikTok stalls
     last_size = 0
     last_growth_time = time.monotonic()
 
@@ -3046,12 +3046,17 @@ def record_worker(args):
                         pass
                     return False
 
+                monitor_file_creation_timeout = (
+                    max(file_creation_timeout, 120)
+                    if from_start or platform == "tiktok"
+                    else file_creation_timeout
+                )
                 last_status, split_requested = monitor_recording_process(
                     proc, raw_file, start_time, max_record_hours,
                     platform, logger, status_queue, channel_key,
                     stop_event, last_status,
-                    # from-start: yt-dlp reads the DASH manifest before any file appears
-                    max(file_creation_timeout, 120) if from_start else file_creation_timeout,
+                    # TikTok may need more than the generic 60s while opening its live endpoint.
+                    monitor_file_creation_timeout,
                     verbose=verbose,
                     max_file_size_gb=max_file_size_gb,
                     stream_info=stream_info,
@@ -3288,11 +3293,9 @@ def record_worker(args):
             logger.info(f"Recording finished — file size: {human_size(file_size)}")
 
             if file_size < min_file_size_mb * 1024 * 1024:
-                logger.warning(f"Recording too small ({human_size(file_size)}) — deleting")
-                try:
-                    os.remove(raw_file)
-                except Exception as e:
-                    logger.error(f"Failed to delete small file: {e}")
+                logger.warning(
+                    f"Recording too small ({human_size(file_size)}) — keeping raw file in Recorded for recovery"
+                )
                 new_status = {"status": "Offline", "detail": "no data captured", "size": "", "time": "", "progress": 0}
                 status_queue.put((channel_key, new_status))
                 time.sleep(random.uniform(5, 15))
@@ -3379,14 +3382,11 @@ def record_worker(args):
                 if error == "output too small":
                     # (remux_to_mp4 already discarded its undersized .part; an MP4 of the same
                     # name that is there is an earlier, good recording and is left alone.)
-                    # Move the raw .ts to PendingDeletion so it doesn't
-                    # accumulate in the Recorded directory
-                    try:
-                        pending_path = os.path.join(pending_dir, os.path.basename(raw_file))
-                        shutil.move(raw_file, pending_path)
-                        logger.info(f"Moved bad raw .ts to PendingDeletion: {os.path.basename(raw_file)}")
-                    except Exception:
-                        pass
+                    # An undersized remux does not prove the source TS is useless.
+                    # Keep the raw file in Recorded so the user can inspect/retry it.
+                    logger.warning(
+                        f"Keeping raw .ts after undersized remux for recovery: {os.path.basename(raw_file)}"
+                    )
 
                     consecutive_small_remux_fails += 1
                     if consecutive_small_remux_fails >= SMALL_REMUX_FAIL_LIMIT:

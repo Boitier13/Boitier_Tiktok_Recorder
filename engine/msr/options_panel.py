@@ -47,7 +47,7 @@ def row(section, key, label, kind="num", hint="", tip="", applies=NEXT, choices=
 # 0-meanings verified in worker.py / recorder.py / util.py / storage.py.
 GROUPS = (
     ("Enregistrement", False, (
-        row("Recording", "quality", "Qualité", "choice", "best = qualité maximale disponible",
+        row("Recording", "quality", "Qualité", "choice", "480p = qualité par défaut · best = maximum disponible",
             "Nom de qualité streamlink / yt-dlp. Une valeur inconnue utilise best.",
             choices=("best", "1080p60", "1080p", "720p60", "720p", "480p", "360p", "worst"), width=10),
         row("Recording", "filename_pattern", "Nom du fichier", "pattern", "",
@@ -134,6 +134,8 @@ GROUPS = (
             applies=RESTART, width=28),
     )),
     ("Délais avancés", True, (
+        row("Timeouts", "tiktok_file_creation_timeout", "TikTok — délai du premier fichier (s)",
+            hint="30 s par défaut, avant actualisation du flux"),
         row("Timeouts", "reconnect_grace_minutes", "Vérifications rapprochées après une coupure (min)",
             hint="vérifications toutes les 15 s ; 0 = désactivé"),
         row("Timeouts", "reconnect_extended_minutes", "Puis vérifications toutes les 30 s pendant (min)", hint="0 = désactivé"),

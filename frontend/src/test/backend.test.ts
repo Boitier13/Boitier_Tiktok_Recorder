@@ -58,6 +58,73 @@ describe("adaptateur d’état moteur BTL", () => {
     expect(state.monitoringActive).toBe(true);
   });
 
+  it("expose le délai sans progression et les états de reprise distincts", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        const payload = url.endsWith("/api/state")
+          ? {
+              session: { running: true, monitoring_active: true },
+              channels: [
+                {
+                  name: "tiktok:stalled",
+                  enabled: true,
+                  status: "Recording",
+                  recording: true,
+                  no_growth_seconds: 75,
+                  stall_timeout_seconds: 180,
+                  size: "1.0 MiB",
+                  duration: "3:35",
+                },
+                {
+                  name: "tiktok:checking",
+                  enabled: true,
+                  status: "Checking...",
+                  detail: "manual check",
+                },
+                {
+                  name: "tiktok:reconnecting",
+                  enabled: true,
+                  status: "Offline",
+                  detail: "reconnecting (100s left)",
+                },
+                {
+                  name: "tiktok:waiting",
+                  enabled: true,
+                  status: "Offline",
+                  live: true,
+                  detail: "LIVE détecté",
+                },
+                {
+                  name: "tiktok:normal_offline",
+                  enabled: true,
+                  status: "Offline",
+                  live: false,
+                },
+              ],
+            }
+          : { recordings: [] };
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    const state = await readSnapshot();
+    expect(state.activeRecordings[0]).toMatchObject({
+      noGrowthSec: 75,
+      stallTimeoutSec: 180,
+      sizeMB: 1,
+    });
+    expect(state.captureStates.map(({ kind }) => kind)).toEqual([
+      "checking",
+      "reconnecting",
+      "live_waiting",
+    ]);
+  });
+
   it("garde les captures actives quand la détection est en pause", async () => {
     vi.stubGlobal(
       "fetch",

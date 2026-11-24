@@ -120,6 +120,48 @@ def _should_report_stream_end(stop_requested, split_requested, output_size):
     return not stop_requested and not split_requested and output_size > 0
 
 
+def _tiktok_start_retry_delay(failure_count):
+    """Base delay for a bounded fast retry after TikTok LIVE yielded no media."""
+    try:
+        attempt = max(1, int(failure_count))
+    except (TypeError, ValueError):
+        attempt = 1
+    return min(10 * (2 ** min(attempt - 1, 2)), 40)
+
+
+def _capture_file_creation_timeout(configured_timeout, from_start=False):
+    """Honor the configured startup deadline except for YouTube from-start."""
+    try:
+        timeout = max(1, int(configured_timeout))
+    except (TypeError, ValueError):
+        timeout = 60
+    return max(timeout, 120) if from_start else timeout
+
+
+def _effective_capture_file_creation_timeout(
+    platform, configured_timeout, tiktok_timeout=30, from_start=False
+):
+    """Use the TikTok-specific startup deadline without changing other platforms."""
+    if from_start:
+        return _capture_file_creation_timeout(configured_timeout, from_start=True)
+    selected = tiktok_timeout if platform == "tiktok" else configured_timeout
+    return _capture_file_creation_timeout(selected)
+
+
+def _initial_capture_status(platform):
+    """Don't label a TikTok process as recording until it has actually written media."""
+    if platform == "tiktok":
+        return {
+            "status": "Checking...",
+            "detail": "Ouverture du flux LIVE TikTok",
+            "size": "", "time": "", "progress": 0,
+        }
+    return {
+        "status": "Recording", "detail": "starting",
+        "size": "0 B", "time": "0:00", "progress": 0,
+    }
+
+
 def _merge_tiktok_status_checks(ytdlp_title, ytdlp_error, api_live, api_title, api_error):
     """Use TikTok API confirmation to resolve yt-dlp's stale offline/error result."""
     if api_live:
@@ -1248,7 +1290,7 @@ def monitor_recording_process(proc, raw_file, start_time, max_record_hours,
     # Stall detection: kill the process if the file stops growing for this long.
     # streamlink's --retry-streams keeps it alive even after the stream ends, so
     # without this the worker would never notice the stream dropped.
-    STALL_TIMEOUT = 90  # seconds without file growth before terminating
+    STALL_TIMEOUT = 180 if platform == "tiktok" else 90  # bounded grace for transient TikTok stalls
     last_size = 0
     last_growth_time = time.monotonic()
 
@@ -1420,6 +1462,8 @@ def monitor_recording_process(proc, raw_file, start_time, max_record_hours,
                     "time": format_elapsed(elapsed),
                     "progress": progress_pct,
                     "raw_file": status_file,
+                    "no_growth_seconds": int(stall_duration),
+                    "stall_timeout_seconds": int(STALL_TIMEOUT),
                 }
                 if from_start is not None:
                     new_status["from_start"] = True   # clip guard: see clip_unavailable_reason
@@ -2294,7 +2338,7 @@ def record_worker(args):
 
     # Get configuration
     root_path = config.get('Paths', 'streams_dir', fallback='') or default_streams_dir()
-    quality = config.get('Recording', 'quality', fallback='best')
+    quality = config.get('Recording', 'quality', fallback='480p')
     max_record_hours = parser_getfloat(config, 'Recording', 'max_record_hours', 12.0)
     min_file_size_mb = parser_getfloat(config, 'Recording', 'min_file_size_mb', 2.0)
     min_disk_space_gb = parser_getfloat(config, 'Recording', 'min_disk_space_gb', 5.0)
@@ -2310,6 +2354,9 @@ def record_worker(args):
     reconnect_grace_minutes = parser_getint(config, 'Timeouts', 'reconnect_grace_minutes', 3)
     reconnect_extended_minutes = parser_getint(config, 'Timeouts', 'reconnect_extended_minutes', 10)
     file_creation_timeout = parser_getint(config, 'Timeouts', 'file_creation_timeout', 60)
+    tiktok_file_creation_timeout = parser_getint(
+        config, 'Timeouts', 'tiktok_file_creation_timeout', 30
+    )
     filename_pattern = config.get('Recording', 'filename_pattern', fallback='{username}_{timestamp}') or '{username}_{timestamp}'
     from_start_enabled, from_start_max_minutes = yt_live_start.settings(config)
 
@@ -2412,6 +2459,12 @@ def record_worker(args):
     error_sleep_seconds = poll_base_seconds          # current error backoff (grows on consecutive errors)
     error_backoff_max_seconds = error_backoff_max_minutes * 60
     consecutive_errors = 0
+
+    # A LIVE TikTok check can succeed while its freshly resolved playback URL
+    # fails to produce bytes. Retry that startup promptly, but only for a
+    # bounded window; repeated failures then return to normal polling.
+    tiktok_start_retry_deadline = 0.0
+    tiktok_start_retry_failures = 0
 
     # Fast reconnect state
     reconnect_mode = False
@@ -2542,6 +2595,10 @@ def record_worker(args):
     while not stop_event.is_set():
         if not _wait_for_monitoring_resume():
             break
+        if tiktok_start_retry_deadline and time.monotonic() >= tiktok_start_retry_deadline:
+            logger.info("TikTok capture-start retry window expired; returning to normal polling")
+            tiktok_start_retry_deadline = 0.0
+            tiktok_start_retry_failures = 0
         try:
             # Live-refresh the poll interval from the shared runtime dict so
             # GUI changes (including custom rates) apply without a restart.
@@ -2674,34 +2731,59 @@ def record_worker(args):
                         if resolved_url:
                             recording_url = resolved_url
             elif platform == "tiktok":
-                is_live, stream_title, error, need_impersonate, resolved_url, format_urls = check_stream_ytdlp(url, logger, stream_check_timeout, cookies_file)
-                if resolved_url:
-                    recording_url = resolved_url
-                    logger.info(f"Using resolved URL for recording: {redact_for_log(recording_url)}")
-                # yt-dlp often reports 24/7 / US-TTP LIVEs as offline. Also,
-                # it can confirm LIVE without yielding a media URL; in that case
-                # ask TikTok's API for the direct video variant before trying
-                # Streamlink against the profile page.
-                if not is_live or not resolved_url:
-                    if not is_live:
-                        logger.info("TikTok: yt-dlp reported offline — cross-checking via TikTok live APIs")
-                    else:
-                        logger.info("TikTok: yt-dlp confirmed LIVE but returned no media URL — querying TikTok APIs")
-                    wc_live, _, wc_title, wc_err, api_stream_url = check_tiktok_live_webcast(
+                # After a confirmed LIVE failed to create any media, first
+                # refresh TikTok's playback URL. Retrying the previous signed
+                # URL would repeat a possibly stale/unavailable connection.
+                retry_api_result = None
+                retry_window_active = (
+                    tiktok_start_retry_deadline > time.monotonic()
+                )
+                if retry_window_active:
+                    logger.info("TikTok: refreshing LIVE status and playback URL after an empty capture attempt")
+                    retry_api_result = check_tiktok_live_webcast(
                         username, cookies_file, logger, stream_check_timeout, quality=quality)
-                    if api_stream_url:
-                        tiktok_stream_url = api_stream_url
-                    if wc_live:
+                    retry_live, _, retry_title, retry_err, retry_url = retry_api_result
+                    if retry_live and retry_url:
+                        is_live = True
+                        stream_title = retry_title
+                        error = None
+                        tiktok_stream_url = retry_url
+                        logger.info("TikTok: refreshed API playback URL; retrying capture")
+
+                # A fresh direct URL is preferred during the bounded recovery
+                # window. Otherwise use the normal yt-dlp + API decision path.
+                if not (retry_window_active and tiktok_stream_url):
+                    is_live, stream_title, error, need_impersonate, resolved_url, format_urls = check_stream_ytdlp(
+                        url, logger, stream_check_timeout, cookies_file)
+                    if resolved_url:
+                        recording_url = resolved_url
+                        logger.info(f"Using resolved URL for recording: {redact_for_log(recording_url)}")
+                    # yt-dlp often reports 24/7 / US-TTP LIVEs as offline. Also,
+                    # it can confirm LIVE without yielding a media URL; in that case
+                    # ask TikTok's API for the direct video variant before trying
+                    # Streamlink against the profile page.
+                    if not is_live or not resolved_url:
                         if not is_live:
-                            logger.info("TikTok: live API confirms LIVE (yt-dlp said offline)")
-                        elif tiktok_stream_url:
-                            logger.info("TikTok: using direct video URL from live API")
-                    else:
-                        logger.info(f"TikTok live API fallback: {wc_err or 'not live'}")
-                    if not is_live:
-                        is_live, stream_title, error = _merge_tiktok_status_checks(
-                            stream_title, error, wc_live, wc_title, wc_err
-                        )
+                            logger.info("TikTok: yt-dlp reported offline — cross-checking via TikTok live APIs")
+                        else:
+                            logger.info("TikTok: yt-dlp confirmed LIVE but returned no media URL — querying TikTok APIs")
+                        if retry_api_result is None:
+                            retry_api_result = check_tiktok_live_webcast(
+                                username, cookies_file, logger, stream_check_timeout, quality=quality)
+                        wc_live, _, wc_title, wc_err, api_stream_url = retry_api_result
+                        if api_stream_url:
+                            tiktok_stream_url = api_stream_url
+                        if wc_live:
+                            if not is_live:
+                                logger.info("TikTok: live API confirms LIVE (yt-dlp said offline)")
+                            elif tiktok_stream_url:
+                                logger.info("TikTok: using direct video URL from live API")
+                        else:
+                            logger.info(f"TikTok live API fallback: {wc_err or 'not live'}")
+                        if not is_live:
+                            is_live, stream_title, error = _merge_tiktok_status_checks(
+                                stream_title, error, wc_live, wc_title, wc_err
+                            )
             elif platform in ["youtube", "custom"]:
                 check_info.clear()
                 is_live, stream_title, error, need_impersonate, resolved_url, format_urls = check_stream_ytdlp(
@@ -2744,8 +2826,14 @@ def record_worker(args):
                 new_status = {"status": "Error", "detail": error, "size": "", "time": "", "progress": 0}
                 status_queue.put((channel_key, new_status))
                 last_status = new_status.copy()
-                # Exponential backoff for errors (doubles each time, capped)
-                if reconnect_mode:
+                # Exponential backoff for errors (doubles each time, capped).
+                # A confirmed LIVE whose capture produced no bytes gets a
+                # bounded, faster recheck instead of a multi-minute error wait.
+                retry_remaining = tiktok_start_retry_deadline - time.monotonic()
+                if platform == "tiktok" and retry_remaining > 0:
+                    retry_poll = jittered_sleep(RECONNECT_POLL_INTERVAL, poll_jitter_percent)
+                    sleep_time = min(retry_poll, retry_remaining)
+                elif reconnect_mode:
                     # A stream just dropped: a transient API/CDN error must not
                     # push the next check out by minutes. Retry at the
                     # reconnect cadence without growing the backoff.
@@ -2789,6 +2877,30 @@ def record_worker(args):
                             "status": "Offline", "detail": "reconnect grace period over",
                             "size": "", "time": "", "progress": 0, "event": "ended"}))
                         _finalize_pending_group()
+
+                # If a LIVE capture just failed before writing bytes, keep
+                # checking briefly rather than hiding the creator for the full
+                # normal poll interval. The retry window is bounded above.
+                retry_remaining = tiktok_start_retry_deadline - time.monotonic()
+                if platform == "tiktok" and retry_remaining > 0:
+                    sleep_time = min(
+                        jittered_sleep(RECONNECT_POLL_INTERVAL, poll_jitter_percent),
+                        retry_remaining,
+                    )
+                    detail = f"vérification rapide après échec de démarrage · {int(retry_remaining)}s"
+                    new_status = {
+                        "status": "Checking...", "detail": detail,
+                        "size": "", "time": "", "progress": 0,
+                    }
+                    if new_status != last_status:
+                        status_queue.put((channel_key, new_status))
+                        last_status = new_status.copy()
+                    logger.info(
+                        f"TikTok was recently LIVE but yielded no media; "
+                        f"rechecking in {sleep_time:.0f}s ({retry_remaining:.0f}s retry window left)"
+                    )
+                    interruptible_sleep(sleep_time, wake_event, stop_event)
+                    continue
 
                 # Normal offline — flat interval with jitter (no backoff)
                 sleep_time = jittered_sleep(poll_base_seconds, poll_jitter_percent)
@@ -2878,7 +2990,7 @@ def record_worker(args):
                 elif from_start_enabled:
                     logger.info(f"Recording live, not from the start: {why}")
 
-            new_status = {"status": "Recording", "detail": "starting", "size": "0 B", "time": "0:00", "progress": 0}
+            new_status = _initial_capture_status(platform)
             if new_status != last_status:
                 status_queue.put((channel_key, new_status))
                 last_status = new_status.copy()
@@ -3132,12 +3244,17 @@ def record_worker(args):
                         pass
                     return False
 
+                monitor_file_creation_timeout = _effective_capture_file_creation_timeout(
+                    platform, file_creation_timeout, tiktok_file_creation_timeout,
+                    from_start=from_start is not None,
+                )
                 last_status, split_requested = monitor_recording_process(
                     proc, raw_file, start_time, max_record_hours,
                     platform, logger, status_queue, channel_key,
                     stop_event, last_status,
-                    # from-start: yt-dlp reads the DASH manifest before any file appears
-                    max(file_creation_timeout, 120) if from_start else file_creation_timeout,
+                    # YouTube from-start may need extra time for its DASH manifest;
+                    # ordinary/TikTok starts honor the configured file-creation timeout.
+                    monitor_file_creation_timeout,
                     # streamlink_debug makes Streamlink emit debug records; tell
                     # the stderr reader not to discard those records as noise.
                     verbose=verbose or streamlink_debug,
@@ -3247,6 +3364,15 @@ def record_worker(args):
                 tool_name = "yt-dlp"
             logger.info(f"{tool_name} exited with code: {exit_code}")
             recorded_output_size = _recording_output_size(raw_file)
+            if platform == "tiktok":
+                if recorded_output_size > 0:
+                    tiktok_start_retry_deadline = 0.0
+                    tiktok_start_retry_failures = 0
+                elif not split_requested and not stop_event.is_set():
+                    if tiktok_start_retry_deadline <= time.monotonic():
+                        tiktok_start_retry_deadline = time.monotonic() + 180
+                        tiktok_start_retry_failures = 0
+                    tiktok_start_retry_failures += 1
 
             # An exited process with no media output did not establish a
             # recording. Do not announce the LIVE as ended or enter reconnect
@@ -3257,6 +3383,29 @@ def record_worker(args):
                     "Capture process exited without writing media data — "
                     "not treating this as a LIVE ending"
                 )
+                if platform == "tiktok" and not stop_event.is_set():
+                    remaining = tiktok_start_retry_deadline - time.monotonic()
+                    base_delay = _tiktok_start_retry_delay(tiktok_start_retry_failures)
+                    retry_delay = min(
+                        jittered_sleep(base_delay, poll_jitter_percent),
+                        max(0.0, remaining),
+                    )
+                    logger.warning(
+                        f"TikTok capture attempt produced no media; refreshing the LIVE check "
+                        f"and playback URL in {retry_delay:.0f}s "
+                        f"(attempt {tiktok_start_retry_failures}, "
+                        f"{max(0.0, remaining):.0f}s retry window left)"
+                    )
+                    new_status = {
+                        "status": "Error",
+                        "detail": "Aucune vidéo reçue; nouvelle tentative de connexion",
+                        "size": "", "time": "", "progress": 0,
+                    }
+                    status_queue.put((channel_key, new_status))
+                    last_status = new_status.copy()
+                    if retry_delay > 0:
+                        interruptible_sleep(retry_delay, wake_event, stop_event)
+                    continue
 
             # If the recording ended on its own (not user-initiated stop) and
             # actually wrote media, the stream likely dropped. Enter fast
@@ -3395,11 +3544,9 @@ def record_worker(args):
             logger.info(f"Recording finished — file size: {human_size(file_size)}")
 
             if file_size < min_file_size_mb * 1024 * 1024:
-                logger.warning(f"Recording too small ({human_size(file_size)}) — deleting")
-                try:
-                    os.remove(raw_file)
-                except Exception as e:
-                    logger.error(f"Failed to delete small file: {e}")
+                logger.warning(
+                    f"Recording too small ({human_size(file_size)}) — keeping raw file in Recorded for recovery"
+                )
                 new_status = {"status": "Offline", "detail": "no data captured", "size": "", "time": "", "progress": 0}
                 status_queue.put((channel_key, new_status))
                 time.sleep(random.uniform(5, 15))
@@ -3486,14 +3633,11 @@ def record_worker(args):
                 if error == "output too small":
                     # (remux_to_mp4 already discarded its undersized .part; an MP4 of the same
                     # name that is there is an earlier, good recording and is left alone.)
-                    # Move the raw .ts to PendingDeletion so it doesn't
-                    # accumulate in the Recorded directory
-                    try:
-                        pending_path = os.path.join(pending_dir, os.path.basename(raw_file))
-                        shutil.move(raw_file, pending_path)
-                        logger.info(f"Moved bad raw .ts to PendingDeletion: {os.path.basename(raw_file)}")
-                    except Exception:
-                        pass
+                    # An undersized remux does not prove the source TS is useless.
+                    # Keep the raw file in Recorded so the user can inspect/retry it.
+                    logger.warning(
+                        f"Keeping raw .ts after undersized remux for recovery: {os.path.basename(raw_file)}"
+                    )
 
                     consecutive_small_remux_fails += 1
                     if consecutive_small_remux_fails >= SMALL_REMUX_FAIL_LIMIT:

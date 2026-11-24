@@ -483,6 +483,16 @@ class FinishingTests(unittest.TestCase):
     def rows(self):
         return {r["name"]: r for r in control.channel_rows(self.app)}
 
+    def test_status_exposes_file_growth_watch_for_the_recordings_ui(self):
+        self.app.recorder.status_dict["knut"] = {
+            "status": "Recording",
+            "detail": "starting",
+            "no_growth_seconds": 75,
+            "stall_timeout_seconds": 180,
+        }
+        row = self.rows()["knut"]
+        self.assertEqual((row["no_growth_seconds"], row["stall_timeout_seconds"]), (75, 180))
+
     def test_finish_between_stop_and_wait_is_not_missed(self):
         res = self.c.handle("record_stop", {"channels": ["twitch:saruei"]})["result"]
         row = res["channels"][0]

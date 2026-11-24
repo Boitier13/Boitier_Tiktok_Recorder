@@ -21,6 +21,7 @@ import {
   setCreatorEnabled,
   setMonitoring,
   stopRecording as stopRecordingRequest,
+  type CaptureState,
   type EngineSnapshot,
 } from "./backend";
 import {
@@ -37,6 +38,9 @@ export type ActiveRecording = {
   elapsedSec: number;
   sizeMB: number;
   fileName: string;
+  noGrowthSec: number;
+  stallTimeoutSec: number;
+  observedAtMs: number;
 };
 
 type Store = {
@@ -47,6 +51,7 @@ type Store = {
   monitoringActive: boolean;
   nextCheckIn: number | null;
   activeRecordings: ActiveRecording[];
+  captureStates: CaptureState[];
   engine: EngineSnapshot | null;
   connected: boolean;
   loading: boolean;
@@ -78,6 +83,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   settingsRef.current = settings;
   const [monitoringActive, setMonitoringActiveState] = useState(false);
   const [activeRecordings, setActiveRecordings] = useState<ActiveRecording[]>([]);
+  const [captureStates, setCaptureStates] = useState<CaptureState[]>([]);
   const [engine, setEngine] = useState<EngineSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -90,6 +96,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setCreators(snapshot.creators);
       setRecordings(snapshot.recordings);
       setActiveRecordings(snapshot.activeRecordings);
+      setCaptureStates(snapshot.captureStates);
       setMonitoringActiveState(snapshot.monitoringActive);
       setDiskFreeGB(snapshot.diskFreeGB);
       setEngine(snapshot.engine);
@@ -246,6 +253,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       monitoringActive,
       nextCheckIn: null,
       activeRecordings,
+      captureStates,
       engine,
       connected,
       loading,
@@ -270,6 +278,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       settings,
       monitoringActive,
       activeRecordings,
+      captureStates,
       engine,
       connected,
       loading,

@@ -346,7 +346,7 @@ function SettingsPage() {
       <Section icon={Video} title="Enregistrement">
         <Row
           label="Qualité Streamlink / yt-dlp"
-          hint="Choisit une variante proposée par le flux. 360p réduit la taille si TikTok la propose; sinon cette qualité exacte peut ne pas être disponible. Les captures déjà lancées ne changent pas."
+          hint="480p est la valeur par défaut pour les nouvelles installations. Le moteur choisit une variante disponible proche de cette limite; le résultat dépend des qualités proposées par le flux. Les captures déjà lancées ne changent pas."
         >
           <Select
             value={settings.quality}
@@ -446,9 +446,7 @@ function SettingsPage() {
               disabled={pathDisabled || !folderDraft.trim() || folderDraft === settings.saveFolder}
               onClick={() => void save("saveFolder", folderDraft.trim())}
               title={
-                sessionActive
-                  ? "Arrêtez la session moteur avant de changer le dossier"
-                  : undefined
+                sessionActive ? "Arrêtez la session moteur avant de changer le dossier" : undefined
               }
             >
               <Save /> Enregistrer
@@ -473,10 +471,10 @@ function SettingsPage() {
       <Section icon={MonitorCog} title="Fenêtre Windows et arrière-plan">
         <div className="space-y-2 p-4 text-sm text-muted-foreground">
           <p>
-            Sous Windows, l’hôte ouvre cette interface React dans une fenêtre Microsoft Edge WebView2
-            et ajoute l’icône BTL à la zone de notification. Réduire ou fermer la fenêtre la masque
-            sans arrêter le moteur ; le menu de l’icône permet de la restaurer, de démarrer ou d’arrêter
-            la surveillance, ou de quitter l’application.
+            Sous Windows, l’hôte ouvre cette interface React dans une fenêtre Microsoft Edge
+            WebView2 et ajoute l’icône BTL à la zone de notification. Réduire ou fermer la fenêtre
+            la masque sans arrêter le moteur ; le menu de l’icône permet de la restaurer, de
+            démarrer ou d’arrêter la surveillance, ou de quitter l’application.
           </p>
           <p>
             <code>--background</code> démarre directement dans la zone de notification sans fenêtre

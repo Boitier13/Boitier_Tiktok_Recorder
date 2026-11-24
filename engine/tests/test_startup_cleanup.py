@@ -433,7 +433,7 @@ class BackgroundStartupTests(unittest.TestCase):
 
     # -- same post-processing as before --------------------------------------
 
-    def test_tiny_file_is_removed_and_big_one_processed(self):
+    def test_tiny_file_is_preserved_and_big_one_processed(self):
         rec = make_recorder(self.tmp)
         rec.config.config.set("Recording", "min_file_size_mb", "1")
         tiny = make_ts(rec, "kick", "chanA", "chanA_20260101_000000.ts", size=1024)
@@ -442,23 +442,24 @@ class BackgroundStartupTests(unittest.TestCase):
         remux = FakeRemux()
         with mock.patch.object(recorder_mod, "remux_to_mp4", remux), self.assertLogs(level="INFO") as logs:
             rec._process_startup_leftovers(plan, background=True)
-        self.assertFalse(os.path.exists(tiny))
-        self.assertIn("Startup cleanup: Removing tiny file chanA_20260101_000000.ts", "\n".join(logs.output))
+        self.assertTrue(os.path.exists(tiny))
+        self.assertIn("Keeping tiny file chanA_20260101_000000.ts", "\n".join(logs.output))
         self.assertFalse(os.path.exists(big))
         self.assertTrue(os.path.exists(pending_path(rec, "kick", "chanA", "chanA_20260101_000100.ts")))
         self.assertEqual(len(remux.calls), 1)
 
-    def test_junk_remux_moves_raw_to_pending_deletion(self):
+    def test_undersized_remux_keeps_raw_for_recovery(self):
         rec = make_recorder(self.tmp)
-        make_ts(rec, "kick", "chanA", "chanA_20260101_000000.ts")
+        raw = make_ts(rec, "kick", "chanA", "chanA_20260101_000000.ts")
         plan = rec._plan_startup_cleanup()
         remux = FakeRemux(fail=True, error="output too small")
         with mock.patch.object(recorder_mod, "remux_to_mp4", remux), self.assertLogs(level="INFO") as logs:
             rec._process_startup_leftovers(plan, background=True)
         text = "\n".join(logs.output)
         self.assertIn("Failed to process chanA_20260101_000000.ts", text)
-        self.assertIn("Moved unprocessable chanA_20260101_000000.ts to PendingDeletion", text)
-        self.assertTrue(os.path.exists(pending_path(rec, "kick", "chanA", "chanA_20260101_000000.ts")))
+        self.assertIn("kept in Recorded for recovery/retry", text)
+        self.assertTrue(os.path.exists(raw))
+        self.assertFalse(os.path.exists(pending_path(rec, "kick", "chanA", "chanA_20260101_000000.ts")))
 
     def test_failed_remux_keeps_raw_for_the_next_start(self):
         """A failure says nothing about the recording: it stays in Recorded/ (see test_footage_safety)."""

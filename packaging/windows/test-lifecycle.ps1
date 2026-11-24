@@ -31,7 +31,7 @@ try {
     $OriginalPath = $env:PATH
     try {
         $env:PATH = Join-Path $env:SystemRoot 'System32'
-        foreach ($ToolName in @('yt-dlp.exe', 'streamlink.exe', 'ffmpeg.exe', 'ffprobe.exe')) {
+        foreach ($ToolName in @((Join-Path 'yt-dlp' 'yt-dlp.exe'), (Join-Path 'streamlink' 'streamlink.exe'), 'ffmpeg.exe', 'ffprobe.exe')) {
             $ToolPath = Join-Path (Join-Path $PayloadDir 'tools') $ToolName
             $HeldToolPath = "$ToolPath.lifecycle-test"
             Move-Item -LiteralPath $ToolPath -Destination $HeldToolPath
@@ -46,8 +46,8 @@ try {
         $env:PATH = $OriginalPath
     }
     $ToolProbes = @(
-        @{ Name = 'yt-dlp.exe'; Args = @('--version') },
-        @{ Name = 'streamlink.exe'; Args = @('--version') },
+        @{ Name = (Join-Path 'yt-dlp' 'yt-dlp.exe'); Args = @('--version') },
+        @{ Name = (Join-Path 'streamlink' 'streamlink.exe'); Args = @('--version') },
         @{ Name = 'ffmpeg.exe'; Args = @('-version') },
         @{ Name = 'ffprobe.exe'; Args = @('-version') }
     )

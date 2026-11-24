@@ -72,6 +72,7 @@ def _coerce_specs():
         ("Timeouts", "reconnect_grace_minutes", "int", 3, 0, None),
         ("Timeouts", "reconnect_extended_minutes", "int", 10, 0, None),
         ("Timeouts", "file_creation_timeout", "int", 60, 1, None),
+        ("Timeouts", "tiktok_file_creation_timeout", "int", 30, 1, 59),
         ("Cleanup", "auto_purge_days", "int", 7, 0, None),
         ("Cleanup", "max_log_size_mb", "float", 20.0, 0.0, None),
         ("Cleanup", "log_backup_count", "int", 3, 0, None),
@@ -163,7 +164,7 @@ class Config:
             'fallback_dir': '',
         },
         'Recording': {
-            'quality': 'best',
+            'quality': '480p',
             'max_record_hours': '12.0',
             'max_file_size_gb': '8.0',   # split when file exceeds this size (0 = off); next capture
                                          # starts first (overlap), then the closed file remuxes in
@@ -186,6 +187,7 @@ class Config:
             'reconnect_grace_minutes': '3',   # fast 15s polling after a stream drops unexpectedly
             'reconnect_extended_minutes': '10',  # then 30s polling this long before normal offline polling
             'file_creation_timeout': '60',    # seconds to wait for output file to appear
+            'tiktok_file_creation_timeout': '30',  # TikTok first-byte deadline before refreshing the playback URL
         },
         'Cleanup': {
             'auto_purge_days': '7',          # delete PendingDeletion files older than N days (0=disabled)

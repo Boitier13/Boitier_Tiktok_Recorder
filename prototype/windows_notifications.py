@@ -5,9 +5,40 @@ arrive when the frontend is closed, as long as the local host and engine are run
 """
 from __future__ import annotations
 
+import re
+
 
 class WindowsNotificationsUnavailable(RuntimeError):
     """Raised when this machine cannot send Windows desktop notifications."""
+
+
+_ERROR_TRANSLATIONS = {
+    "timeout": "Délai d’attente dépassé. Vérifiez la connexion puis réessayez.",
+    "timed out": "Délai d’attente dépassé. Vérifiez la connexion puis réessayez.",
+    "connection timed out": "Délai de connexion dépassé. Vérifiez votre accès à Internet.",
+    "connection reset": "La connexion a été interrompue. Le direct sera réessayé.",
+    "connection refused": "La connexion au service a été refusée.",
+    "http error 403: forbidden": "TikTok a refusé l’accès au flux (HTTP 403).",
+    "http 403": "TikTok a refusé l’accès au flux (HTTP 403).",
+    "forbidden": "Accès au flux refusé.",
+    "blocked": "bloqué",
+    "no room id": "TikTok n’a pas fourni l’identifiant de la salle LIVE.",
+    "no variants": "Aucune qualité de flux exploitable n’a été proposée.",
+    "file not created": "Aucun fichier vidéo n’a été créé. Le flux n’a peut-être pas pu être ouvert.",
+}
+
+
+def _localized_error(value: object) -> str:
+    """Translate common short engine errors while retaining diagnostic context."""
+    detail = str(value or "Une erreur moteur est survenue.").strip()
+    normalized = detail.casefold().strip(" .!:")
+    if normalized in _ERROR_TRANSLATIONS:
+        return _ERROR_TRANSLATIONS[normalized]
+    # Translate embedded common errors without discarding usernames, URLs, or codes.
+    translated = detail
+    for english, french in sorted(_ERROR_TRANSLATIONS.items(), key=lambda item: len(item[0]), reverse=True):
+        translated = re.sub(re.escape(english), french, translated, flags=re.IGNORECASE)
+    return translated
 
 
 def notification_content(event: dict) -> tuple[str, str] | None:
@@ -26,7 +57,7 @@ def notification_content(event: dict) -> tuple[str, str] | None:
             return "Enregistrement incomplet", f"Le fichier de {who} n’a pas pu être finalisé correctement."
         return "Enregistrement terminé", f"Le fichier de {who} est prêt dans la bibliothèque."
     if kind == "error":
-        detail = str(event.get("error") or "Une erreur moteur est survenue.").strip()
+        detail = _localized_error(event.get("error"))
         return "Erreur moteur BTL", f"{who} : {detail[:220]}"
     if kind == "disk_low":
         free = event.get("free_gb")

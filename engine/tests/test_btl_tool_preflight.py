@@ -6,6 +6,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from prototype.btl_vertical_host import (
+    _bundled_tool_commands,
+    _bundled_tool_search_dirs,
     _capture_tool_presence,
     _capture_tool_version,
     _seed_engine_tool_presence,
@@ -13,6 +15,16 @@ from prototype.btl_vertical_host import (
 
 
 class CaptureToolPreflightTests(unittest.TestCase):
+    def test_uses_onedir_tool_paths_without_temp_extraction(self):
+        root = Path("C:/BTL/tools")
+        self.assertEqual(_bundled_tool_commands(root), {
+            "yt-dlp": str(root / "yt-dlp" / "yt-dlp.exe"),
+            "streamlink": str(root / "streamlink" / "streamlink.exe"),
+            "ffmpeg": str(root / "ffmpeg.exe"),
+            "ffprobe": str(root / "ffprobe.exe"),
+        })
+        self.assertEqual(_bundled_tool_search_dirs(root), [root / "yt-dlp", root / "streamlink", root])
+
     def test_startup_cache_is_seeded_from_presence_without_launching_tools(self):
         with tempfile.TemporaryDirectory() as tmp:
             commands = {}

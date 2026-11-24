@@ -278,12 +278,8 @@ class BackgroundCleaner:
 
                     if file_size < min_file_size_mb * 1024 * 1024:
                         logging.info(f"Cleanup: Skipping {filename} — too small ({human_size(file_size)})")
-                        try:
-                            os.remove(raw_file)
-                        except PermissionError:
-                            found_locked = True
-                        except Exception:
-                            pass
+                        # Size alone cannot establish that a partial recording is unrecoverable.
+                        # Leave it in Recorded for manual inspection or a later retry.
                         continue
 
                     found_any = True
@@ -319,19 +315,11 @@ class BackgroundCleaner:
                         if not success:
                             logging.error(f"Cleanup: Failed to process {filename}: {error}")
                             self._report("finished", platform, username_dir, raw_file, ok=False, error=error or "")
-                            if error != "output too small":
-                                # A failed remux (ffmpeg missing, timeout, disk full, antivirus lock)
-                                # says nothing about the recording: keep it where it is and retry.
-                                logging.warning(
-                                    f"Cleanup: {filename} kept in Recorded (not moved, not deleted); "
-                                    "it is retried on the next pass")
-                                continue
-                            try:
-                                pending_path = os.path.join(pending_dir, filename)
-                                shutil.move(raw_file, pending_path)
-                                logging.info(f"Cleanup: Moved unprocessable {filename} to PendingDeletion")
-                            except Exception as move_err:
-                                logging.warning(f"Cleanup: Could not move {filename} to PendingDeletion: {move_err}")
+                            # Even "output too small" may reflect a truncated but useful source.
+                            # Keep every failed-remux TS in Recorded for recovery/retry.
+                            logging.warning(
+                                f"Cleanup: {filename} kept in Recorded (not moved, not deleted); "
+                                "it can be inspected or retried")
                             continue
 
                     pending_path = os.path.join(pending_dir, filename)
@@ -2275,11 +2263,9 @@ class StreamRecorder:
             return "skipped"
 
         if file_size < min_file_size_mb * 1024 * 1024:
-            logging.info(f"Startup cleanup: Removing tiny file {filename} ({human_size(file_size)})")
-            try:
-                os.remove(raw_file)
-            except Exception:
-                pass
+            logging.info(
+                f"Startup cleanup: Keeping tiny file {filename} ({human_size(file_size)}) in Recorded for recovery"
+            )
             return "skipped"
 
         logging.info(f"Startup cleanup: Processing {filename} ({human_size(file_size)})")
@@ -2337,17 +2323,8 @@ class StreamRecorder:
                 except OSError:
                     pass
                 logging.error(f"Startup cleanup: Failed to process {filename}: {error}")
-                if error != "output too small":
-                    logging.warning(
-                        f"Startup cleanup: {filename} kept in Recorded (not moved, not deleted); "
-                        "it is retried on the next start")
-                    return "error"
-                try:
-                    pending_path = os.path.join(pending_dir, filename)
-                    shutil.move(raw_file, pending_path)
-                    logging.info(f"Startup cleanup: Moved unprocessable {filename} to PendingDeletion")
-                except Exception as move_err:
-                    logging.warning(f"Startup cleanup: Could not move {filename} to PendingDeletion: {move_err}")
+                # The raw transport stream may still be useful even when its remux is tiny.
+                logging.warning(f"Startup cleanup: {filename} kept in Recorded for recovery/retry")
                 return "error"
 
         try:

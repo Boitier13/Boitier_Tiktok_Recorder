@@ -13,12 +13,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { CreatorAvatar } from "@/components/creator-avatar";
+import { ElapsedTimer } from "@/components/elapsed-timer";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/app-store";
 import { openActiveRecordingFolder } from "@/lib/backend";
-import { formatDuration, formatSize } from "@/lib/format";
+import { formatSize } from "@/lib/format";
 import type { ActivityType } from "@/lib/models";
 import { cn } from "@/lib/utils";
 
@@ -209,7 +210,7 @@ function SurveillancePage() {
                     ENR
                   </span>
                   <span className="absolute right-4 top-4 font-mono text-2xl font-medium text-foreground">
-                    {formatDuration(r.elapsedSec)}
+                    <ElapsedTimer elapsedSec={r.elapsedSec} observedAtMs={r.observedAtMs} />
                   </span>
                   <div className="flex items-center gap-3">
                     <CreatorAvatar name={r.creator.displayName} live />
